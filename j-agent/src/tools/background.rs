@@ -212,8 +212,9 @@ impl BackgroundManager {
         drop(tasks);
 
         // 等待新输出或超时
-        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-        while Instant::now() < deadline {
+        let start = Instant::now();
+        let timeout = Duration::from_millis(timeout_ms);
+        while start.elapsed() < timeout {
             let tasks = safe_lock(&self.tasks, "session_stdout::poll");
             if let Some(task) = tasks.get(task_id) {
                 let buf = safe_lock(&task.output_buffer, "session_stdout::poll_buf");
@@ -626,7 +627,8 @@ impl Tool for TaskOutputTool {
 
         // block=true 且任务仍在运行时，轮询等待
         if params.block && self.manager.is_running(&params.task_id) {
-            let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+            let start = Instant::now();
+            let timeout = Duration::from_millis(timeout_ms);
             loop {
                 if !self.manager.is_running(&params.task_id) {
                     break;
@@ -651,7 +653,7 @@ impl Tool for TaskOutputTool {
                         plan_decision: PlanDecision::None,
                     };
                 }
-                if Instant::now() >= deadline {
+                if start.elapsed() >= timeout {
                     // 超时，返回当前状态
                     let info = self
                         .manager

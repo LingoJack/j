@@ -1,3 +1,13 @@
+# v12.10.58
+
+
+### 新功能
+- **文件加密文档**: 新增 `j lock` / `j unlock` 文件加密功能的帮助文档（中英文），涵盖 AES-256-GCM 加密原理、命令用法、批量操作及注意事项
+
+### 改进
+- **代码块渲染**: 代码块围栏宽度改为根据代码内容动态计算，不再固定占满整行；边框和背景统一使用 `text_dim` / `bg_primary` 主题色，移除独立的 `code_border` / `code_bg` 配色
+- **超时计算**: Background Task 的轮询超时逻辑从 `Instant::now() + Duration` 改为 `start.elapsed() >= timeout`，避免循环中
+
 # v12.10.57
 
 
