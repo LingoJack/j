@@ -33,7 +33,6 @@ function Write-Warn($msg) {
 
 function Write-Err($msg) {
     Write-Host "[ERROR] $msg" -ForegroundColor Red
-    exit 1
 }
 
 # 检测平台
@@ -51,7 +50,7 @@ function Detect-Platform {
             Write-Warn "32 位 Windows 不受官方支持，尝试使用 x64 版本"
             return "windows-x64"
         }
-        default { Write-Err "不支持的架构: $arch" }
+        default { Write-Err "不支持的架构: $arch"; return }
     }
 }
 
@@ -87,6 +86,7 @@ function Get-LatestVersion {
 
     # 所有网络方法均失败，直接报错
     Write-Err "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.ps1 -Version v1.0.0"
+    return
 }
 
 # 下载并安装
@@ -120,6 +120,7 @@ function Install-JCli {
         }
         catch {
             Write-Err "下载失败，请检查版本号是否正确或网络连接是否正常`n$($_.Exception.Message)"
+            return
         }
 
         # 解压
@@ -139,6 +140,7 @@ function Install-JCli {
             $srcExe = Get-ChildItem -Path $tmpDir -Filter "$BinaryName.exe" -Recurse | Select-Object -First 1
             if ($null -eq $srcExe) {
                 Write-Err "解压后未找到 $BinaryName.exe"
+                return
             }
             $srcExe = $srcExe.FullName
         }
@@ -214,6 +216,7 @@ function Install-JCli {
         }
         else {
             Write-Err "安装失败"
+            return
         }
     }
     finally {
@@ -317,6 +320,10 @@ function Main {
     }
     else {
         $platform = Detect-Platform
+        if ([string]::IsNullOrEmpty($platform)) {
+            Write-Err "无法检测平台，安装终止"
+            return
+        }
         Install-JCli -Version $Version -Platform $platform
     }
 }
