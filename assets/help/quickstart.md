@@ -1,8 +1,3 @@
----
-name: 快速上手
-order: 1
----
-
 ```bash
 # ====== macOS / Linux ======
 

@@ -1,0 +1,10 @@
+# 日报管理
+
+| 命令 | 说明 |
+|------|------|
+| `j reportctl new [date]` | 开启新的一周（周数+1） |
+| `j reportctl sync [date]` | 同步周数和日期 |
+| `j reportctl push [msg]` | 推送周报到远程 git 仓库 |
+| `j reportctl pull` | 从远程 git 仓库拉取周报 |
+| `j reportctl set-url [url]` | 设置/查看 git 仓库地址 |
+| `j reportctl open` | 用内置 TUI 编辑器打开日报文件全文编辑 |
