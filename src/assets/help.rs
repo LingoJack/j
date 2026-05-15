@@ -51,6 +51,13 @@ impl HelpExpandedDirs {
         self.0.contains(dir_path)
     }
 
+    /// 创建展开所有目录的集合
+    pub fn all_expanded() -> Self {
+        let files = collect_help_files();
+        let dirs = collect_dirs(&files);
+        Self(dirs.into_iter().collect())
+    }
+
     /// 切换指定目录的展开/折叠状态
     pub fn toggle(&mut self, dir_path: &str) {
         if self.0.contains(dir_path) {

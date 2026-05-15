@@ -83,7 +83,7 @@ impl Default for HelpApp {
 impl HelpApp {
     /// 创建 HelpApp 实例
     pub fn new() -> Self {
-        let expanded_dirs = HelpExpandedDirs::new();
+        let expanded_dirs = HelpExpandedDirs::all_expanded();
         let flat_entries = assets::load_help_entries(&expanded_dirs);
 
         let agent_config = load_agent_config();
