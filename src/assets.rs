@@ -6,7 +6,7 @@
 //!
 //! | 资源名称 | 类型 | 路径 | 用途 |
 //! |---------|------|------|------|
-//! | `HELP_TABS` | 文本 | `assets/help/*.md` | 帮助命令 Tab 内容（frontmatter 驱动） |
+//! | `HELP_TABS` | 文本 | `assets/help/*.md` | 帮助文档内容（目录树驱动） |
 //! | `VERSION_TEMPLATE` | 文本 | `assets/version.md` | 版本命令模板 |
 //! | `DEFAULT_SYSTEM_PROMPT` | 文本 | `assets/system_prompt_default.md` | 默认系统提示词模板 |
 //! | `DEFAULT_MEMORY` | 文本 | `assets/memory_default.md` | 默认记忆占位文件 |
@@ -32,7 +32,7 @@ pub struct Assets;
 
 // ========== 重导出子模块公开 API ==========
 
-pub use help::{HelpTab, load_help_tabs};
+pub use help::{HelpEntry, HelpEntryKind, HelpExpandedDirs, help_file_count, load_help_entries};
 pub use install::{install_default_commands, install_default_scripts, install_default_skills};
 pub use template::{
     default_agent_md, default_memory, default_soul, default_system_prompt, quotes_text,

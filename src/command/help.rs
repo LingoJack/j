@@ -2,7 +2,7 @@ pub mod app;
 pub mod ui;
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -12,7 +12,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::theme::ThemeName;
 use app::{AppMode, HelpApp};
-use ui::draw_help_ui;
+use ui::draw_ui;
 
 /// 帮助页事件轮询间隔（毫秒）。
 const HELP_POLL_MS: u64 = 100;
@@ -25,14 +25,23 @@ struct TerminalGuard {
 impl TerminalGuard {
     fn activate() -> io::Result<Self> {
         terminal::enable_raw_mode()?;
-        execute!(io::stdout(), EnterAlternateScreen)?;
+        let mut stdout = io::stdout();
+        execute!(
+            stdout,
+            EnterAlternateScreen,
+            crossterm::event::EnableMouseCapture
+        )?;
         Ok(Self { active: true })
     }
 
     fn deactivate(&mut self) {
         if self.active {
+            let _ = execute!(
+                io::stdout(),
+                crossterm::event::DisableMouseCapture,
+                LeaveAlternateScreen
+            );
             let _ = terminal::disable_raw_mode();
-            let _ = execute!(io::stdout(), LeaveAlternateScreen);
             self.active = false;
         }
     }
@@ -70,7 +79,7 @@ fn run_help_tui() -> io::Result<()> {
             let terminal = &mut *terminal_ref;
 
             loop {
-                terminal.draw(|f| draw_help_ui(f, app))?;
+                terminal.draw(|f| draw_ui(f, app))?;
 
                 if event::poll(std::time::Duration::from_millis(HELP_POLL_MS))? {
                     match event::read()? {
@@ -82,13 +91,17 @@ fn run_help_tui() -> io::Result<()> {
                             }
                             match app.mode {
                                 AppMode::Normal => {
-                                    if handle_normal_key(app, key) {
+                                    if handle_normal_key(app, key, terminal.get_frame().area()) {
                                         break;
                                     }
                                 }
                                 AppMode::CommandPopup => handle_command_popup_key(app, key),
                                 AppMode::ThemeSelect => handle_theme_select_key(app, key),
                             }
+                        }
+                        Event::Mouse(mouse) if app.mode == AppMode::Normal => {
+                            let frame_area = terminal.get_frame().area();
+                            handle_mouse_event(app, mouse, frame_area);
                         }
                         Event::Resize(_, _) => {
                             app.invalidate_cache();
@@ -107,7 +120,6 @@ fn run_help_tui() -> io::Result<()> {
     match result {
         Ok(inner_result) => inner_result,
         Err(panic_info) => {
-            // 打印 panic 信息（已恢复终端）
             if let Some(s) = panic_info.downcast_ref::<&str>() {
                 eprintln!("Help TUI panic: {}", s);
             } else if let Some(s) = panic_info.downcast_ref::<String>() {
@@ -120,35 +132,132 @@ fn run_help_tui() -> io::Result<()> {
     }
 }
 
+// ========== 鼠标事件处理 ==========
+
+/// 处理鼠标事件
+fn handle_mouse_event(app: &mut HelpApp, mouse: MouseEvent, frame_area: ratatui::layout::Rect) {
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            handle_left_click(app, mouse.column, mouse.row, frame_area);
+        }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            handle_drag(app, mouse.column, frame_area);
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            app.is_dragging_panel = false;
+        }
+        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+            handle_scroll(app, mouse.column, mouse.row, frame_area, mouse.kind);
+        }
+        _ => {}
+    }
+}
+
+/// 主区域 Y 起始位置（标题栏 3 行）
+const MAIN_AREA_Y_OFFSET: u16 = 3;
+
+/// 处理左键点击
+fn handle_left_click(app: &mut HelpApp, col: u16, row: u16, frame_area: ratatui::layout::Rect) {
+    let main_y = frame_area.y + MAIN_AREA_Y_OFFSET;
+    let main_height = frame_area.height.saturating_sub(MAIN_AREA_Y_OFFSET + 1); // +1 hint bar
+
+    // 检测是否点击分割线区域
+    let left_width = app.compute_left_panel_width(frame_area.width as usize) as u16;
+    let divider_x = frame_area.x + left_width;
+    if col >= divider_x.saturating_sub(2)
+        && col <= divider_x + 2
+        && row >= main_y
+        && row < main_y + main_height
+    {
+        app.is_dragging_panel = true;
+        return;
+    }
+
+    // 点击左侧列表区
+    if col >= frame_area.x
+        && col < frame_area.x + left_width
+        && row >= main_y
+        && row < main_y + main_height
+    {
+        let inner_y = row.saturating_sub(main_y).saturating_sub(1) as usize; // -1 边框
+        let max_visible = main_height.saturating_sub(2) as usize;
+        if inner_y < max_visible && inner_y < app.entries().len() {
+            app.selected = inner_y;
+            app.content_scroll = 0;
+        }
+    }
+}
+
+/// 处理鼠标拖拽（调整面板宽度）
+fn handle_drag(app: &mut HelpApp, col: u16, frame_area: ratatui::layout::Rect) {
+    if !app.is_dragging_panel {
+        return;
+    }
+    let main_x = frame_area.x;
+    let main_width = frame_area.width;
+    app.set_panel_width_from_drag(col, main_x, main_width);
+}
+
+/// 处理滚轮事件
+fn handle_scroll(
+    app: &mut HelpApp,
+    col: u16,
+    row: u16,
+    frame_area: ratatui::layout::Rect,
+    kind: MouseEventKind,
+) {
+    let main_y = frame_area.y + MAIN_AREA_Y_OFFSET;
+    let main_height = frame_area.height.saturating_sub(MAIN_AREA_Y_OFFSET + 1);
+    let left_width = app.compute_left_panel_width(frame_area.width as usize) as u16;
+
+    // 在左侧列表区滚轮
+    if col >= frame_area.x
+        && col < frame_area.x + left_width
+        && row >= main_y
+        && row < main_y + main_height
+    {
+        match kind {
+            MouseEventKind::ScrollUp => app.move_up(),
+            MouseEventKind::ScrollDown => app.move_down(),
+            _ => {}
+        }
+        return;
+    }
+
+    // 在右侧内容区滚轮
+    if col >= frame_area.x + left_width && row >= main_y && row < main_y + main_height {
+        match kind {
+            MouseEventKind::ScrollUp => app.scroll_up(3),
+            MouseEventKind::ScrollDown => app.scroll_down(3),
+            _ => {}
+        }
+    }
+}
+
+// ========== 键盘事件处理 ==========
+
 /// 正常模式按键处理，返回 true 表示退出
-fn handle_normal_key(app: &mut HelpApp, key: crossterm::event::KeyEvent) -> bool {
+fn handle_normal_key(
+    app: &mut HelpApp,
+    key: crossterm::event::KeyEvent,
+    frame_area: ratatui::layout::Rect,
+) -> bool {
+    let frame_width = frame_area.width as usize;
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => return true,
 
-        // Tab 切换
-        KeyCode::Right | KeyCode::Char('l') => app.next_tab(),
-        KeyCode::Left | KeyCode::Char('h') => app.prev_tab(),
-        KeyCode::Char('[') => app.prev_tab(),
-        KeyCode::Char(']') => app.next_tab(),
-        KeyCode::Tab => {
-            if key.modifiers.contains(KeyModifiers::SHIFT) {
-                app.prev_tab();
-            } else {
-                app.next_tab();
-            }
-        }
-        KeyCode::BackTab => app.prev_tab(),
+        // 列表上下移动
+        KeyCode::Down | KeyCode::Char('j') => app.move_down(),
+        KeyCode::Up | KeyCode::Char('k') => app.move_up(),
 
-        // 数字键跳转
-        KeyCode::Char(c @ '1'..='9') => {
-            let idx = (c as usize) - ('1' as usize);
-            app.goto_tab(idx);
-        }
-        KeyCode::Char('0') => app.goto_tab(9),
+        // 展开/折叠目录
+        KeyCode::Enter | KeyCode::Char(' ') => app.toggle_expand(),
 
-        // 滚动
-        KeyCode::Down | KeyCode::Char('j') => app.scroll_down(1),
-        KeyCode::Up | KeyCode::Char('k') => app.scroll_up(1),
+        // 调整左右面板宽度
+        KeyCode::Char('[') => app.shrink_left(frame_width),
+        KeyCode::Char(']') => app.widen_left(frame_width),
+
+        // 内容滚动
         KeyCode::PageDown => app.scroll_down(10),
         KeyCode::PageUp => app.scroll_up(10),
         KeyCode::Home => app.scroll_to_top(),
@@ -198,14 +307,7 @@ fn handle_command_popup_key(app: &mut HelpApp, key: crossterm::event::KeyEvent) 
                         app.open_theme_select();
                         return;
                     }
-                    "help" => {
-                        app.goto_tab(0);
-                        app.mode = AppMode::Normal;
-                        return;
-                    }
                     "quit" => {
-                        // quit 命令：设置为 Normal，主循环下一轮用 q 退出
-                        // 这里直接发出退出信号不方便，回到 Normal 让用户再按 q
                         app.mode = AppMode::Normal;
                         app.message = Some("按 q 退出".to_string());
                         return;
