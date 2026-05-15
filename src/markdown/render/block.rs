@@ -195,30 +195,33 @@ fn task_list_marker(checked: Option<bool>, _theme: &dyn MdStyle) -> String {
     }
 }
 
-/// 渲染引用块
+/// 渲染引用块（与 thinking block 风格一致：竖线 + bg_primary 背景）
 fn render_blockquote(blocks: &[Block], ctx: &RenderContext) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
-    // 前导空行
-    lines.push(Line::from(""));
-
-    let _blockquote_style = Style::default()
-        .fg(ctx.theme.md_blockquote_text())
-        .bg(ctx.theme.md_blockquote_bg());
+    // 背景色使用 bg_primary（与 thinking block 一致，融入主背景）
+    let bg_color = ctx.theme.bg_primary();
     let bar_style = Style::default()
         .fg(ctx.theme.md_blockquote_bar())
-        .bg(ctx.theme.md_blockquote_bg())
+        .bg(bg_color)
         .add_modifier(Modifier::BOLD);
+    let text_style = Style::default()
+        .fg(ctx.theme.md_blockquote_text())
+        .bg(bg_color);
+
+    // 前导空行
+    lines.push(Line::from(""));
 
     for block in blocks {
         let inner_lines = render_block(block, ctx);
         for inner_line in inner_lines {
             let mut line_spans: Vec<Span<'static>> = Vec::new();
+            line_spans.push(Span::styled("  ".to_string(), text_style));
             line_spans.push(Span::styled("| ".to_string(), bar_style));
             for span in inner_line.spans {
                 line_spans.push(Span::styled(
                     span.content.to_string(),
-                    span.style.bg(ctx.theme.md_blockquote_bg()),
+                    span.style.bg(bg_color),
                 ));
             }
             lines.push(Line::from(line_spans));

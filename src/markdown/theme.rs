@@ -37,6 +37,7 @@ pub trait MdStyle {
 
     // ===== Blockquote =====
     fn md_blockquote_bar(&self) -> Color;
+    #[allow(dead_code)]
     fn md_blockquote_bg(&self) -> Color;
     fn md_blockquote_text(&self) -> Color;
 

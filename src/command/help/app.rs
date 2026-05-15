@@ -2,7 +2,17 @@ use crate::assets::{self, HelpEntryKind, HelpExpandedDirs};
 use crate::command::chat::storage::{load_agent_config, save_agent_config};
 use crate::markdown::markdown_to_lines;
 use crate::theme::{Theme, ThemeName};
+use ratatui::layout::Rect;
 use ratatui::text::Line;
+
+/// 鼠标选区状态（用于内容区拖拽选择文字）
+#[derive(Clone, Debug)]
+pub struct MouseSelection {
+    /// 选区起点（内容行号，行内字符偏移）
+    pub anchor: (usize, usize),
+    /// 选区当前位置（内容行号，行内字符偏移）
+    pub current: (usize, usize),
+}
 
 /// 渲染缓存
 struct ContentCache {
@@ -58,6 +68,10 @@ pub struct HelpApp {
     pub message: Option<String>,
     /// 是否正在拖拽分割线
     pub is_dragging_panel: bool,
+    /// 鼠标选区状态（内容区文字选择）
+    pub mouse_selection: Option<MouseSelection>,
+    /// 内容区 inner rect（边框内部区域），用于坐标映射
+    pub content_inner_rect: Option<Rect>,
 }
 
 impl Default for HelpApp {
@@ -97,6 +111,8 @@ impl HelpApp {
             theme_popup_selected,
             message: None,
             is_dragging_panel: false,
+            mouse_selection: None,
+            content_inner_rect: None,
         };
 
         // 默认选中第一个文件条目
@@ -348,4 +364,111 @@ impl HelpApp {
             self.message = Some(format!("主题: {}", name.display_name()));
         }
     }
+
+    /// 从渲染行和选区中提取纯文本
+    pub fn extract_selection_text(&self) -> Option<String> {
+        let sel = self.mouse_selection.as_ref()?;
+        let cache = self.content_cache.as_ref()?;
+        let lines = &cache.lines;
+
+        use crate::tui::components::selection::normalize_selection;
+        let ((sr, sc), (er, ec)) = normalize_selection(sel.anchor, sel.current);
+
+        let mut result = String::new();
+        for line_idx in sr..=er {
+            let Some(line) = lines.get(line_idx) else {
+                continue;
+            };
+
+            // 提取纯文本
+            let full_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            if full_text.trim().is_empty() {
+                continue;
+            }
+
+            let chars: Vec<char> = full_text.chars().collect();
+            let start = if line_idx == sr {
+                sc.min(chars.len())
+            } else {
+                0
+            };
+            let end = if line_idx == er {
+                ec.min(chars.len())
+            } else {
+                chars.len()
+            };
+
+            if start < end {
+                if !result.is_empty() {
+                    result.push('\n');
+                }
+                let slice: String = chars[start..end].iter().collect();
+                result.push_str(&slice);
+            }
+        }
+
+        if result.is_empty() {
+            None
+        } else {
+            Some(result)
+        }
+    }
+
+    /// 复制选区文本到剪贴板
+    pub fn copy_selection(&mut self) -> bool {
+        let text = match self.extract_selection_text() {
+            Some(t) => t,
+            None => return false,
+        };
+        use crate::command::chat::render::cache::copy_to_clipboard;
+        let ok = copy_to_clipboard(&text);
+        self.mouse_selection = None;
+        self.message = if ok {
+            Some("已复制到剪贴板".to_string())
+        } else {
+            Some("复制失败".to_string())
+        };
+        ok
+    }
+
+    /// 屏幕坐标 → 内容行号 + 字符偏移
+    pub fn screen_to_content_pos(&self, col: u16, row: u16) -> Option<(usize, usize)> {
+        let inner = self.content_inner_rect?;
+        let cache = self.content_cache.as_ref()?;
+
+        // 行号映射
+        let local_y = row.saturating_sub(inner.y) as usize;
+        if local_y >= inner.height as usize {
+            return None;
+        }
+        let content_line = self.content_scroll + local_y;
+        if content_line >= cache.lines.len() {
+            return None;
+        }
+
+        let line = &cache.lines[content_line];
+        let local_x = col.saturating_sub(inner.x) as usize;
+
+        // 字符偏移（考虑 CJK 宽字符）
+        let char_offset = spans_to_char_offset(&line.spans, local_x);
+        Some((content_line, char_offset))
+    }
+}
+
+/// 根据 spans 和屏幕 x 坐标计算字符偏移
+fn spans_to_char_offset(spans: &[ratatui::text::Span<'static>], screen_col: usize) -> usize {
+    let mut acc_width = 0usize;
+    let mut char_offset = 0usize;
+
+    for span in spans {
+        for ch in span.content.chars() {
+            let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+            if acc_width >= screen_col {
+                return char_offset;
+            }
+            acc_width += w;
+            char_offset += 1;
+        }
+    }
+    char_offset
 }

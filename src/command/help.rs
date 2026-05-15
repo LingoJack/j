@@ -84,10 +84,15 @@ fn run_help_tui() -> io::Result<()> {
                 if event::poll(std::time::Duration::from_millis(HELP_POLL_MS))? {
                     match event::read()? {
                         Event::Key(key) => {
+                            // Ctrl+C：有选区时复制，否则退出
                             if key.modifiers.contains(KeyModifiers::CONTROL)
                                 && key.code == KeyCode::Char('c')
                             {
-                                break;
+                                if app.mouse_selection.is_some() {
+                                    app.copy_selection();
+                                } else {
+                                    break;
+                                }
                             }
                             match app.mode {
                                 AppMode::Normal => {
@@ -141,10 +146,15 @@ fn handle_mouse_event(app: &mut HelpApp, mouse: MouseEvent, frame_area: ratatui:
             handle_left_click(app, mouse.column, mouse.row, frame_area);
         }
         MouseEventKind::Drag(MouseButton::Left) => {
-            handle_drag(app, mouse.column, frame_area);
+            if app.is_dragging_panel {
+                handle_panel_drag(app, mouse.column, frame_area);
+            } else if app.mouse_selection.is_some() {
+                handle_selection_drag(app, mouse.column, mouse.row);
+            }
         }
         MouseEventKind::Up(MouseButton::Left) => {
             app.is_dragging_panel = false;
+            // 选区保持，等待 Ctrl+C 复制或下次点击清除
         }
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             handle_scroll(app, mouse.column, mouse.row, frame_area, mouse.kind);
@@ -170,6 +180,7 @@ fn handle_left_click(app: &mut HelpApp, col: u16, row: u16, frame_area: ratatui:
         && row < main_y + main_height
     {
         app.is_dragging_panel = true;
+        app.mouse_selection = None;
         return;
     }
 
@@ -185,17 +196,36 @@ fn handle_left_click(app: &mut HelpApp, col: u16, row: u16, frame_area: ratatui:
             app.selected = inner_y;
             app.content_scroll = 0;
         }
+        app.mouse_selection = None;
+        return;
+    }
+
+    // 点击右侧内容区 → 开始选区
+    if col >= frame_area.x + left_width && row >= main_y && row < main_y + main_height {
+        if let Some(pos) = app.screen_to_content_pos(col, row) {
+            app.mouse_selection = Some(app::MouseSelection {
+                anchor: pos,
+                current: pos,
+            });
+        } else {
+            app.mouse_selection = None;
+        }
     }
 }
 
-/// 处理鼠标拖拽（调整面板宽度）
-fn handle_drag(app: &mut HelpApp, col: u16, frame_area: ratatui::layout::Rect) {
-    if !app.is_dragging_panel {
-        return;
-    }
+/// 处理面板拖拽（调整面板宽度）
+fn handle_panel_drag(app: &mut HelpApp, col: u16, frame_area: ratatui::layout::Rect) {
     let main_x = frame_area.x;
     let main_width = frame_area.width;
     app.set_panel_width_from_drag(col, main_x, main_width);
+}
+
+/// 处理内容区选区拖拽
+fn handle_selection_drag(app: &mut HelpApp, col: u16, row: u16) {
+    let pos = app.screen_to_content_pos(col, row);
+    if let (Some(sel), Some(p)) = (&mut app.mouse_selection, pos) {
+        sel.current = p;
+    }
 }
 
 /// 处理滚轮事件
