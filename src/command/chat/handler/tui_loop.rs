@@ -13,12 +13,16 @@ use crate::command::chat::input_thread::InputThread;
 use crate::command::chat::remote;
 use crate::command::chat::remote::bridge::WsBridge;
 use crate::command::chat::remote::protocol::{WsInbound, WsOutbound};
+use crate::command::chat::render::cache::copy_to_clipboard;
 use crate::command::chat::storage::{
     load_style, load_system_prompt, save_style, save_system_prompt,
 };
-use crate::command::chat::ui::chat::{copy_selection_to_clipboard, screen_to_text_pos};
+use crate::command::chat::ui::chat::{
+    copy_selection_to_clipboard, extract_selection_text, screen_to_text_pos,
+};
 use crate::command::chat::ui::context_menu::is_point_in_menu;
 use crate::command::chat::ui::draw_chat_ui;
+use crate::command::chat::ui::help::{help_extract_selection_text, help_screen_to_text_pos};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
@@ -324,7 +328,33 @@ fn dispatch_event(
             if app.ui.mouse_selection.is_some() {
                 match key.code {
                     KeyCode::Char('c') => {
-                        copy_selection_to_clipboard(app);
+                        // 根据当前模式选择对应的缓存
+                        let text = if matches!(app.ui.mode, ChatMode::Help) {
+                            app.ui
+                                .help_lines_cache
+                                .as_ref()
+                                .zip(app.ui.mouse_selection.as_ref())
+                                .map(|(cached, sel)| {
+                                    help_extract_selection_text(cached, sel.anchor, sel.current)
+                                })
+                                .unwrap_or_default()
+                        } else {
+                            app.ui
+                                .msg_lines_cache
+                                .as_ref()
+                                .zip(app.ui.mouse_selection.as_ref())
+                                .map(|(cached, sel)| {
+                                    extract_selection_text(cached, sel.anchor, sel.current)
+                                })
+                                .unwrap_or_default()
+                        };
+                        if !text.is_empty() {
+                            if copy_to_clipboard(&text) {
+                                app.show_toast("已复制到剪贴板", false);
+                            } else {
+                                app.show_toast("复制到剪贴板失败", true);
+                            }
+                        }
                         app.ui.mouse_selection = None;
                         return false;
                     }
@@ -346,7 +376,28 @@ fn dispatch_event(
                 ChatMode::SelectTheme => handle_select_theme(app, key),
                 ChatMode::Browse => handle_browse_mode(app, key),
                 ChatMode::Help => {
-                    app.update(Action::ExitToChat);
+                    // Help 模式下支持滚动（复制已由全局选区处理）
+                    match key.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            app.ui.help_scroll_offset = app.ui.help_scroll_offset.saturating_sub(1);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            app.ui.help_scroll_offset = app.ui.help_scroll_offset.saturating_add(1);
+                        }
+                        KeyCode::PageUp => {
+                            app.ui.help_scroll_offset =
+                                app.ui.help_scroll_offset.saturating_sub(10);
+                        }
+                        KeyCode::PageDown => {
+                            app.ui.help_scroll_offset =
+                                app.ui.help_scroll_offset.saturating_add(10);
+                        }
+                        _ => {
+                            // 任意其他键退出帮助
+                            app.ui.mouse_selection = None;
+                            app.update(Action::ExitToChat);
+                        }
+                    }
                 }
                 ChatMode::Config => handle_config_mode(app, key),
                 ChatMode::ArchiveConfirm => handle_archive_confirm_mode(app, key),
@@ -445,6 +496,27 @@ fn dispatch_event(
                     return false;
                 }
 
+                // ── Help 模式：选区 ──
+                if matches!(app.ui.mode, ChatMode::Help) {
+                    if let Some(inner) = app.ui.help_area_inner
+                        && let Some(ref cached) = app.ui.help_lines_cache
+                        && let Some((gline, coff)) = help_screen_to_text_pos(
+                            mouse.column,
+                            mouse.row,
+                            inner,
+                            app.ui.help_scroll_offset,
+                            cached,
+                        )
+                    {
+                        app.ui.mouse_selection = Some(MouseSelection {
+                            anchor: (gline, coff),
+                            current: (gline, coff),
+                        });
+                        *needs_redraw = true;
+                    }
+                    return false;
+                }
+
                 // 点击消息区域：开始选择
                 // 点击空白区域：清除选区
                 if let Some(inner) = app.ui.msg_area_inner
@@ -498,6 +570,24 @@ fn dispatch_event(
                 false
             }
             MouseEventKind::Drag(MouseButton::Left) => {
+                // Help 模式：拖拽更新选区
+                if matches!(app.ui.mode, ChatMode::Help) {
+                    if let Some(inner) = app.ui.help_area_inner
+                        && let Some(ref cached) = app.ui.help_lines_cache
+                        && let Some((gline, coff)) = help_screen_to_text_pos(
+                            mouse.column,
+                            mouse.row,
+                            inner,
+                            app.ui.help_scroll_offset,
+                            cached,
+                        )
+                        && let Some(ref mut sel) = app.ui.mouse_selection
+                    {
+                        sel.current = (gline, coff);
+                        *needs_redraw = true;
+                    }
+                    return false;
+                }
                 // 拖拽：更新选区终点
                 if let Some(inner) = app.ui.msg_area_inner
                     && let Some(ref cached) = app.ui.msg_lines_cache

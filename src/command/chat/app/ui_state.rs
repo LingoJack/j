@@ -210,6 +210,12 @@ pub struct UIState {
     pub msg_area_inner: Option<Rect>,
     /// 右键上下文菜单状态
     pub context_menu: Option<ContextMenu>,
+    /// 帮助页面渲染行缓存（每帧更新）
+    pub help_lines_cache: Option<Vec<Line<'static>>>,
+    /// 帮助页面渲染区域（每帧更新）
+    pub help_area_inner: Option<Rect>,
+    /// 帮助页面滚动偏移
+    pub help_scroll_offset: usize,
     /// 配置面板列表区域（chunks[1]），用于鼠标点击检测
     pub config_list_area: Option<Rect>,
     /// 配置面板 Tab 栏的全局 Y 坐标（屏幕行号）

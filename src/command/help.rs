@@ -84,24 +84,26 @@ fn run_help_tui() -> io::Result<()> {
                 if event::poll(std::time::Duration::from_millis(HELP_POLL_MS))? {
                     match event::read()? {
                         Event::Key(key) => {
-                            // Ctrl+C：有选区时复制，否则退出
-                            if key.modifiers.contains(KeyModifiers::CONTROL)
+                            // 有选区时按 c 复制
+                            if app.mouse_selection.is_some() && key.code == KeyCode::Char('c') {
+                                app.copy_selection();
+                                app.mouse_selection = None;
+                            } else if key.modifiers.contains(KeyModifiers::CONTROL)
                                 && key.code == KeyCode::Char('c')
                             {
-                                if app.mouse_selection.is_some() {
-                                    app.copy_selection();
-                                } else {
-                                    break;
-                                }
-                            }
-                            match app.mode {
-                                AppMode::Normal => {
-                                    if handle_normal_key(app, key, terminal.get_frame().area()) {
-                                        break;
+                                // Ctrl+C：退出
+                                break;
+                            } else {
+                                match app.mode {
+                                    AppMode::Normal => {
+                                        if handle_normal_key(app, key, terminal.get_frame().area())
+                                        {
+                                            break;
+                                        }
                                     }
+                                    AppMode::CommandPopup => handle_command_popup_key(app, key),
+                                    AppMode::ThemeSelect => handle_theme_select_key(app, key),
                                 }
-                                AppMode::CommandPopup => handle_command_popup_key(app, key),
-                                AppMode::ThemeSelect => handle_theme_select_key(app, key),
                             }
                         }
                         Event::Mouse(mouse) if app.mode == AppMode::Normal => {
@@ -154,7 +156,7 @@ fn handle_mouse_event(app: &mut HelpApp, mouse: MouseEvent, frame_area: ratatui:
         }
         MouseEventKind::Up(MouseButton::Left) => {
             app.is_dragging_panel = false;
-            // 选区保持，等待 Ctrl+C 复制或下次点击清除
+            // 选区保持，等待按 c 复制或下次点击清除
         }
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             handle_scroll(app, mouse.column, mouse.row, frame_area, mouse.kind);
