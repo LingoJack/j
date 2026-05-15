@@ -8,26 +8,43 @@ use ratatui::text::{Line, Span};
 pub fn render_code_block(
     lang: &str,
     code: &str,
-    content_width: usize,
+    _content_width: usize,
     theme: &dyn MdStyle,
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
-    let label = if lang.is_empty() {
-        " code ".to_string()
+    // 计算代码内容的最大显示宽度（用于动态围栏宽度）
+    let code_content_expanded = code.replace('\t', "    ");
+    let max_content_width = code_content_expanded
+        .lines()
+        .map(display_width)
+        .max()
+        .unwrap_or(0)
+        .max(10);
+
+    // 围栏总宽度 = 内容最大宽度 + 2（左右 padding）
+    let total_width = max_content_width + 2 + 2;
+
+    // 开始围栏：┌─ lang ──────┐
+    let (left_part, left_width) = if lang.is_empty() {
+        ("┌─".to_string(), 2)
     } else {
-        format!(" {} ", lang)
+        let s = format!("┌─ {} ─", lang);
+        let w = display_width(&s);
+        (s, w)
     };
-    let label_w = display_width(&label);
-    let border_fill = content_width.saturating_sub(3 + label_w);
-    let top_border = format!("┌─{}{}┐", label, "─".repeat(border_fill));
+
+    let dash_count = total_width.saturating_sub(left_width + 1).max(1);
+
+    let top_border_style = Style::default().fg(theme.text_dim()).bg(theme.bg_primary());
+
     lines.push(Line::from(Span::styled(
-        top_border,
-        Style::default().fg(theme.code_border()).bg(theme.code_bg()),
+        format!("{}{}┐", left_part, "─".repeat(dash_count)),
+        top_border_style,
     )));
 
-    let code_inner_w = content_width.saturating_sub(4);
-    let code_content_expanded = code.replace('\t', "    ");
+    // 渲染代码内容行
+    let code_inner_w = max_content_width;
     for code_line in code_content_expanded.lines() {
         let wrapped = wrap_text(code_line, code_inner_w);
         for wl in wrapped {
@@ -35,30 +52,50 @@ pub fn render_code_block(
             let highlighted = highlight_code_line(&wl, lang, &editor_theme);
             let text_w: usize = highlighted.iter().map(|s| display_width(&s.content)).sum();
             let fill = code_inner_w.saturating_sub(text_w);
+
             let mut spans_vec = Vec::new();
+
+            // 边框 │
             spans_vec.push(Span::styled(
-                "│ ".to_string(),
-                Style::default().fg(theme.code_border()).bg(theme.code_bg()),
+                "│",
+                Style::default().fg(theme.text_dim()).bg(theme.bg_primary()),
             ));
+
+            // 空格 padding
+            spans_vec.push(Span::styled(" ", Style::default().bg(theme.bg_primary())));
+
+            // 代码内容（背景使用 bg_primary，而不是 code_bg）
             for hs in highlighted {
                 spans_vec.push(Span::styled(
                     hs.content.to_string(),
-                    hs.style.bg(theme.code_bg()),
+                    hs.style.bg(theme.bg_primary()),
                 ));
             }
+
+            // 右侧填充空格
             spans_vec.push(Span::styled(
-                format!("{} │", " ".repeat(fill)),
-                Style::default().fg(theme.code_border()).bg(theme.code_bg()),
+                " ".repeat(fill),
+                Style::default().bg(theme.bg_primary()),
             ));
+
+            // 右侧空格 padding
+            spans_vec.push(Span::styled(" ", Style::default().bg(theme.bg_primary())));
+
+            // 右侧边框 │
+            spans_vec.push(Span::styled(
+                "│",
+                Style::default().fg(theme.text_dim()).bg(theme.bg_primary()),
+            ));
+
             lines.push(Line::from(spans_vec));
         }
     }
 
-    let bottom_border = format!("└{}┘", "─".repeat(content_width.saturating_sub(2)));
-    lines.push(Line::from(Span::styled(
-        bottom_border,
-        Style::default().fg(theme.code_border()).bg(theme.code_bg()),
-    )));
+    // 结束围栏：└─────────────┘
+    let bottom_dash_count = total_width.saturating_sub(2).max(1);
+    let bottom_border = format!("└{}┘", "─".repeat(bottom_dash_count));
+
+    lines.push(Line::from(Span::styled(bottom_border, top_border_style)));
 
     lines
 }

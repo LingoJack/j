@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-GCVh-tLq.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-DDvf-pcx.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -756,6 +756,97 @@ Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
 | j-indicator | Menu bar indicator | Not supported |
 `,k=e({default:()=>A}),A=`## Overview
 
+File encryption and decryption using **AES-256-GCM** symmetric encryption, supporting single files or batch directory operations.
+
+## Basic Usage
+
+### Encrypt a file
+
+\`\`\`bash
+j lock <password> <file-or-directory-path>
+\`\`\`
+
+### Decrypt a file
+
+\`\`\`bash
+j unlock <password> <file-or-directory-path>
+\`\`\`
+
+## Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| password | Used to derive the AES-256 key; not stored on disk |
+| file-or-directory-path | Target file or directory; directories are processed recursively |
+
+## Examples
+
+### Encrypt a single file
+
+\`\`\`bash
+j lock mypassword secret.txt
+# Output: secret.txt.lock (original file is deleted)
+\`\`\`
+
+### Decrypt a single file
+
+\`\`\`bash
+j unlock mypassword secret.txt.lock
+# Output: secret.txt (.lock file is deleted)
+\`\`\`
+
+### Batch encrypt a directory
+
+\`\`\`bash
+j lock mypassword ./documents/
+# Recursively encrypts all files, generating .lock files for each
+\`\`\`
+
+### Batch decrypt a directory
+
+\`\`\`bash
+j unlock mypassword ./documents/
+# Recursively decrypts all .lock files in the directory
+\`\`\`
+
+## Encryption Details
+
+| Item | Description |
+|------|-------------|
+| Algorithm | AES-256-GCM (authenticated encryption, tamper-proof) |
+| Key derivation | HKDF-SHA256, derives 256-bit key from password + random Salt |
+| Randomness | Each encryption uses an independent random Salt (32 bytes) and Nonce (12 bytes) |
+
+### Encrypted File Format
+
+\`\`\`
+MAGIC(4) + VERSION(1) + SALT(32) + NONCE(12) + CIPHERTEXT+TAG(16)
+\`\`\`
+
+| Field | Length | Description |
+|-------|--------|-------------|
+| MAGIC | 4 bytes | \`JLCK\`, identifies j-cli encrypted files |
+| VERSION | 1 byte | Format version (currently \`0x01\`) |
+| SALT | 32 bytes | HKDF salt |
+| NONCE | 12 bytes | AES-GCM random nonce |
+| CIPHERTEXT+TAG | variable + 16 bytes | Encrypted data + GCM authentication tag |
+
+## Behavior
+
+| Behavior | Description |
+|----------|-------------|
+| After encryption | **Deletes the original file**, keeping only the \`.lock\` encrypted file |
+| After decryption | **Deletes the \`.lock\` file**, keeping only the restored original file |
+| Skip rule | Skips files already having the \`.lock\` suffix during encryption |
+| Hidden files | Skips hidden files and directories (starting with \`.\`) |
+| Symlinks | Skips symbolic links |
+
+## Important Notes
+
+- **Remember your password** — lost passwords cannot recover file contents
+- Passwords are not stored in the system; must be entered each time
+- Original files are deleted after encryption; verify encryption succeeded before cleanup`,j=e({default:()=>M}),M=`## Overview
+
 The built-in Markdown editor is a Typora-like terminal editor with line-level rendering toggle and full Vim mode support.
 
 Core features:
@@ -895,7 +986,7 @@ Auto-aligned column widths, rendered as a formatted table:
 - Code snippet editing
 
 The editor returns the edited content on save, and returns empty on cancel.
-`,j=e({default:()=>M}),M=`## Permission Configuration File
+`,N=e({default:()=>P}),P=`## Permission Configuration File
 
 Permissions are configured in \`.jcli/permissions.yaml\` in your project directory:
 
@@ -1006,7 +1097,7 @@ allow:
   - "WebFetch(domain:github.com)"
   - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # Regex match all google subdomains
 \`\`\`
-`,N=e({default:()=>P}),P=`## Register App Aliases
+`,F=e({default:()=>I}),I=`## Register App Aliases
 
 ### macOS / Linux
 
@@ -1080,7 +1171,7 @@ j chat Hello              # Quick question
 
 \`\`\`bash
 j                         # Enter interactive mode with Tab completion
-\`\`\``,F=e({default:()=>I}),I=`## Overview
+\`\`\``,L=e({default:()=>R}),R=`## Overview
 
 Control AI chat from mobile devices via WebSocket, started with \`j chat --remote\`.
 
@@ -1102,7 +1193,7 @@ A QR code will be displayed for phone scanning.
 ## Client
 
 - **Web**: Scan QR code to connect
-`,L=e({default:()=>R}),R=`## Overview
+`,z=e({default:()=>B}),B=`## Overview
 
 Daily/weekly report system with quick logging, week management, and Git sync.
 
@@ -1170,7 +1261,7 @@ Report settings are stored in two locations:
 When current date exceeds \`last_day\`, writing to report automatically:
 1. Generates new week title \`# WeekN[start_date - end_date]\`
 2. Updates week_num and last_day
-`,z=e({default:()=>B}),B=`## Overview
+`,V=e({default:()=>H}),H=`## Overview
 
 Script system for creating and managing executable scripts via \`concat\` command.
 
@@ -1295,7 +1386,7 @@ start "" "%J_VSCODE%" .\\src
 "%J_NOTEPAD%" readme.txt
 \`\`\`
 
-> Paths with spaces must be wrapped in double quotes: \`"$J_CHROME"\` / \`"%J_VSCODE%"\``,V=e({default:()=>H}),H=`## Overview
+> Paths with spaces must be wrapped in double quotes: \`"$J_CHROME"\` / \`"%J_VSCODE%"\``,U=e({default:()=>W}),W=`## Overview
 
 Skills are specialized prompt modules that extend AI capabilities, loaded via the \`LoadSkill\` tool.
 
@@ -1367,7 +1458,7 @@ Disable specific skills via the TUI configuration interface. Settings are saved 
   "disabled_skills": ["skill-name-1", "skill-name-2"]
 }
 \`\`\`
-`,U=e({default:()=>W}),W=`## Overview
+`,G=e({default:()=>K}),K=`## Overview
 
 Todo management system with status transitions and TUI interface.
 
@@ -1417,7 +1508,7 @@ Todo data is stored in the data directory:
 |----------|------|
 | macOS / Linux | \`~/.jdata/report/todo.json\` |
 | Windows | \`%USERPROFILE%\\.jdata\\report\\todo.json\` |
-`,G=e({default:()=>K}),K=`## File Tools
+`,q=e({default:()=>se}),se=`## File Tools
 
 ### Read
 
@@ -1977,7 +2068,7 @@ permissions:
 |------|------|
 | \`@file:path\` | Include file content (auto-read and inject into context) |
 | \`@skill:name\` | Load and activate specified skill |
-`,q=e({default:()=>se}),se=`## 概述
+`,ce=e({default:()=>le}),le=`## 概述
 
 AI 对话系统，支持多模型、上下文引用和 Agent 自主执行。
 
@@ -2088,7 +2179,7 @@ permissions:
 j chat --remote     # 启用远程控制（手机扫码）
 j chat --remote --port 9390  # 指定端口
 \`\`\`
-`,ce=e({default:()=>le}),le=`## 概述
+`,ue=e({default:()=>de}),de=`## 概述
 
 别名系统，为路径和网址创建简短别名以便快速访问。
 
@@ -2172,7 +2263,7 @@ path:
 inner_url:
   gh: https://github.com
 \`\`\`
-`,ue=e({default:()=>de}),de=`## 概述
+`,fe=e({default:()=>pe}),pe=`## 概述
 
 Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取。
 
@@ -2263,7 +2354,7 @@ settings:
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,fe=e({default:()=>pe}),pe=`## 概述
+`,me=e({default:()=>he}),he=`## 概述
 
 Commands 是可复用的提示词片段，帮助快速调用预设的提示词。
 
@@ -2366,7 +2457,7 @@ description: 进入 PLAN 模式
 ### 管理命令
 
 在 TUI 中按 \`Ctrl+E\` 打开配置界面，切换到 Commands 标签页，可以启用或禁用命令。
-`,me=e({default:()=>he}),he=`## 概述
+`,ge=e({default:()=>_e}),_e=`## 概述
 
 j-cli 的所有数据存储在统一的用户数据目录中，支持通过环境变量自定义路径。
 
@@ -2487,7 +2578,7 @@ Copy-Item "$env:USERPROFILE\\.jdata.backup" "$env:USERPROFILE\\.jdata" -Recurse
 2. 复制到目标平台对应位置
 3. 调整脚本文件扩展名（\`.sh\` → \`.cmd\`）
 4. 更新 alias.yaml 中的路径格式
-`,ge=e({default:()=>_e}),_e=`## 概述
+`,ve=e({default:()=>ye}),ye=`## 概述
 
 Hook 系统允许在 AI 对话生命周期的特定节点自动执行自定义脚本。
 
@@ -2615,7 +2706,7 @@ type AGENTS.md 2>NUL
 - 命令输出会作为系统消息注入到对话上下文中
 - 避免在 hook 中执行耗时操作
 - 敏感信息不要通过 hook 输出
-`,ve=e({default:()=>ye}),ye=`## 一键安装（推荐）
+`,be=e({default:()=>xe}),xe=`## 一键安装（推荐）
 
 ### macOS / Linux
 
@@ -2722,7 +2813,98 @@ Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
 | 安装位置 | \`/usr/local/bin/j\` | \`%LOCALAPPDATA%\\j-cli\\j.exe\` |
 | Computer Use | 支持 | 不支持 |
 | j-indicator | 菜单栏指示灯 | 不支持 |
-`,be=e({default:()=>xe}),xe=`## 概述
+`,Se=e({default:()=>Ce}),Ce=`## 概述
+
+文件加密与解密功能，使用 **AES-256-GCM** 对文件进行对称加密，支持单文件或目录批量操作。
+
+## 基本用法
+
+### 加密文件
+
+\`\`\`bash
+j lock <密码> <文件或目录路径>
+\`\`\`
+
+### 解密文件
+
+\`\`\`bash
+j unlock <密码> <文件或目录路径>
+\`\`\`
+
+## 参数说明
+
+| 参数 | 说明 |
+|------|------|
+| 密码 | 用于派生 AES-256 密钥，不会存储到磁盘 |
+| 文件或目录路径 | 目标文件或目录；目录时会递归处理所有文件 |
+
+## 使用示例
+
+### 加密单个文件
+
+\`\`\`bash
+j lock mypassword secret.txt
+# 输出: secret.txt.lock（原文件被删除）
+\`\`\`
+
+### 解密单个文件
+
+\`\`\`bash
+j unlock mypassword secret.txt.lock
+# 输出: secret.txt（.lock 文件被删除）
+\`\`\`
+
+### 批量加密目录
+
+\`\`\`bash
+j lock mypassword ./documents/
+# 递归加密目录下所有文件，每个文件生成对应的 .lock 文件
+\`\`\`
+
+### 批量解密目录
+
+\`\`\`bash
+j unlock mypassword ./documents/
+# 递归解密目录下所有 .lock 文件
+\`\`\`
+
+## 加密原理
+
+| 项目 | 说明 |
+|------|------|
+| 算法 | AES-256-GCM（认证加密，防篡改） |
+| 密钥派生 | HKDF-SHA256，从密码 + 随机 Salt 派生 256-bit 密钥 |
+| 随机性 | 每次加密使用独立的随机 Salt（32 字节）和 Nonce（12 字节） |
+
+### 加密文件格式
+
+\`\`\`
+MAGIC(4) + VERSION(1) + SALT(32) + NONCE(12) + CIPHERTEXT+TAG(16)
+\`\`\`
+
+| 字段 | 长度 | 说明 |
+|------|------|------|
+| MAGIC | 4 字节 | \`JLCK\`，标识 j-cli 加密文件 |
+| VERSION | 1 字节 | 格式版本号（当前为 \`0x01\`） |
+| SALT | 32 字节 | HKDF 盐值 |
+| NONCE | 12 字节 | AES-GCM 随机 nonce |
+| CIPHERTEXT+TAG | 变长 + 16 字节 | 加密数据 + GCM 认证标签 |
+
+## 行为说明
+
+| 行为 | 说明 |
+|------|------|
+| 加密后 | **删除原文件**，只保留 \`.lock\` 加密文件 |
+| 解密后 | **删除 .lock 文件**，只保留还原后的原文件 |
+| 跳过规则 | 加密时跳过已有 \`.lock\` 后缀的文件 |
+| 隐藏文件 | 跳过以 \`.\` 开头的隐藏文件和隐藏目录 |
+| 符号链接 | 跳过符号链接 |
+
+## 注意事项
+
+- 请务必**记住密码**，密码丢失无法恢复文件内容
+- 密码不存储在系统中，每次加密/解密需手动输入
+- 加密后原文件被删除，请确认加密成功后再清理`,we=e({default:()=>Te}),Te=`## 概述
 
 内置 Markdown 编辑器是一个类 Typora 的终端编辑器，支持行级渲染切换和完整 Vim 模式。
 
@@ -2863,7 +3045,7 @@ Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
 - 代码片段编辑
 
 编辑器会在保存时返回编辑后的内容，取消时返回空。
-`,Se=e({default:()=>Ce}),Ce=`## 权限配置文件
+`,Ee=e({default:()=>De}),De=`## 权限配置文件
 
 权限配置位于项目目录 \`.jcli/permissions.yaml\`：
 
@@ -2974,7 +3156,7 @@ allow:
   - "WebFetch(domain:github.com)"
   - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # 正则匹配所有 google 子域名
 \`\`\`
-`,we=e({default:()=>Te}),Te=`## 注册应用别名
+`,Oe=e({default:()=>ke}),ke=`## 注册应用别名
 
 ### macOS / Linux
 
@@ -3048,7 +3230,7 @@ j chat 你好               # 快速提问
 
 \`\`\`bash
 j                         # 进入交互模式，支持 Tab 补全
-\`\`\``,Ee=e({default:()=>De}),De=`## 概述
+\`\`\``,Ae=e({default:()=>je}),je=`## 概述
 
 通过 WebSocket 从移动设备控制 AI 对话，使用 \`j chat --remote\` 启动。
 
@@ -3070,7 +3252,7 @@ j chat --remote --port 9390  # 指定端口
 ## 客户端
 
 - **Web**：扫描二维码连接
-`,Oe=e({default:()=>ke}),ke=`## 概述
+`,Me=e({default:()=>Ne}),Ne=`## 概述
 
 日报/周报系统，支持快速记录、周报管理和 Git 同步。
 
@@ -3138,7 +3320,7 @@ j reportctl pull
 当当前日期超过 \`last_day\` 时，写入日报会自动：
 1. 生成新周标题 \`# WeekN[开始日期 - 结束日期]\`
 2. 更新 week_num 和 last_day
-`,Ae=e({default:()=>je}),je=`## 概述
+`,Pe=e({default:()=>Fe}),Fe=`## 概述
 
 脚本系统，通过 \`concat\` 命令创建和管理可执行脚本。
 
@@ -3264,7 +3446,7 @@ start "" "%J_VSCODE%" .\\src
 \`\`\`
 
 > 路径含空格时，脚本中必须用双引号包裹变量：\`"$J_CHROME"\` / \`"%J_VSCODE%"\`
-`,Me=e({default:()=>Ne}),Ne=`## 概述
+`,Ie=e({default:()=>Le}),Le=`## 概述
 
 Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具加载。
 
@@ -3336,7 +3518,7 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
   "disabled_skills": ["skill-name-1", "skill-name-2"]
 }
 \`\`\`
-`,Pe=e({default:()=>Fe}),Fe=`## 概述
+`,Re=e({default:()=>ze}),ze=`## 概述
 
 待办管理系统，支持任务状态流转和 TUI 交互界面。
 
@@ -3386,7 +3568,7 @@ j todo add "完成文档"     # 快速添加待办
 |------|------|
 | macOS / Linux | \`~/.jdata/report/todo.json\` |
 | Windows | \`%USERPROFILE%\\.jdata\\report\\todo.json\` |
-`,Ie=e({default:()=>Le}),Le=`## 文件工具
+`,Be=e({default:()=>Ve}),Ve=`## 文件工具
 
 ### Read
 
@@ -3946,9 +4128,9 @@ permissions:
 |------|------|
 | \`@file:路径\` | 包含文件内容（自动读取并注入上下文） |
 | \`@skill:名称\` | 加载并激活指定 skill |
-`,Re={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},ze={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function Be(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`markdownEditor`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Ve=Object.assign({"./en/aiChat.md":ne,"./en/alias.md":ie,"./en/browser.md":oe,"./en/commands.md":x,"./en/dataDirectory.md":C,"./en/hooks.md":T,"./en/installation.md":D,"./en/markdown-editor.md":k,"./en/permissions.md":j,"./en/quickStart.md":N,"./en/remote.md":F,"./en/report.md":L,"./en/script.md":z,"./en/skills.md":V,"./en/todo.md":U,"./en/tools.md":G}),He=Object.assign({"./zh/aiChat.md":q,"./zh/alias.md":ce,"./zh/browser.md":ue,"./zh/commands.md":fe,"./zh/dataDirectory.md":me,"./zh/hooks.md":ge,"./zh/installation.md":ve,"./zh/markdown-editor.md":be,"./zh/permissions.md":Se,"./zh/quickStart.md":we,"./zh/remote.md":Ee,"./zh/report.md":Oe,"./zh/script.md":Ae,"./zh/skills.md":Me,"./zh/todo.md":Pe,"./zh/tools.md":Ie});function Ue(){let e={en:{},zh:{}},t=e=>e.replace(/-([a-z])/g,(e,t)=>t.toUpperCase());for(let[n,r]of Object.entries(Ve)){let i=n.match(/\.\/en\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.en[n]=r.default}}for(let[n,r]of Object.entries(He)){let i=n.match(/\.\/zh\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.zh[n]=r.default}}return e}var Y=Ue();function X(e,t){return Y[e]?.[t]||Y.en[t]||``}function Z(e,t){return J[e]?.[t]||J.en[t]||t}var We={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ge({lang:e,activeSection:t,onNavigate:n}){let r=Be(),i=J[e],a=We[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Ke={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function qe(e){let t=e.split(`
-`),n=[],r=new Set,i=!1;return t.forEach(e=>{if(e.startsWith("```")){i=!i;return}if(i)return;let t,a;if(e.startsWith(`## `))t=e.slice(3).trim(),a=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),a=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),a=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let o=$(t),s=1;for(;r.has(o);)o=`${$(t)}-${s}`,s++;r.add(o),n.push({id:o,text:t,level:a})}),n}function Je({content:e,lang:t}){let n=(0,u.useMemo)(()=>qe(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Ke[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
+`,He={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`,lock:`File Encryption`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`,lock:`文件加密`}}}},Ue={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`,lock:`File Encryption`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`,lock:`文件加密`}};function We(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`markdownEditor`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`,`lock`]}var Ge=Object.assign({"./en/aiChat.md":ne,"./en/alias.md":ie,"./en/browser.md":oe,"./en/commands.md":x,"./en/dataDirectory.md":C,"./en/hooks.md":T,"./en/installation.md":D,"./en/lock.md":k,"./en/markdown-editor.md":j,"./en/permissions.md":N,"./en/quickStart.md":F,"./en/remote.md":L,"./en/report.md":z,"./en/script.md":V,"./en/skills.md":U,"./en/todo.md":G,"./en/tools.md":q}),Y=Object.assign({"./zh/aiChat.md":ce,"./zh/alias.md":ue,"./zh/browser.md":fe,"./zh/commands.md":me,"./zh/dataDirectory.md":ge,"./zh/hooks.md":ve,"./zh/installation.md":be,"./zh/lock.md":Se,"./zh/markdown-editor.md":we,"./zh/permissions.md":Ee,"./zh/quickStart.md":Oe,"./zh/remote.md":Ae,"./zh/report.md":Me,"./zh/script.md":Pe,"./zh/skills.md":Ie,"./zh/todo.md":Re,"./zh/tools.md":Be});function Ke(){let e={en:{},zh:{}},t=e=>e.replace(/-([a-z])/g,(e,t)=>t.toUpperCase());for(let[n,r]of Object.entries(Ge)){let i=n.match(/\.\/en\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.en[n]=r.default}}for(let[n,r]of Object.entries(Y)){let i=n.match(/\.\/zh\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.zh[n]=r.default}}return e}var X=Ke();function Z(e,t){return X[e]?.[t]||X.en[t]||``}function qe(e,t){return J[e]?.[t]||J.en[t]||t}var Je={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ye({lang:e,activeSection:t,onNavigate:n}){let r=We(),i=J[e],a=Je[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Xe={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function Ze(e){let t=e.split(`
+`),n=[],r=new Set,i=!1;return t.forEach(e=>{if(e.startsWith("```")){i=!i;return}if(i)return;let t,a;if(e.startsWith(`## `))t=e.slice(3).trim(),a=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),a=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),a=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let o=$(t),s=1;for(;r.has(o);)o=`${$(t)}-${s}`,s++;r.add(o),n.push({id:o,text:t,level:a})}),n}function Qe({content:e,lang:t}){let n=(0,u.useMemo)(()=>Ze(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Xe[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
                   relative w-full text-left py-1.5 px-3 rounded-lg transition-all duration-200
                   ${s?`pl-8 text-xs`:a?`pl-6 text-xs`:`text-sm mt-1`}
                   ${i?s?`text-stone-700 font-medium bg-stone-50 before:absolute before:left-5 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-400 before:rounded-full`:a?`text-stone-800 font-medium bg-stone-50 before:absolute before:left-3 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-500 before:rounded-full`:`text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-stone-900 before:rounded-full`:s?`text-stone-400 hover:text-stone-500 hover:bg-stone-50`:a?`text-stone-400 hover:text-stone-600 hover:bg-stone-50`:`text-stone-500 hover:text-stone-700 hover:bg-stone-50`}
-                `,children:t})},e)})})]})}function Ye(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=ze[n],m=Re[n],h=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline`,children:n===`zh`?`首页`:`Home`}),(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/jcli`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:h,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-64 xl:mr-52 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=X(n,c),t=Z(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(te,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ge,{lang:n,activeSection:c,onNavigate:h})]})}),(0,d.jsx)(Je,{content:X(n,c)||``,lang:n}),(0,d.jsx)(`footer`,{className:`lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/jcli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Ye as default};
+                `,children:t})},e)})})]})}function $e(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Ue[n],m=He[n],h=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline`,children:n===`zh`?`首页`:`Home`}),(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/jcli`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:h,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-64 xl:mr-52 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=Z(n,c),t=qe(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(te,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ye,{lang:n,activeSection:c,onNavigate:h})]})}),(0,d.jsx)(Qe,{content:Z(n,c)||``,lang:n}),(0,d.jsx)(`footer`,{className:`lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/jcli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{$e as default};

@@ -45,8 +45,7 @@ pub trait MdStyle {
     fn md_rule(&self) -> Color;
 
     // ===== Code Block =====
-    fn code_border(&self) -> Color;
-    fn code_bg(&self) -> Color;
+    // code_border / code_bg 不再使用——代码块边框和背景已统一使用 text_dim / bg_primary
 
     // ===== Table =====
     fn table_header(&self) -> Color;
@@ -113,13 +112,6 @@ impl MdStyle for Theme {
     }
     fn md_rule(&self) -> Color {
         self.md_rule
-    }
-
-    fn code_border(&self) -> Color {
-        self.code_border
-    }
-    fn code_bg(&self) -> Color {
-        self.code_bg
     }
 
     fn table_header(&self) -> Color {

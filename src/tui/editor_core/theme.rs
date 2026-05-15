@@ -123,13 +123,6 @@ impl crate::markdown::theme::MdStyle for EditorTheme {
         self.md_rule
     }
 
-    fn code_border(&self) -> Color {
-        self.code_border
-    }
-    fn code_bg(&self) -> Color {
-        self.code_bg
-    }
-
     fn table_header(&self) -> Color {
         self.table_header
     }

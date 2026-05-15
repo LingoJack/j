@@ -36,7 +36,8 @@ export const docTree: Record<Language, Record<string, { title: string; children:
       children: {
         browser: 'Browser Automation',
         remote: 'Remote Control',
-        permissions: 'Permissions'
+        permissions: 'Permissions',
+        lock: 'File Encryption'
       }
     }
   },
@@ -74,7 +75,8 @@ export const docTree: Record<Language, Record<string, { title: string; children:
       children: {
         browser: '浏览器自动化',
         remote: '远程控制',
-        permissions: '权限配置'
+        permissions: '权限配置',
+        lock: '文件加密'
       }
     }
   }
@@ -112,7 +114,8 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
     hooks: 'Hook',
     browser: 'Browser Automation',
     remote: 'Remote Control',
-    permissions: 'Permissions'
+    permissions: 'Permissions',
+    lock: 'File Encryption'
   },
   zh: {
     installation: '安装',
@@ -130,7 +133,8 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
     hooks: 'Hook',
     browser: '浏览器自动化',
     remote: '远程控制',
-    permissions: '权限配置'
+    permissions: '权限配置',
+    lock: '文件加密'
   }
 }
 
@@ -140,7 +144,7 @@ export function getOrderedSections(): string[] {
     'installation', 'quickStart', 'dataDirectory',
     'alias', 'report', 'todo', 'script', 'markdownEditor',
     'aiChat', 'tools', 'commands', 'skills', 'hooks',
-    'browser', 'remote', 'permissions'
+    'browser', 'remote', 'permissions', 'lock'
   ]
 }
 
