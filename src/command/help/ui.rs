@@ -195,30 +195,30 @@ fn truncate_name(name: &str, max_width: usize) -> String {
 
 /// 渲染右侧内容区
 fn render_content(f: &mut ratatui::Frame, app: &mut HelpApp, area: Rect) {
-    let content_width = area.width.saturating_sub(2) as usize; // 减边框
+    // 左右各留 2 字符 padding
+    let h_pad: u16 = 2;
+    let inner_area = Rect::new(
+        area.x + h_pad,
+        area.y,
+        area.width.saturating_sub(h_pad * 2),
+        area.height,
+    );
+    let content_width = inner_area.width as usize;
 
     let lines = app.content_lines(content_width).to_vec();
     let total_lines = app.total_lines;
 
-    // 钳制滚动偏移
-    let visible_height = area.height.saturating_sub(2) as usize;
+    // 取可见范围内的行，并应用选区高亮
+    let scroll_offset = app.content_scroll;
+    let selection = app.mouse_selection.clone();
+    let visible_height = inner_area.height as usize;
     let max_scroll = total_lines.saturating_sub(visible_height);
     if app.content_scroll > max_scroll {
         app.content_scroll = max_scroll;
     }
 
-    // 缓存 inner rect（边框内部区域）
-    let inner = Rect::new(
-        area.x + 1,
-        area.y + 1,
-        area.width.saturating_sub(2),
-        area.height.saturating_sub(2),
-    );
-    app.content_inner_rect = Some(inner);
-
-    // 取可见范围内的行，并应用选区高亮
-    let scroll_offset = app.content_scroll;
-    let selection = app.mouse_selection.clone();
+    // 缓存 inner rect（含 padding 偏移）
+    app.content_inner_rect = Some(inner_area);
 
     let visible_lines: Vec<Line<'static>> = lines
         .into_iter()
@@ -231,12 +231,8 @@ fn render_content(f: &mut ratatui::Frame, app: &mut HelpApp, area: Rect) {
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
-
-    let content = Paragraph::new(visible_lines).block(block);
-    f.render_widget(content, area);
+    let content = Paragraph::new(visible_lines);
+    f.render_widget(content, inner_area);
 }
 
 /// 对单行应用选区高亮

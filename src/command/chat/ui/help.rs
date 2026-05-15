@@ -6,7 +6,7 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::command::chat::app::ChatApp;
@@ -54,15 +54,14 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         Style::default().fg(t.help_path),
     )));
 
-    let help_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(t.border_title))
-        .title(Span::styled(
-            " 帮助 (按任意键返回) ",
+    help_lines.insert(
+        0,
+        Line::from(Span::styled(
+            " 帮助 (按任意键返回)",
             Style::default().fg(t.text_dim),
-        ))
-        .style(Style::default().bg(t.help_bg));
-    let help_widget = Paragraph::new(help_lines).block(help_block);
+        )),
+    );
+
+    let help_widget = Paragraph::new(help_lines).style(Style::default().bg(t.help_bg));
     f.render_widget(help_widget, area);
 }

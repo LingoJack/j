@@ -42,8 +42,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         .map(|m| !m.teammates.is_empty())
         .unwrap_or(false);
     let has_subagents = !app.sub_agent_tracker.display_snapshots().is_empty();
-    let status_separator = (has_teammates || has_subagents) as u16; // 状态行与 teammate/subagent 之间的分割线
-    let title_height = 2 + status_separator + (has_teammates as u16) + (has_subagents as u16);
+    let title_height = title_bar::calc_title_height(app);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
