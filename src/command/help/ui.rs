@@ -113,8 +113,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut HelpApp, area: Rect) {
                     name,
                     content: _,
                 } => {
-                    let guide_width =
-                        unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
+                    let guide_width = unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
                     let name_display_width = inner_width.saturating_sub(guide_width);
                     let name_text = truncate_name(name, name_display_width);
 
@@ -173,9 +172,7 @@ fn make_full_width_line(
     let padding = inner_width.saturating_sub(content_width);
     if padding > 0 {
         let pad_style = if is_selected {
-            Style::default()
-                .bg(Color::Cyan)
-                .fg(Color::Black)
+            Style::default().bg(Color::Cyan).fg(Color::Black)
         } else {
             Style::default()
         };

@@ -168,7 +168,7 @@ impl MarkdownRenderer {
             return Line::from(spans);
         }
 
-        // 引用块
+        // 引用块（与 thinking block 风格一致：| 竖线 + bg_primary 背景）
         if trimmed.starts_with('>') {
             let mut level = 0;
             let mut rest = trimmed;
@@ -178,17 +178,20 @@ impl MarkdownRenderer {
             }
             let text = rest;
 
-            // 引用块竖线: 每级一个 ▎，加粗显示
-            let bar: String = (0..level).map(|_| "▎").collect::<Vec<_>>().join("");
+            // 背景色使用 bg_primary（与 thinking block 一致，融入主背景）
+            let bg_color = self.theme.bg_primary;
+            let bar_color = self.theme.md_blockquote_bar;
+            let text_color = self.theme.md_blockquote_text;
+
+            // 引用块竖线: 每级一个 | ，加粗显示
+            let bar: String = (0..level).map(|_| "|").collect::<Vec<_>>().join("");
             let bar_style = Style::default()
-                .fg(self.theme.md_blockquote_bar)
-                .bg(self.theme.md_blockquote_bg)
+                .fg(bar_color)
+                .bg(bg_color)
                 .add_modifier(Modifier::BOLD);
 
-            // 引用块文字: 使用主题专用颜色 + 背景
-            let text_style = Style::default()
-                .fg(self.theme.md_blockquote_text)
-                .bg(self.theme.md_blockquote_bg);
+            // 引用块文字: 使用主题专用颜色 + bg_primary 背景
+            let text_style = Style::default().fg(text_color).bg(bg_color);
 
             // 渲染行内元素，然后覆盖基础文字颜色和背景
             let rendered = self.render_inline(text);
@@ -208,8 +211,8 @@ impl MarkdownRenderer {
                                 if fg == self.theme.text_normal {
                                     text_style
                                 } else {
-                                    // 加粗/斜体等保留原前景色，只加 blockquote 背景
-                                    Style::default().fg(fg).bg(self.theme.md_blockquote_bg)
+                                    // 加粗/斜体等保留原前景色，只加 bg_primary 背景
+                                    Style::default().fg(fg).bg(bg_color)
                                 }
                             }),
                         )
@@ -220,6 +223,7 @@ impl MarkdownRenderer {
             let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
+                Span::styled("  ", Style::default()),
                 Span::styled(format!("{} ", bar), bar_style),
             ];
             spans.extend(styled_rendered);

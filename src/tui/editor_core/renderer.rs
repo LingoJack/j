@@ -318,7 +318,7 @@ impl MarkdownRenderer {
                 return vec![];
             }
 
-            // 引用块续行：保持引用块样式，渲染 inline
+            // 引用块续行：保持引用块样式（与 thinking block 一致），渲染 inline
             let trimmed = line_content.trim_start();
             if trimmed.starts_with('>') {
                 let mut level = 0;
@@ -328,14 +328,15 @@ impl MarkdownRenderer {
                     rest = rest[1..].trim_start();
                 }
 
-                let bar: String = (0..level).map(|_| "▎").collect::<Vec<_>>().join("");
+                let bg_color = self.theme.bg_primary;
+                let bar: String = (0..level).map(|_| "|").collect::<Vec<_>>().join("");
                 let bar_style = Style::default()
                     .fg(self.theme.md_blockquote_bar)
-                    .bg(self.theme.md_blockquote_bg)
+                    .bg(bg_color)
                     .add_modifier(Modifier::BOLD);
                 let bq_text_style = Style::default()
                     .fg(self.theme.md_blockquote_text)
-                    .bg(self.theme.md_blockquote_bg);
+                    .bg(bg_color);
 
                 // 对引用内容部分渲染 inline，然后提取续行片段
                 let inline_spans = self.render_inline(rest);
@@ -352,6 +353,7 @@ impl MarkdownRenderer {
                 let vl_spans = extract_span_range(&inline_spans, adjusted_start, adjusted_end);
 
                 let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
+                spans.push(Span::styled("  ", Style::default()));
                 spans.push(Span::styled(format!("{} ", bar), bar_style));
                 // 应用引用块文本样式
                 for span in vl_spans {
