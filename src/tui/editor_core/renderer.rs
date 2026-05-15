@@ -172,13 +172,17 @@ impl MarkdownRenderer {
         };
 
         // ---- 光标行：显示源码 + 光标 ----
-        // 代码块内的光标行也复用 bg_primary 背景；保留 code_block_max_width
-        // 以驱动右边框对齐（不再用作色块背景）。
+        // 代码块内的光标行用 wrap_width 驱动右边框对齐
+        let line_num_w = if self.show_line_numbers { 6 } else { 0 };
         let code_block_max_width = if !Self::is_code_fence_line(&line_content)
             && self.is_line_in_complete_code_block(logical_line, lines)
         {
-            self.find_code_block_range(logical_line, lines)
-                .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
+            Some(
+                wrap_width
+                    .saturating_sub(line_num_w)
+                    .max(10)
+                    .saturating_sub(4),
+            )
         } else {
             None
         };
@@ -275,13 +279,12 @@ impl MarkdownRenderer {
                         .fg(self.theme.text_normal)
                         .bg(self.theme.bg_primary),
                 ));
-                // 计算填充宽度以对齐右边框
-                let max_width = self
-                    .find_code_block_range(logical_line, lines)
-                    .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
-                    .unwrap_or(0);
+                // 用 wrap_width 计算填充宽度以撑满屏幕
+                let line_num_w = if self.show_line_numbers { 6 } else { 0 };
+                let total_width = wrap_width.saturating_sub(line_num_w).max(10);
+                let inner_width = total_width.saturating_sub(4);
                 let content_width = display_width(text);
-                let fill_width = max_width.saturating_sub(content_width);
+                let fill_width = inner_width.saturating_sub(content_width);
                 spans.push(Span::styled(
                     " ".repeat(fill_width),
                     Style::default().bg(self.theme.bg_primary),
@@ -395,7 +398,7 @@ impl MarkdownRenderer {
         // 检查是否是代码块围栏行
         if Self::is_code_fence_line(line_content) {
             if self.is_fence_line_paired(logical_line, lines) {
-                return vec![self.render_code_fence_line(line_content, logical_line, lines)];
+                return vec![self.render_code_fence_line(line_content, logical_line, wrap_width)];
             }
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
@@ -409,7 +412,12 @@ impl MarkdownRenderer {
 
         // 检查是否在完整的代码块内
         if self.is_line_in_complete_code_block(logical_line, lines) {
-            return vec![self.render_code_block_line(line_content, logical_line, lines)];
+            return vec![self.render_code_block_line(
+                line_content,
+                logical_line,
+                lines,
+                wrap_width,
+            )];
         }
 
         // 检查是否在表格内

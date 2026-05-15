@@ -4,26 +4,23 @@ use crate::util::text::{display_width, wrap_text};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
-/// 渲染围栏代码块
+/// 渲染围栏代码块（撑满可用宽度 + 自动折行 + 前后空行）
 pub fn render_code_block(
     lang: &str,
     code: &str,
-    _content_width: usize,
+    content_width: usize,
     theme: &dyn MdStyle,
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
-    // 计算代码内容的最大显示宽度（用于动态围栏宽度）
-    let code_content_expanded = code.replace('\t', "    ");
-    let max_content_width = code_content_expanded
-        .lines()
-        .map(display_width)
-        .max()
-        .unwrap_or(0)
-        .max(10);
+    // 最小宽度保证
+    let total_width = content_width.max(10);
 
-    // 围栏总宽度 = 内容最大宽度 + 2（左右 padding）
-    let total_width = max_content_width + 2 + 2;
+    // 代码内容可用宽度 = total_width - 4（│ + 空格 + 内容 + 空格 + │）
+    let code_inner_w = total_width.saturating_sub(4);
+
+    // 前导空行
+    lines.push(Line::from(""));
 
     // 开始围栏：┌─ lang ──────┐
     let (left_part, left_width) = if lang.is_empty() {
@@ -43,10 +40,14 @@ pub fn render_code_block(
         top_border_style,
     )));
 
-    // 渲染代码内容行
-    let code_inner_w = max_content_width;
+    // 渲染代码内容行（自动折行）
+    let code_content_expanded = code.replace('\t', "    ");
     for code_line in code_content_expanded.lines() {
-        let wrapped = wrap_text(code_line, code_inner_w);
+        let wrapped = if code_inner_w > 0 {
+            wrap_text(code_line, code_inner_w)
+        } else {
+            vec![code_line.to_string()]
+        };
         for wl in wrapped {
             let editor_theme = theme.code_syntax_theme();
             let highlighted = highlight_code_line(&wl, lang, &editor_theme);
@@ -64,7 +65,7 @@ pub fn render_code_block(
             // 空格 padding
             spans_vec.push(Span::styled(" ", Style::default().bg(theme.bg_primary())));
 
-            // 代码内容（背景使用 bg_primary，而不是 code_bg）
+            // 代码内容（背景使用 bg_primary）
             for hs in highlighted {
                 spans_vec.push(Span::styled(
                     hs.content.to_string(),
@@ -96,6 +97,9 @@ pub fn render_code_block(
     let bottom_border = format!("└{}┘", "─".repeat(bottom_dash_count));
 
     lines.push(Line::from(Span::styled(bottom_border, top_border_style)));
+
+    // 后导空行
+    lines.push(Line::from(""));
 
     lines
 }

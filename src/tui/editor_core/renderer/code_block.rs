@@ -130,52 +130,12 @@ impl MarkdownRenderer {
             .map(|s| s.to_string())
     }
 
-    /// 查找代码块范围（统一通过缓存）
-    pub(super) fn find_code_block_range(
-        &self,
-        line_idx: usize,
-        _lines: &[String],
-    ) -> Option<(usize, usize)> {
-        self.code_block_cache.get_block_range(line_idx)
-    }
-
-    /// 查找围栏行对应的代码块范围（统一通过缓存）
-    pub(super) fn find_code_block_range_for_fence(
-        &self,
-        fence_line: usize,
-        _lines: &[String],
-    ) -> Option<(usize, usize)> {
-        self.code_block_cache.get_block_range(fence_line)
-    }
-
-    /// 计算代码块内容的最大显示宽度
-    pub(super) fn calculate_code_block_max_width(
-        &self,
-        start_idx: usize,
-        end_idx: usize,
-        lines: &[String],
-    ) -> usize {
-        let mut max_width = 0;
-        for i in (start_idx + 1)..end_idx {
-            if let Some(line) = lines.get(i) {
-                if self.horizontal_scroll == 0 {
-                    max_width = max_width.max(display_width(line));
-                } else {
-                    // 跳过 horizontal_scroll 个字符后计算宽度
-                    let visible: String = line.chars().skip(self.horizontal_scroll).collect();
-                    max_width = max_width.max(display_width(&visible));
-                }
-            }
-        }
-        max_width.max(10)
-    }
-
-    /// 渲染代码块围栏行
+    /// 渲染代码块围栏行（撑满 wrap_width）
     pub(super) fn render_code_fence_line(
         &self,
         line: &str,
         line_idx: usize,
-        lines: &[String],
+        wrap_width: usize,
     ) -> Line<'static> {
         let line_num = self.format_line_number(line_idx);
         let trimmed = line.trim_start();
@@ -186,13 +146,9 @@ impl MarkdownRenderer {
             .get_block_range(line_idx)
             .is_some_and(|(start, _)| start == line_idx);
 
-        // 计算代码块内容的最大宽度
-        let content_max_width = self
-            .find_code_block_range_for_fence(line_idx, lines)
-            .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
-            .unwrap_or(10);
-
-        let total_width = content_max_width + 2 + 2; // +2 for left/right padding
+        // 行号占用宽度
+        let line_num_w = if self.show_line_numbers { 6 } else { 0 };
+        let total_width = wrap_width.saturating_sub(line_num_w).max(10);
 
         if is_start {
             // 开始围栏：┌─ lang ──────┐
@@ -237,12 +193,13 @@ impl MarkdownRenderer {
         }
     }
 
-    /// 渲染代码块内容行
+    /// 渲染代码块内容行（撑满 wrap_width）
     pub(super) fn render_code_block_line(
         &self,
         line: &str,
         line_idx: usize,
         lines: &[String],
+        wrap_width: usize,
     ) -> Line<'static> {
         let line_num = self.format_line_number(line_idx);
 
@@ -260,13 +217,12 @@ impl MarkdownRenderer {
         // 计算当前行的显示宽度
         let content_width = display_width(&visible_line);
 
-        // 查找代码块范围并计算最大宽度
-        let max_width = self
-            .find_code_block_range(line_idx, lines)
-            .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
-            .unwrap_or(content_width);
-
-        let fill_width = max_width.saturating_sub(content_width);
+        // 行号占用宽度
+        let line_num_w = if self.show_line_numbers { 6 } else { 0 };
+        // 内容区总宽度 = wrap_width - line_num_w，内部可用 = 总宽 - 4（│+sp+内容+sp+│）
+        let total_width = wrap_width.saturating_sub(line_num_w).max(10);
+        let inner_width = total_width.saturating_sub(4);
+        let fill_width = inner_width.saturating_sub(content_width);
 
         let mut spans = vec![
             Span::styled(
