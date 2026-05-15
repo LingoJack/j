@@ -18,7 +18,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
 /// 绘制顶部 Tab 栏（支持窄屏水平滚动）
@@ -193,6 +193,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     // 如果没有可滚动列表，或终端太小，回退到整体渲染
     if list_lines.is_empty() || area.height <= fixed_h + 1 {
+        // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
+        f.render_widget(Clear, area);
         let mut all_lines: Vec<Line> = vec![
             Line::from(""),
             draw_tab_bar_line(app),
@@ -239,6 +241,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         .split(area);
 
     // ── 固定头部：顶部边框 + 标题 + Tab 栏 + Tab 专属头部 ──
+    // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
+    f.render_widget(Clear, chunks[0]);
     let mut header_lines: Vec<Line> = vec![
         Line::from(""),
         draw_tab_bar_line(app),
@@ -275,6 +279,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .split(chunks[1]);
 
         // ── 左侧：工具列表（可滚动）──
+        // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
+        f.render_widget(Clear, h_chunks[0]);
         let inner_height = h_chunks[0].height.saturating_sub(1) as usize;
         let selected_idx = app.ui.config_field_idx;
         if let Some(&selected_line) = field_line_indices.get(selected_idx) {
@@ -300,6 +306,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         f.render_widget(left_widget, h_chunks[0]);
 
         // ── 右侧：选中工具详情 ──
+        // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
+        f.render_widget(Clear, h_chunks[1]);
         let detail_lines = tools::draw_tab_tools_detail(app);
         let selected_tool_name = app
             .tool_registry
@@ -330,6 +338,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     }
 
     // ── 可滚动列表区域（非 Tools Tab 的通用路径）──
+    // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
+    f.render_widget(Clear, chunks[1]);
     // 可见高度 = list_area_h - 1（底部 border）
     let inner_height = list_area_h.saturating_sub(1) as usize;
     let selected_idx = match app.ui.config_tab {

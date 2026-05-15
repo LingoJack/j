@@ -21,7 +21,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 use ratatui_image::{Resize, StatefulImage};
 
@@ -29,7 +29,9 @@ use ratatui_image::{Resize, StatefulImage};
 pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let size = f.area();
 
-    // 整体背景
+    // 整体背景：先清除旧内容，再填充背景色。
+    // Windows 上 crossterm 差异缓冲区可能不清理旧内容，导致切换模式时残留上一帧的字符。
+    f.render_widget(Clear, size);
     let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 

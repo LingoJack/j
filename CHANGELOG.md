@@ -1,3 +1,14 @@
+# v12.10.57
+
+
+### Bug 修复
+- **安装脚本错误处理**: 修复 PowerShell 和 Shell 安装脚本中 `exit 1` 导致的非预期退出问题，改为使用 `return` 优雅退出函数
+- **Windows 重复渲染**: 在 `chat.rs` 和 `config.rs` 中添加 `Clear` widget，解决 Windows 上 crossterm 差异缓冲区不清理旧内容导致的界面重复渲染问题
+
+### 改进
+- **安装脚本版本回退**: 移除安装脚本的内置版本回退机制（`FALLBACK_VERSION`），所有网络获取失败时直接报错并提示用户指定版本安装
+</result
+
 # v12.10.56
 
 
