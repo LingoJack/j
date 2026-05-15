@@ -314,13 +314,23 @@ fn perform_update_internal(target: &str, interactive: bool) {
             }
             Err(e) => {
                 let err_str = e.to_string();
-                if err_str.contains("403") || err_str.contains("rate limit") {
+                // 多种错误情况都尝试使用备用方案更新
+                // - 403/rate limit: GitHub API 限流
+                // - decoding/TLS/IoError: Windows 上 rustls 可能遇到的问题
+                // - certificate/ssl: 证书验证失败
+                let should_fallback = err_str.contains("403")
+                    || err_str.contains("rate limit")
+                    || err_str.contains("decoding")
+                    || err_str.contains("IoError")
+                    || err_str.contains("certificate")
+                    || err_str.contains("ssl")
+                    || err_str.contains("TLS")
+                    || err_str.contains("connection");
+
+                if should_fallback {
                     println!("{} {}", "更新失败:".red(), e);
-                    println!(
-                        "{}",
-                        "GitHub API 请求被限流，尝试使用 curl 方式更新...".yellow()
-                    );
-                    perform_update_curl(target, interactive);
+                    println!("{}", "尝试使用备用方式更新...".yellow());
+                    perform_update_fallback(target, interactive);
                 } else {
                     println!("{} {}", "更新失败:".red(), e);
                     println!("请尝试手动更新:");
@@ -586,11 +596,12 @@ fn show_unknown_source_hint(interactive: bool) {
     handle_cargo_update(false, interactive);
 }
 
-/// 使用 curl 方式下载更新（当 self_update 因 API 限流失败时的后备方案）
-/// 模仿 install.sh 的逻辑：先获取最新版本号，再下载 tarball
-fn perform_update_curl(target: &str, interactive: bool) {
+/// 备用更新方案（当 self_update 因 TLS/API 限流等问题失败时）
+/// Unix: 使用 curl 下载
+/// Windows: 使用 PowerShell Invoke-WebRequest 下载（绕过 rustls 问题）
+fn perform_update_fallback(target: &str, interactive: bool) {
     // 获取最新版本号
-    let version = get_latest_version_curl();
+    let version = get_latest_version_fallback();
     let version_display = version.as_deref().unwrap_or("未知").to_string();
     println!("最新版本: {}", version_display.cyan());
 
@@ -599,8 +610,13 @@ fn perform_update_curl(target: &str, interactive: bool) {
         None => {
             println!("{}", "无法获取最新版本号".red());
             println!("请尝试手动更新:");
+            #[cfg(unix)]
             println!(
                 "  curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh"
+            );
+            #[cfg(windows)]
+            println!(
+                "  irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex"
             );
             return;
         }
@@ -654,16 +670,49 @@ fn perform_update_curl(target: &str, interactive: bool) {
     #[cfg(windows)]
     let tmp_archive = tmp_dir.join(format!("{}.zip", asset_name));
 
-    // 用 curl 下载
+    // 下载
     println!("{}", "正在下载...".yellow());
-    let download = std::process::Command::new("curl")
-        .args(["-fsSL", "--progress-bar", "-o"])
-        .arg(&tmp_archive)
-        .arg(&url)
-        .status();
 
-    match download {
-        Ok(status) if status.success() => {}
+    #[cfg(unix)]
+    let download_result = {
+        std::process::Command::new("curl")
+            .args(["-fsSL", "--progress-bar", "-o"])
+            .arg(&tmp_archive)
+            .arg(&url)
+            .status()
+    };
+
+    #[cfg(windows)]
+    let download_result = {
+        let tmp_archive_str = tmp_archive.to_string_lossy().to_string();
+        // 使用 PowerShell 的 Invoke-WebRequest 下载（使用系统原生 TLS，避免 rustls 问题）
+        let ps_script = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             Invoke-WebRequest -Uri '{}' -OutFile '{}' -UseBasicParsing",
+            url, tmp_archive_str
+        );
+        std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", &ps_script])
+            .status()
+    };
+
+    match download_result {
+        Ok(status) if status.success() => {
+            // 验证下载文件存在且非空
+            if !tmp_archive.exists() {
+                println!("{}", "下载文件不存在".red());
+                let _ = std::fs::remove_dir_all(&tmp_dir);
+                return;
+            }
+            let file_size = std::fs::metadata(&tmp_archive)
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if file_size == 0 {
+                println!("{}", "下载文件为空".red());
+                let _ = std::fs::remove_dir_all(&tmp_dir);
+                return;
+            }
+        }
         Ok(status) => {
             println!(
                 "{} 退出码: {}",
@@ -839,54 +888,122 @@ fn perform_update_curl(target: &str, interactive: bool) {
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
 
-/// 通过 curl 获取最新版本号（模仿 install.sh 的多种回退策略）
-fn get_latest_version_curl() -> Option<String> {
+/// 通过外部工具获取最新版本号（模仿 install.sh 的多种回退策略）
+/// Unix: 使用 curl
+/// Windows: 使用 PowerShell Invoke-WebRequest
+fn get_latest_version_fallback() -> Option<String> {
     println!("{}", "正在获取最新版本号...".yellow());
 
     let auth_token = get_github_auth_token();
 
-    // 方法1: 使用 GitHub API（带认证）
-    let mut api_cmd = std::process::Command::new("curl");
-    api_cmd.args(["-fsSL", "-H", "User-Agent: j-cli-updater"]);
-    if let Some(ref token) = auth_token {
-        api_cmd.args(["-H", &format!("Authorization: token {}", token)]);
-    }
-    api_cmd.arg("https://api.github.com/repos/LingoJack/jcli/releases/latest");
-
-    if let Ok(output) = api_cmd.output()
-        && output.status.success()
+    #[cfg(unix)]
     {
-        let body = String::from_utf8_lossy(&output.stdout);
-        let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
-        // 从 JSON 中提取 tag_name
-        for line in body.lines() {
-            if line.contains("\"tag_name\"")
-                && let Some(re) = &re
-                && let Some(m) = re.find(line)
+        // 方法1: 使用 GitHub API（带认证）
+        let mut api_cmd = std::process::Command::new("curl");
+        api_cmd.args(["-fsSL", "-H", "User-Agent: j-cli-updater"]);
+        if let Some(ref token) = auth_token {
+            api_cmd.args(["-H", &format!("Authorization: token {}", token)]);
+        }
+        api_cmd.arg("https://api.github.com/repos/LingoJack/jcli/releases/latest");
+
+        if let Ok(output) = api_cmd.output()
+            && output.status.success()
+        {
+            let body = String::from_utf8_lossy(&output.stdout);
+            let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
+            // 从 JSON 中提取 tag_name
+            for line in body.lines() {
+                if line.contains("\"tag_name\"")
+                    && let Some(re) = &re
+                    && let Some(m) = re.find(line)
+                {
+                    return Some(m.as_str().to_string());
+                }
+            }
+        }
+
+        // 方法2: 从 releases 页面解析重定向
+        if let Ok(output) = std::process::Command::new("curl")
+            .args(["-fsSL", "-o", "/dev/null", "-w", "%{url_effective}"])
+            .arg("https://github.com/LingoJack/jcli/releases/latest")
+            .output()
+            && output.status.success()
+        {
+            let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // 重定向 URL 格式: https://github.com/LingoJack/jcli/releases/tag/v12.8.10
+            let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
+            if let Some(re) = re
+                && let Some(m) = re.find(&url)
             {
                 return Some(m.as_str().to_string());
             }
         }
+
+        None
     }
 
-    // 方法2: 从 releases 页面解析重定向
-    if let Ok(output) = std::process::Command::new("curl")
-        .args(["-fsSL", "-o", "/dev/null", "-w", "%{url_effective}"])
-        .arg("https://github.com/LingoJack/jcli/releases/latest")
-        .output()
-        && output.status.success()
+    #[cfg(windows)]
     {
-        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        // 重定向 URL 格式: https://github.com/LingoJack/jcli/releases/tag/v12.8.10
-        let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
-        if let Some(re) = re
-            && let Some(m) = re.find(&url)
-        {
-            return Some(m.as_str().to_string());
+        // Windows: 使用 PowerShell 获取最新版本号
+        let mut auth_header = String::from("User-Agent: j-cli-updater");
+        if let Some(ref token) = auth_token {
+            auth_header.push_str(&format!(", Authorization: token {}", token));
         }
-    }
 
-    None
+        // 方法1: 通过 GitHub API 获取
+        let ps_script = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             try {{ \
+                 $r = Invoke-WebRequest -Uri 'https://api.github.com/repos/LingoJack/jcli/releases/latest' \
+                     -Headers @{{'User-Agent'='j-cli-updater'}} -UseBasicParsing; \
+                 $j = $r.Content | ConvertFrom-Json; \
+                 Write-Output $j.tag_name \
+             }} catch {{ Write-Output '' }}"
+        );
+
+        if let Ok(output) = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", &ps_script])
+            .output()
+            && output.status.success()
+        {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
+            if let Some(re) = re
+                && let Some(m) = re.find(&version)
+            {
+                return Some(m.as_str().to_string());
+            }
+        }
+
+        // 方法2: 从 releases 页面解析重定向 Location
+        let ps_script2 = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             try {{ \
+                 $r = Invoke-WebRequest -Uri 'https://github.com/LingoJack/jcli/releases/latest' \
+                     -MaximumRedirection 0 -ErrorAction SilentlyContinue; \
+                 Write-Output '' \
+             }} catch {{ \
+                 $loc = $_.Exception.Response.Headers['Location']; \
+                 if ($loc) {{ Write-Output $loc }} else {{ Write-Output '' }} \
+             }}"
+        );
+
+        if let Ok(output) = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", &ps_script2])
+            .output()
+            && output.status.success()
+        {
+            let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
+            if let Some(re) = re
+                && let Some(m) = re.find(&url)
+            {
+                return Some(m.as_str().to_string());
+            }
+        }
+
+        None
+    }
 }
 
 /// 从 GitHub Release 下载并安装 j-indicator 到 j 同目录

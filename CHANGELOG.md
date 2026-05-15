@@ -1,3 +1,14 @@
+# v12.10.56
+
+
+### 改进
+- **更新备用方案**: 更新失败时的备用方案从仅支持 curl 扩展为 Windows PowerShell 方案，解决 Windows 上 rustls 导致的 TLS/证书/连接错误；同时扩展错误识别范围，覆盖 decoding、IoError、certificate、ssl、TLS、connection 等多种失败场景
+- **下载验证**: 备用下载完成后增加文件存在性和非空校验，避免空文件或丢失文件导致后续解压失败
+- **欢迎页 ASCII Art**: 修正 J-CLI ASCII Art 字符对齐，调整间距使 logo 显示更规整
+
+### Bug 修复
+- **Windows 更新失败**: 修复 Windows 平台因 rustls TLS 兼容性问题导致 `j update` 无法正常更新的问题，改用系统原生 TLS 的 PowerShell Invoke-WebRequest 作为下载后备方案
+
 # v12.10.55
 
 
