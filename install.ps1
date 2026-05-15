@@ -21,7 +21,7 @@ $Repo = "LingoJack/jcli"
 $BinaryName = "j"
 $InstallDir = "$env:LOCALAPPDATA\j-cli"
 $DataDir = "$env:USERPROFILE\.jdata"
-$FallbackVersion = "v12.10.22"
+
 
 function Write-Info($msg) {
     Write-Host "[INFO] $msg" -ForegroundColor Green
@@ -85,9 +85,8 @@ function Get-LatestVersion {
         Write-Warn "Releases 页面访问失败: $($_.Exception.Message)"
     }
 
-    # 方法3: 内置版本
-    Write-Warn "无法从网络获取最新版本，使用内置版本: $FallbackVersion"
-    return $FallbackVersion
+    # 所有网络方法均失败，直接报错
+    Write-Err "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.ps1 -Version v1.0.0"
 }
 
 # 下载并安装

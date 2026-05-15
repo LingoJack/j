@@ -11,7 +11,7 @@ REPO="LingoJack/jcli"
 BINARY_NAME="j"
 INSTALL_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"
-FALLBACK_VERSION="v12.10.22"
+
 
 # 颜色输出
 RED='\033[0;31m'
@@ -72,18 +72,14 @@ get_latest_version() {
         latest=$(curl -fsSL -o /dev/null -w "%{url_effective}" -H "User-Agent: j-cli-installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
     fi
     
-    # 方法4: 使用已知最新版本
+    # 所有网络方法均失败，直接报错
     if [ -z "$latest" ]; then
-        warn "无法从网络获取最新版本"
-        info "使用内置版本: ${FALLBACK_VERSION}" >&2
-        latest="${FALLBACK_VERSION}"
+        error "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.sh v1.0.0"
     fi
     
     # 验证版本号格式
     if ! echo "$latest" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-        warn "获取到的版本号格式不正确: $latest"
-        info "使用内置版本: ${FALLBACK_VERSION}" >&2
-        latest="${FALLBACK_VERSION}"
+        error "获取到的版本号格式不正确: $latest，请检查网络连接后重试"
     fi
     
     echo "$latest"
