@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_wildcard_rule() {
-    assert!(matches_rule("*", "Bash", "{}"));
+    assert!(matches_rule("*", "Shell", "{}"));
     assert!(matches_rule("*", "Read", "{}"));
 }
 
@@ -16,15 +16,15 @@ fn test_tool_name_rule() {
 #[test]
 fn test_bash_command_prefix() {
     let args = r#"{"command": "cargo build --release"}"#;
-    assert!(matches_rule("Bash(cargo build:*)", "Bash", args));
-    assert!(!matches_rule("Bash(cargo test:*)", "Bash", args));
+    assert!(matches_rule("Shell(cargo build:*)", "Shell", args));
+    assert!(!matches_rule("Shell(cargo test:*)", "Shell", args));
 
     let args2 = r#"{"command": "ls -la"}"#;
-    assert!(matches_rule("Bash(ls:*)", "Bash", args2));
+    assert!(matches_rule("Shell(ls:*)", "Shell", args2));
 
     // 精确匹配（无参数）
     let args3 = r#"{"command": "cargo fmt"}"#;
-    assert!(matches_rule("Bash(cargo fmt:*)", "Bash", args3));
+    assert!(matches_rule("Shell(cargo fmt:*)", "Shell", args3));
 }
 
 #[test]
@@ -54,18 +54,18 @@ fn test_deny_priority() {
     let config = JcliConfig {
         permissions: PermissionConfig {
             allow_all: false,
-            allow: vec!["Bash(cargo:*)".to_string()],
-            deny: vec!["Bash(cargo build:*)".to_string()],
+            allow: vec!["Shell(cargo:*)".to_string()],
+            deny: vec!["Shell(cargo build:*)".to_string()],
         },
     };
     // cargo test 被 allow 的 cargo:* 覆盖
     let args_test = r#"{"command": "cargo test"}"#;
-    assert!(config.is_allowed("Bash", args_test));
+    assert!(config.is_allowed("Shell", args_test));
 
     // cargo build 被 deny 拦截
     let args_build = r#"{"command": "cargo build"}"#;
-    assert!(!config.is_allowed("Bash", args_build));
-    assert!(config.is_denied("Bash", args_build));
+    assert!(!config.is_allowed("Shell", args_build));
+    assert!(config.is_denied("Shell", args_build));
 }
 
 #[test]
@@ -77,17 +77,17 @@ fn test_allow_all() {
             deny: vec![],
         },
     };
-    assert!(config.is_allowed("Bash", r#"{"command": "rm -rf /"}"#));
+    assert!(config.is_allowed("Shell", r#"{"command": "rm -rf /"}"#));
 
     // deny 仍然优先
     let config2 = JcliConfig {
         permissions: PermissionConfig {
             allow_all: true,
             allow: vec![],
-            deny: vec!["Bash(rm -rf:*)".to_string()],
+            deny: vec!["Shell(rm -rf:*)".to_string()],
         },
     };
-    assert!(!config2.is_allowed("Bash", r#"{"command": "rm -rf /"}"#));
+    assert!(!config2.is_allowed("Shell", r#"{"command": "rm -rf /"}"#));
 }
 
 #[test]
@@ -103,13 +103,13 @@ fn test_url_domain_matching() {
 #[test]
 fn test_generate_allow_rule_bash() {
     let args = r#"{"command": "cargo build --release"}"#;
-    assert_eq!(generate_allow_rule("Bash", args), "Bash(cargo build:*)");
+    assert_eq!(generate_allow_rule("Shell", args), "Shell(cargo build:*)");
 
     let args2 = r#"{"command": "ls -la"}"#;
-    assert_eq!(generate_allow_rule("Bash", args2), "Bash(ls -la:*)");
+    assert_eq!(generate_allow_rule("Shell", args2), "Shell(ls -la:*)");
 
     let args3 = r#"{"command": "ls"}"#;
-    assert_eq!(generate_allow_rule("Bash", args3), "Bash(ls:*)");
+    assert_eq!(generate_allow_rule("Shell", args3), "Shell(ls:*)");
 }
 
 #[test]
@@ -147,23 +147,23 @@ fn test_generate_allow_rule_other() {
 
 #[test]
 fn test_regex_bash_command() {
-    // Bash(/^cargo (build|test)/) 匹配 cargo build 和 cargo test
+    // Shell(/^cargo (build|test)/) 匹配 cargo build 和 cargo test
     let args_build = r#"{"command": "cargo build --release"}"#;
     let args_test = r#"{"command": "cargo test --lib"}"#;
     let args_run = r#"{"command": "cargo run"}"#;
     assert!(matches_rule(
-        "Bash(/^cargo (build|test)/)",
-        "Bash",
+        "Shell(/^cargo (build|test)/)",
+        "Shell",
         args_build
     ));
     assert!(matches_rule(
-        "Bash(/^cargo (build|test)/)",
-        "Bash",
+        "Shell(/^cargo (build|test)/)",
+        "Shell",
         args_test
     ));
     assert!(!matches_rule(
-        "Bash(/^cargo (build|test)/)",
-        "Bash",
+        "Shell(/^cargo (build|test)/)",
+        "Shell",
         args_run
     ));
 }
@@ -204,7 +204,7 @@ fn test_regex_domain_pattern() {
 fn test_regex_invalid_pattern() {
     // 无效的 regex 不匹配
     let args = r#"{"command": "anything"}"#;
-    assert!(!matches_rule("Bash(/[invalid/)", "Bash", args));
+    assert!(!matches_rule("Shell(/[invalid/)", "Shell", args));
     // 空 regex 不匹配
-    assert!(!matches_rule("Bash(//)", "Bash", args));
+    assert!(!matches_rule("Shell(//)", "Shell", args));
 }

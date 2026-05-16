@@ -33,7 +33,7 @@ pub struct PendingAgentPerm {
     pub agent_type: AgentType,
     /// 发起请求的 agent 名称（teammate 名 / sub_id）
     pub name: String,
-    /// 工具名称（"Write"/"Edit"/"Bash"）
+    /// 工具名称（"Write"/"Edit"/"Shell"）
     pub tool_name: String,
     /// 工具自身生成的人读确认提示
     pub confirm_msg: String,

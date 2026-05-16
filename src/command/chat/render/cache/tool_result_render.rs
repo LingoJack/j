@@ -150,7 +150,7 @@ pub fn render_tool_result_msg(params: &ToolResultRenderParams, lines: &mut Vec<L
     {
         // Agent/Compact/LoadSkill/Plan 结果边框显示
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
-    } else if tool_name == tool_names::BASH {
+    } else if tool_name == tool_names::SHELL {
         // Bash 结果：命令行高亮 + 输出
         render_bash_result(
             &clean,

@@ -12,7 +12,7 @@ fn agent_type_title_format() {
     let main_perm = PendingAgentPerm::new(
         AgentType::Main,
         "Main".into(),
-        "Bash".into(),
+        "Shell".into(),
         "run script".into(),
     );
     assert_eq!(main_perm.title(), " 权限请求 [Main] ");
@@ -39,7 +39,7 @@ fn pending_perm_resolve_approved() {
     let perm = PendingAgentPerm::new(
         AgentType::Teammate,
         "Backend".into(),
-        "Bash".into(),
+        "Shell".into(),
         "run tests".into(),
     );
     // 在另一个线程中等待
@@ -97,12 +97,12 @@ fn pending_perm_fields_preserved() {
     let perm = PendingAgentPerm::new(
         AgentType::Teammate,
         "Backend".into(),
-        "Bash".into(),
+        "Shell".into(),
         "run script".into(),
     );
     assert_eq!(perm.agent_type, AgentType::Teammate);
     assert_eq!(perm.name, "Backend");
-    assert_eq!(perm.tool_name, "Bash");
+    assert_eq!(perm.tool_name, "Shell");
     assert_eq!(perm.confirm_msg, "run script");
 }
 
@@ -123,7 +123,7 @@ fn queue_request_and_pop_fifo() {
     let req1 = PendingAgentPerm::new(
         AgentType::Teammate,
         "Backend".into(),
-        "Bash".into(),
+        "Shell".into(),
         "first".into(),
     );
     let req2 = PendingAgentPerm::new(
@@ -166,7 +166,7 @@ fn queue_deny_all_resolves_false() {
     let req2 = PendingAgentPerm::new(
         AgentType::Teammate,
         "Backend".into(),
-        "Bash".into(),
+        "Shell".into(),
         "run build".into(),
     );
 

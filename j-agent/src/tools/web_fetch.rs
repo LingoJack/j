@@ -63,7 +63,7 @@ impl Tool for WebFetchTool {
         - The tool is read-only and does not modify any files
         - Results may be truncated if the content is very large
         - Supports custom headers and authorization for authenticated APIs
-        - For GitHub URLs, prefer using the `gh` CLI via Bash instead (e.g., gh pr view, gh issue view, gh api)
+        - For GitHub URLs, prefer using the `gh` CLI via Shell instead (e.g., gh pr view, gh issue view, gh api)
         "#.into()
     }
 

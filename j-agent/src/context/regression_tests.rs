@@ -113,7 +113,7 @@ fn tool_name_constants_match_policy_hardcoded_strings() {
 fn regular_tool_name_constants_match_policy() {
     use crate::tools::tool_names::*;
 
-    for name in [BASH, READ, WRITE, EDIT, GLOB, GREP, WEB_FETCH, WEB_SEARCH] {
+    for name in [SHELL, READ, WRITE, EDIT, GLOB, GREP, WEB_FETCH, WEB_SEARCH] {
         let p = policy_for(name);
         assert_eq!(
             p.tier,
@@ -154,7 +154,7 @@ fn builtin_exempt_tools_aliases_key_tools() {
 fn is_exempt_tool_without_extra_equals_is_key_tool() {
     use crate::tools::tool_names::*;
 
-    for name in [ENTER_PLAN_MODE, BASH, READ, LOAD_SKILL, ASK, GREP] {
+    for name in [ENTER_PLAN_MODE, SHELL, READ, LOAD_SKILL, ASK, GREP] {
         assert_eq!(
             is_exempt_tool(name, &[]),
             is_key_tool(name),
@@ -167,13 +167,13 @@ fn is_exempt_tool_without_extra_equals_is_key_tool() {
 /// 用户扩展清单优先级高于 policy：即使 policy 判定 RegularTool，用户扩展也能豁免
 #[test]
 fn user_extra_exempt_tools_override() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
-    let extra = vec![BASH.to_string()];
-    assert!(is_exempt_tool(BASH, &extra), "Bash 被用户扩展豁免应生效");
+    let extra = vec![SHELL.to_string()];
+    assert!(is_exempt_tool(SHELL, &extra), "Shell 被用户扩展豁免应生效");
     assert!(
-        !is_exempt_tool(BASH, &[]),
-        "Bash 未被扩展豁免时应非豁免（默认 RegularTool）"
+        !is_exempt_tool(SHELL, &[]),
+        "Shell 未被扩展豁免时应非豁免（默认 RegularTool）"
     );
 }
 
@@ -200,11 +200,11 @@ fn micro_compact_preserves_key_tool_results() {
         tool_result("k4", &big),
         // 后面堆叠足够多的 tool result 迫使前面被考虑压缩
         user("do shell"),
-        tool_call_with_id("b1", BASH),
+        tool_call_with_id("b1", SHELL),
         tool_result("b1", "ls output"),
-        tool_call_with_id("b2", BASH),
+        tool_call_with_id("b2", SHELL),
         tool_result("b2", "ls output"),
-        tool_call_with_id("b3", BASH),
+        tool_call_with_id("b3", SHELL),
         tool_result("b3", "ls output"),
     ];
 
@@ -223,46 +223,46 @@ fn micro_compact_preserves_key_tool_results() {
 /// RegularTool 的大体积 result 应按 keep_recent 替换为占位符
 #[test]
 fn micro_compact_placeholder_for_regular_tools() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     let big = "x".repeat(5000);
     let mut msgs = vec![
         user("q1"),
-        tool_call_with_id("b1", BASH),
+        tool_call_with_id("b1", SHELL),
         tool_result("b1", &big),
         user("q2"),
-        tool_call_with_id("b2", BASH),
+        tool_call_with_id("b2", SHELL),
         tool_result("b2", &big),
         user("q3"),
-        tool_call_with_id("b3", BASH),
+        tool_call_with_id("b3", SHELL),
         tool_result("b3", &big),
     ];
 
     micro_compact(&mut msgs, 1, &[]);
 
-    // 最早两个 Bash result 应被替换为占位符
+    // 最早两个 Shell result 应被替换为占位符
     let placeholders = msgs
         .iter()
-        .filter(|m| m.role == MessageRole::Tool && m.content.starts_with("[Previous: used Bash]"))
+        .filter(|m| m.role == MessageRole::Tool && m.content.starts_with("[Previous: used Shell]"))
         .count();
-    assert_eq!(placeholders, 2, "最早 2 个 Bash result 应被替换为占位符");
+    assert_eq!(placeholders, 2, "最早 2 个 Shell result 应被替换为占位符");
 }
 
 /// 小于阈值的 result 不被替换
 #[test]
 fn micro_compact_below_threshold_not_replaced() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     let small = "ok".to_string();
     let mut msgs = vec![
         user("q1"),
-        tool_call_with_id("b1", BASH),
+        tool_call_with_id("b1", SHELL),
         tool_result("b1", &small),
         user("q2"),
-        tool_call_with_id("b2", BASH),
+        tool_call_with_id("b2", SHELL),
         tool_result("b2", &small),
         user("q3"),
-        tool_call_with_id("b3", BASH),
+        tool_call_with_id("b3", SHELL),
         tool_result("b3", &small),
     ];
 
@@ -311,11 +311,11 @@ fn window_preserves_user_mentioned_key_tools_under_tight_budget() {
 /// User 兜底：至少保留最新 User 消息
 #[test]
 fn window_always_retains_latest_user() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     let mut msgs = Vec::new();
     for i in 0..50 {
-        msgs.push(tool_call(&[BASH]));
+        msgs.push(tool_call(&[SHELL]));
         msgs.push(tool_result("call_0", &"output ".repeat(500)));
         msgs.push(user(&format!("q{}", i)));
     }
@@ -335,13 +335,13 @@ fn window_always_retains_latest_user() {
 /// 时间保底：最近 keep_recent * MULTIPLIER 个 unit 无条件保留
 #[test]
 fn window_stage1_time_fallback() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     let mut msgs = Vec::new();
     for i in 0..20 {
         msgs.push(user(&format!("old {}", i).repeat(30)));
     }
-    msgs.push(tool_call(&[BASH]));
+    msgs.push(tool_call(&[SHELL]));
     msgs.push(tool_result("call_0", "recent bash"));
     msgs.push(user("latest"));
 
@@ -352,7 +352,7 @@ fn window_stage1_time_fallback() {
         result
             .iter()
             .any(|m| m.role == MessageRole::Tool && m.content == "recent bash"),
-        "最近的 Bash result 应被 Stage 1 时间保底保留"
+        "最近的 Shell result 应被 Stage 1 时间保底保留"
     );
     assert!(
         result
@@ -369,7 +369,7 @@ fn window_merges_adjacent_dropped_tool_groups() {
 
     let msgs = vec![
         user("run"),
-        tool_call(&[BASH]),
+        tool_call(&[SHELL]),
         tool_result("call_0", &"x".repeat(3000)),
         tool_call(&[READ]),
         tool_result("call_0", &"y".repeat(3000)),
@@ -395,7 +395,7 @@ fn window_merges_adjacent_dropped_tool_groups() {
         .collect::<Vec<_>>()
         .join("\n");
     // 三个工具名中至少两个会合并到同一占位符
-    let hit = [BASH, READ, GREP]
+    let hit = [SHELL, READ, GREP]
         .iter()
         .filter(|name| combined.contains(*name))
         .count();
@@ -409,12 +409,12 @@ fn window_merges_adjacent_dropped_tool_groups() {
 /// 时间顺序保持：被保留的消息在输出中保持原始时间顺序
 #[test]
 fn window_preserves_time_order() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     let msgs = vec![
         user("A"),
         assistant("a1"),
-        tool_call(&[BASH]),
+        tool_call(&[SHELL]),
         tool_result("call_0", "r1"),
         user("B"),
         assistant("a2"),
@@ -491,8 +491,8 @@ fn tier_ordering_matches_user_requirement() {
     // 用户明确点名的四个工具的 tier 严格优于普通 Shell
     for name in [ENTER_PLAN_MODE, ENTER_WORKTREE, ASK, LOAD_SKILL] {
         assert!(
-            tier_for(name) < tier_for(BASH),
-            "{} 的 tier 必须严格优于 Bash",
+            tier_for(name) < tier_for(SHELL),
+            "{} 的 tier 必须严格优于 Shell",
             name
         );
     }

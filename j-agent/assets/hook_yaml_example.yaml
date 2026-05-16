@@ -60,14 +60,14 @@
 
 # filter: [可选] 条件过滤，仅当匹配时执行
 #   - tool_name: 工具名精确匹配
-#   - tool_matcher: 工具名模式匹配（管道分隔，如 "Bash|Write|Edit"）
+#   - tool_matcher: 工具名模式匹配（管道分隔，如 "Shell|Write|Edit"）
 #   - model_prefix: 模型名前缀匹配
 
 # ============================================
 # 示例配置（取消注释即可使用）
 # ============================================
 
-# --- 示例 1：Bash hook - 基础配置 ---
+# --- 示例 1：Shell hook - 基础配置 ---
 # events: [pre_send_message]
 # type: bash
 # command: script.sh
@@ -100,7 +100,7 @@
 #   如果不安全，返回 {"action":"skip"}。
 #   如果安全，返回 {}。
 # filter:
-#   tool_matcher: "Bash|Shell"
+#   tool_matcher: "Shell"
 # timeout: 15
 # retry: 1
 

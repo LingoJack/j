@@ -79,7 +79,7 @@ impl JcliConfig {
 
     /// 检查某个工具调用是否被自动允许（跳过确认）
     ///
-    /// - tool_name: "Bash", "Read", "Write" 等
+    /// - tool_name: "Shell", "Read", "Write" 等
     /// - arguments: JSON 字符串（用于提取 command/path 等）
     ///
     /// 返回 true 表示该调用无需用户确认
@@ -159,7 +159,7 @@ impl JcliConfig {
 /// 支持的格式：
 /// - `"*"` → 匹配所有工具所有调用
 /// - `"Read"` → 匹配该工具所有调用（工具名不带括号）
-/// - `"Bash(cargo build:*)"` → Bash 命令前缀匹配
+/// - `"Shell(cargo build:*)"` → Shell 命令前缀匹配
 /// - `"Write(path:/foo/bar/*)"` → 文件路径前缀匹配
 /// - `"WebFetch(domain:docs.rs)"` → URL 域名匹配
 fn matches_rule(rule: &str, tool_name: &str, arguments: &str) -> bool {
@@ -240,7 +240,7 @@ fn match_condition(tool_name: &str, condition: &str, arguments: &str) -> bool {
     }
 
     // 默认：Bash 命令前缀匹配（格式 "command_prefix:*"）
-    if tool_name == "Bash" || tool_name == "Shell" {
+    if tool_name == "Shell" {
         let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("");
         if is_regex_pattern(condition) {
             return match_regex(condition, command);
@@ -348,7 +348,7 @@ fn url_matches_domain(url: &str, domain: &str) -> bool {
 
 /// 根据工具名和参数生成对应的 allow 规则
 ///
-/// - Bash: 提取 command 字段的前两个词（如 `cargo build --release` → `Bash(cargo build:*)`）
+/// - Shell: 提取 command 字段的前两个词（如 `cargo build --release` → `Shell(cargo build:*)`）
 /// - Write/Edit: 提取 file_path 所在目录 → `Write(path:/dir/*)`
 /// - WebFetch: 提取 url 域名 → `WebFetch(domain:xxx)`
 /// - 其他工具: 直接用工具名 → `"Read"`
@@ -364,7 +364,7 @@ pub fn generate_allow_rule(tool_name: &str, arguments: &str) -> String {
                 "ComputerUse".to_string()
             }
         }
-        "Bash" | "Shell" => {
+        "Shell" => {
             let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("");
             let words: Vec<&str> = command.split_whitespace().collect();
             let prefix = if words.len() >= 2 {
@@ -372,9 +372,9 @@ pub fn generate_allow_rule(tool_name: &str, arguments: &str) -> String {
             } else if words.len() == 1 {
                 words[0].to_string()
             } else {
-                return tool_name.to_string();
+                return "Shell".to_string();
             };
-            format!("{}({}:*)", tool_name, prefix)
+            format!("Shell({}:*)", prefix)
         }
         "Write" | "Edit" => {
             let file_path = parsed

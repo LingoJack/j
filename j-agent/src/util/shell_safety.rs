@@ -171,7 +171,7 @@ fn check_background_service(cmd: &str) -> Option<&'static str> {
             if is_long_running_server(first, &tokens) {
                 return Some(
                     "检测到后台启动长运行服务（shell &）。请设置 run_in_background: true \
-                     来启动服务，然后通过单独的 Bash 调用执行健康检查等操作",
+                     来启动服务，然后通过单独的 Shell 调用执行健康检查等操作",
                 );
             }
         }

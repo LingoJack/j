@@ -70,7 +70,7 @@ fn error_to_retry_policy_chain() {
 #[test]
 fn key_tool_names_are_non_empty() {
     // 核心工具名常量必须是非空字符串
-    assert!(!tool_names::BASH.is_empty(), "BASH 工具名不应为空");
+    assert!(!tool_names::SHELL.is_empty(), "SHELL 工具名不应为空");
     assert!(!tool_names::READ.is_empty(), "READ 工具名不应为空");
     assert!(!tool_names::EDIT.is_empty(), "EDIT 工具名不应为空");
     assert!(!tool_names::WRITE.is_empty(), "WRITE 工具名不应为空");
@@ -82,7 +82,7 @@ fn key_tool_names_are_non_empty() {
 fn tool_names_are_consistent_format() {
     // 工具名应是不含空格的非空字符串
     for name in [
-        tool_names::BASH,
+        tool_names::SHELL,
         tool_names::READ,
         tool_names::EDIT,
         tool_names::WRITE,

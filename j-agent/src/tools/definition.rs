@@ -172,12 +172,7 @@ impl ToolRegistry {
         let plan_approval_queue = Arc::new(super::plan::PlanApprovalQueue::new());
 
         let tools: Vec<Box<dyn Tool>> = vec![
-            #[cfg(unix)]
             Box::new(super::shell::ShellTool {
-                manager: Arc::clone(&background_manager),
-            }),
-            #[cfg(windows)]
-            Box::new(super::powershell::PowerShellTool {
                 manager: Arc::clone(&background_manager),
             }),
             Box::new(super::file::ReadFileTool),

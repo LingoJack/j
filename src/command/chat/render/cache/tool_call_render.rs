@@ -330,7 +330,7 @@ pub(crate) fn extract_tool_description_from_args(
 
     match tool_name {
         // ── 文件操作 ──
-        tool_names::BASH => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        tool_names::SHELL => parsed.get("description")?.as_str().map(|s| s.to_string()),
         tool_names::READ
         | tool_names::WRITE
         | tool_names::EDIT
@@ -842,7 +842,7 @@ fn render_specialized_tool_call(
     theme: &Theme,
 ) -> bool {
     match tool_name {
-        tool_names::BASH => {
+        tool_names::SHELL => {
             if let Some(bash_args) = extract_bash_args(arguments) {
                 render_bash_call_request_expanded(&bash_args, bubble_max_width, lines, theme);
                 return true;

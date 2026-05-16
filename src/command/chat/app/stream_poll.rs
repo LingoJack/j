@@ -621,8 +621,8 @@ pub(super) fn extract_tool_description(tool_name: &str, arguments: &str) -> Opti
     let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
 
     match tool_name {
-        // Bash / Shell：提取 description 字段
-        "Bash" | "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        // Shell：提取 description 字段
+        "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
         // 文件工具：提取 path / file_path 作为描述
         "Read" | "Write" | "Edit" | "Glob" | "Grep" => parsed
             .get("path")

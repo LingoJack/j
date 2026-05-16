@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn regular_tools_are_placeholder() {
         for name in [
-            tool_names::BASH,
+            tool_names::SHELL,
             tool_names::READ,
             tool_names::WRITE,
             tool_names::EDIT,

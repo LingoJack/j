@@ -136,7 +136,7 @@ pub(super) fn split_frontmatter(content: &str) -> Option<(String, String)> {
     Some((fm, body))
 }
 
-/// 拼合 body + references/ 和 scripts/ 的文件列表（不内联内容，由模型按需 Read/Bash）
+/// 拼合 body + references/ 和 scripts/ 的文件列表（不内联内容，由模型按需 Read/Shell）
 pub fn resolve_skill_content(skill: &Skill) -> String {
     let mut result = skill.body.clone();
 
@@ -150,7 +150,7 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
 
     // 列出 scripts/ 目录中的脚本路径，供模型按需执行
     if let Some(paths) = list_dir_files(&skill.dir_path.join("scripts")) {
-        result.push_str("\n\n## 脚本\n\n以下脚本可按需使用 Bash/BackgroundRun 工具执行：\n");
+        result.push_str("\n\n## 脚本\n\n以下脚本可按需使用 Shell/BackgroundRun 工具执行：\n");
         for p in &paths {
             result.push_str(&format!("- `{}`\n", p));
         }

@@ -14,7 +14,7 @@ const TOOL_ARG_PREVIEW_MAX_CHARS: usize = 60;
 pub(crate) fn extract_tool_desc(tool_name: &str, arguments: &str) -> Option<String> {
     let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
     match tool_name {
-        "Bash" | "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
         "Read" | "Write" | "Edit" | "Glob" | "Grep" => parsed
             .get("path")
             .or_else(|| parsed.get("file_path"))

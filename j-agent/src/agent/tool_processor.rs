@@ -390,14 +390,14 @@ fn extract_path_from_args(args: &str) -> Option<String> {
         .and_then(|v| v.get("path")?.as_str().map(String::from))
 }
 
-/// 从 Bash 工具的 arguments JSON 中提取 command 字段
+/// 从 Shell 工具的 arguments JSON 中提取 command 字段
 fn extract_command_from_args(args: &str) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(args)
         .ok()
         .and_then(|v| v.get("command")?.as_str().map(String::from))
 }
 
-/// 记录 Edit/Write/Bash 写入操作到 ops.jsonl
+/// 记录 Edit/Write/Shell 写入操作到 ops.jsonl
 fn append_write_ops(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg], session_id: &str) {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -416,7 +416,7 @@ fn append_write_ops(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg],
             "Write" => {
                 extract_path_from_args(&item.arguments).map(|path| SessionOpKind::Write { path })
             }
-            "Bash" => extract_command_from_args(&item.arguments)
+            "Shell" => extract_command_from_args(&item.arguments)
                 .map(|cmd| SessionOpKind::Bash { command: cmd }),
             _ => None,
         };

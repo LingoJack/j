@@ -68,7 +68,7 @@ impl Tool for GrepTool {
         A powerful regex-based search tool for searching within file contents.
 
         Usage:
-        - ALWAYS use Grep for content search tasks. NEVER invoke `grep` or `rg` as a Bash command
+        - ALWAYS use Grep for content search tasks. NEVER invoke `grep` or `rg` as a Shell command
         - Supports full regex syntax, e.g. "log.*Error", "function\s+\w+"
         - Filter files with the glob parameter (e.g. "*.js", "**/*.tsx") or the type parameter (e.g. "js", "py", "rust")
         - Output modes:

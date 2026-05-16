@@ -58,13 +58,13 @@ fn test_no_truncation_needed() {
 
 #[test]
 fn test_tool_group_dropped_first() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
-    // U1 → A1(text) → TG1(Bash+result) → U2 → A2(text)
+    // U1 → A1(text) → TG1(Shell+result) → U2 → A2(text)
     let msgs = vec![
         user_msg("do something"),
         assistant_msg("let me check"),
-        tool_call_msg(&[BASH]),
+        tool_call_msg(&[SHELL]),
         tool_result_msg("call_0", &"huge output ".repeat(1000)),
         user_msg("what about this"),
         assistant_msg("here's the answer"),
@@ -81,12 +81,12 @@ fn test_tool_group_dropped_first() {
 
 #[test]
 fn test_time_order_preserved() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     let msgs = vec![
         user_msg("first"),
         assistant_msg("ok1"),
-        tool_call_msg(&[BASH]),
+        tool_call_msg(&[SHELL]),
         tool_result_msg("call_0", "output"),
         user_msg("second"),
         assistant_msg("ok2"),
@@ -106,11 +106,11 @@ fn test_time_order_preserved() {
 
 #[test]
 fn test_placeholder_format() {
-    use crate::tools::tool_names::{BASH, READ};
+    use crate::tools::tool_names::{READ, SHELL};
 
     let msgs = vec![
         user_msg("run"),
-        tool_call_msg(&[BASH, READ]),
+        tool_call_msg(&[SHELL, READ]),
         tool_result_msg("call_0", &"x".repeat(2000)),
         tool_result_msg("call_1", &"y".repeat(2000)),
     ];
@@ -121,7 +121,7 @@ fn test_placeholder_format() {
     let placeholder = result.iter().find(|m| m.content.contains("Previous: used"));
     assert!(placeholder.is_some());
     let p = placeholder.unwrap();
-    assert!(p.content.contains(BASH));
+    assert!(p.content.contains(SHELL));
     assert!(p.content.contains(READ));
     assert!(p.tool_calls.is_none());
 }
@@ -155,14 +155,14 @@ fn test_exempt_tool_group_protected() {
 
 #[test]
 fn test_stage1_time_fallback_keeps_recent_tool_group() {
-    use crate::tools::tool_names::BASH;
+    use crate::tools::tool_names::SHELL;
 
     // 即使早期有很多 User 消息，最近的 ToolGroup 也应该被 Stage 1 保底保留
     let mut msgs = Vec::new();
     for i in 0..20 {
         msgs.push(user_msg(&format!("old user {}", i).repeat(50)));
     }
-    msgs.push(tool_call_msg(&[BASH]));
+    msgs.push(tool_call_msg(&[SHELL]));
     msgs.push(tool_result_msg("call_0", "recent shell output"));
     msgs.push(user_msg("latest"));
 

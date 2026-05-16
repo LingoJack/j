@@ -530,7 +530,7 @@ pub fn build_running_summary(manager: &Arc<BackgroundManager>) -> String {
         }
         out.push_str(
             "## Interactive Sessions\n\n\
-             The following interactive PTY sessions are alive (started via Bash/Powershell with interactive: true). \
+             The following interactive PTY sessions are alive (started via Shell with interactive: true). \
              Use the Session tool (action=stdin/stdout/quit) with the sid below to interact with them. \
              Do NOT use TaskOutput and do NOT re-spawn these processes — they are still running and waiting for input.\n",
         );
@@ -562,7 +562,7 @@ fn format_elapsed(secs: u64) -> String {
 /// TaskOutputTool 参数
 #[derive(Deserialize, JsonSchema)]
 struct TaskOutputParams {
-    /// The task ID to get output from (returned by Bash with run_in_background: true)
+    /// The task ID to get output from (returned by Shell with run_in_background: true)
     task_id: String,
     /// Whether to wait for task completion (default: true). Set to false for a non-blocking check of current status.
     #[serde(default = "default_block")]
@@ -597,7 +597,7 @@ impl Tool for TaskOutputTool {
 
     fn description(&self) -> Cow<'_, str> {
         r#"
-        Retrieves output from a running or completed background task (started via Bash with run_in_background: true).
+        Retrieves output from a running or completed background task (started via Shell with run_in_background: true).
         Use block=true (default) to wait for task completion; use block=false for a non-blocking status check.
         Returns the task output along with status information.
         "#.into()

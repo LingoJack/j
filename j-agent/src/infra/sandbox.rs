@@ -151,8 +151,8 @@ fn extract_paths(tool_name: &str, arguments: &str) -> Vec<String> {
                 paths.push(p.to_string());
             }
         }
-        // Bash 工具：提取 cwd 参数
-        "Bash" | "Shell" => {
+        // Shell 工具：提取 cwd 参数
+        "Shell" => {
             if let Some(cwd) = parsed.get("cwd").and_then(|v| v.as_str()) {
                 paths.push(cwd.to_string());
             }
@@ -221,14 +221,14 @@ mod tests {
     #[test]
     fn test_extract_paths_bash_cwd() {
         let args = r#"{"command": "ls", "cwd": "/tmp"}"#;
-        let paths = extract_paths("Bash", args);
+        let paths = extract_paths("Shell", args);
         assert_eq!(paths, vec!["/tmp"]);
     }
 
     #[test]
     fn test_extract_paths_bash_no_cwd() {
         let args = r#"{"command": "cargo build"}"#;
-        let paths = extract_paths("Bash", args);
+        let paths = extract_paths("Shell", args);
         assert!(paths.is_empty());
     }
 

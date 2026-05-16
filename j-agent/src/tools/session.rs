@@ -1,6 +1,6 @@
 //! Session 工具：操作交互式进程的标准输入输出
 //!
-//! 当 Bash/Powershell 工具使用 interactive: true 启动时，返回 sid，
+//! 当 Shell 工具使用 interactive: true 启动时，返回 sid，
 //! Agent 可用 Session 工具与该进程持续交互。
 
 use super::background::BackgroundManager;
@@ -16,7 +16,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 struct SessionParams {
     /// 操作类型：stdin 向进程写入内容；stdout 读取当前输出；quit 终止会话
     action: String,
-    /// 会话 ID，即 Bash/Powershell 返回的 sid 字段，与 task_id 相同
+    /// 会话 ID，即 Shell 返回的 sid 字段，与 task_id 相同
     sid: String,
     /// action=stdin 时必填，写入进程的内容，换行用 \n
     #[serde(default)]
@@ -45,7 +45,7 @@ impl Tool for SessionTool {
 
     fn description(&self) -> Cow<'_, str> {
         r#"
-        Operate on an interactive process session's stdin/stdout. Use this tool when Bash/Powershell returns a sid (session ID) with interactive: true.
+        Operate on an interactive process session's stdin/stdout. Use this tool when Shell returns a sid (session ID) with interactive: true.
 
         Actions:
         - stdin: Write text to the process. Use \n for newlines. For example, to answer a prompt, send the text followed by \n.
@@ -53,7 +53,7 @@ impl Tool for SessionTool {
         - quit: Terminate the session. Drops the PTY handle, the process receives SIGHUP and exits naturally.
 
         Example workflow:
-        1. Bash with interactive: true → returns { "sid": "bg_5", ... }
+        1. Shell with interactive: true → returns { "sid": "bg_5", ... }
         2. Session action=stdin, sid=bg_5, text="hello\n" → sends "hello" + Enter
         3. Session action=stdout, sid=bg_5 → reads process output
         4. Session action=quit, sid=bg_5 → terminates the session

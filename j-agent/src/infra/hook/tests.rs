@@ -820,18 +820,10 @@ fn test_hook_context_new_fields() {
 fn test_hook_filter_tool_matcher() {
     let filter = HookFilter {
         tool_name: None,
-        tool_matcher: Some("Bash|Shell".to_string()),
+        tool_matcher: Some("Shell".to_string()),
         model_prefix: None,
     };
     assert!(!filter.is_empty());
-
-    // 匹配 Bash
-    let ctx = HookContext {
-        event: HookEvent::PreToolExecution,
-        tool_name: Some("Bash".to_string()),
-        ..Default::default()
-    };
-    assert!(filter.matches(&ctx));
 
     // 匹配 Shell
     let ctx = HookContext {
@@ -861,7 +853,7 @@ fn test_hook_filter_tool_matcher() {
 fn test_hook_filter_tool_name_priority_over_matcher() {
     // tool_name 精确匹配优先于 tool_matcher
     let filter = HookFilter {
-        tool_name: Some("Bash".to_string()),
+        tool_name: Some("Shell".to_string()),
         tool_matcher: Some("Write|Edit".to_string()),
         model_prefix: None,
     };
@@ -870,15 +862,15 @@ fn test_hook_filter_tool_name_priority_over_matcher() {
         tool_name: Some("Write".to_string()),
         ..Default::default()
     };
-    // tool_name 要求精确匹配 "Bash"，不匹配 "Write"
+    // tool_name 要求精确匹配 "Shell"，不匹配 "Write"
     assert!(!filter.matches(&ctx));
 }
 
 #[test]
 fn test_hook_filter_tool_matcher_yaml() {
-    let yaml = r#"tool_matcher: "Bash|Shell""#;
+    let yaml = r#"tool_matcher: "Shell""#;
     let filter: HookFilter = serde_yaml::from_str(yaml).unwrap();
-    assert_eq!(filter.tool_matcher.as_deref(), Some("Bash|Shell"));
+    assert_eq!(filter.tool_matcher.as_deref(), Some("Shell"));
     assert!(filter.tool_name.is_none());
 }
 
@@ -888,13 +880,13 @@ fn test_render_prompt_template() {
     let ctx = HookContext {
         event: HookEvent::PreSendMessage,
         user_input: Some("hello".to_string()),
-        tool_name: Some("Bash".to_string()),
+        tool_name: Some("Shell".to_string()),
         ..Default::default()
     };
     let rendered = render_prompt_template(template, &ctx);
     assert!(rendered.contains("pre_send_message"));
     assert!(rendered.contains("hello"));
-    assert!(rendered.contains("Bash"));
+    assert!(rendered.contains("Shell"));
 }
 
 #[test]

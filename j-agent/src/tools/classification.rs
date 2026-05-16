@@ -42,7 +42,7 @@ impl ToolCategory {
                 Self::File
             }
             tool_names::GREP => Self::Search,
-            tool_names::BASH | tool_names::TASK | tool_names::TASK_OUTPUT => Self::Execute,
+            tool_names::SHELL | tool_names::TASK | tool_names::TASK_OUTPUT => Self::Execute,
             tool_names::WEB_FETCH | tool_names::WEB_SEARCH | tool_names::BROWSER => Self::Network,
             tool_names::ENTER_PLAN_MODE | tool_names::EXIT_PLAN_MODE => Self::Plan,
             tool_names::AGENT => Self::Agent,
@@ -145,7 +145,7 @@ pub fn get_result_summary_for_tool(
     // 工具特性化摘要
     match tool_name {
         tool_names::READ => get_read_summary(content, tool_args),
-        tool_names::BASH => get_bash_summary(content, tool_args),
+        tool_names::SHELL => get_bash_summary(content, tool_args),
         tool_names::TODO_WRITE => get_todo_write_summary(content, tool_args),
         tool_names::TODO_READ => get_todo_read_summary(content),
         tool_names::TASK => get_task_summary(content, tool_args),

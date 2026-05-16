@@ -21,7 +21,7 @@ Any prose you output without calling a tool is private — only you and the huma
 - All messages are visible to all agents regardless of `to` — no private DMs.
 
 ## Doing work (other tools)
-Bash / Read / Edit / Write / Grep etc. execute real tasks. Their results come back to you only — they are not messages to the team.
+Shell / Read / Edit / Write / Grep etc. execute real tasks. Their results come back to you only — they are not messages to the team.
 
 ## Send gate
 If new messages arrive while you're thinking, your pending SendMessage may be held. You'll receive a system_reminder with the held content and new messages. Review, then call SendMessage again (possibly revised) to send, or don't to discard.

@@ -229,7 +229,7 @@ pub(crate) fn interactive_confirm(
     let mut cursor_pos = initial;
 
     // 参数描述
-    let desc = if tool_name == "Bash" || tool_name == "Shell" {
+    let desc = if tool_name == "Shell" {
         if let Some(cmd) = extract_bash_command(arguments) {
             format!("$ {}", cmd)
         } else {

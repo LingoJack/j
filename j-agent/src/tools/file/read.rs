@@ -77,7 +77,7 @@ impl Tool for ReadFileTool {
         - You can optionally specify offset and limit for large files, but it's recommended to read the whole file first
         - Results are returned with line numbers (1-based)
         - This tool can read image files (PNG, JPG, GIF, WEBP, BMP). When reading an image, the contents are presented visually
-        - This tool can only read files, not directories. To list a directory, use `ls` via the Bash tool
+        - This tool can only read files, not directories. To list a directory, use `ls` via the Shell tool
         - You will regularly be asked to read screenshots. If the user provides a path to a screenshot, ALWAYS use this tool to view the file
         - You can call multiple tools in a single response. It is always better to speculatively read multiple potentially useful files in parallel
         "#.into()

@@ -13,8 +13,6 @@ pub mod hook;
 pub mod ignore_message;
 pub mod load_tool;
 pub mod plan;
-#[cfg(windows)]
-mod powershell;
 pub mod send_message;
 mod session;
 mod shell;
@@ -37,9 +35,7 @@ pub use definition::{
 /// 工具名称常量 — 所有工具的 NAME 统一在此导出，避免硬编码
 #[allow(dead_code)] // 常量按需引用，非全部立即使用
 pub mod tool_names {
-    pub const BASH: &str = super::shell::ShellTool::NAME;
-    #[cfg(windows)]
-    pub const POWERSHELL: &str = super::powershell::PowerShellTool::NAME;
+    pub const SHELL: &str = super::shell::ShellTool::NAME;
     pub const READ: &str = super::file::ReadFileTool::NAME;
     pub const WRITE: &str = super::file::WriteFileTool::NAME;
     pub const EDIT: &str = super::file::EditFileTool::NAME;

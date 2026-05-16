@@ -53,7 +53,7 @@ impl Tool for EnterPlanModeTool {
         r#"
         Enter plan mode to explore the codebase and design an implementation approach before writing code.
         In plan mode, only read-only tools (Read, Glob, Grep, WebFetch, WebSearch, Ask, etc.) are available.
-        Write tools (Bash, Write, Edit, etc.) will be blocked until plan mode is exited.
+        Write tools (Shell, Write, Edit, etc.) will be blocked until plan mode is exited.
 
         Use this proactively before starting non-trivial implementation tasks. Prefer using EnterPlanMode when ANY of these apply:
         - New feature implementation with architectural decisions
