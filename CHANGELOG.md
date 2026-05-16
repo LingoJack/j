@@ -1,3 +1,23 @@
+# v12.10.64
+
+
+### 改进
+
+- **Shell 工具统一**: 将 Unix (Bash) 和 Windows (PowerShell) 的 Shell 工具合并为统一的 `Shell` 工具入口，按平台条件编译分发到 `shell/unix.rs` 和 `shell/windows.rs`，消除了工具名分叉（`Bash` / `PowerShell` → 统一 `Shell`），简化权限规则、渲染和分类链路的维护
+
+- **终端状态恢复**: 提取 `restore_terminal_state()` 和 `try_enable_keyboard_enhancement()` 为独立函数，消除 `TerminalGuard::Drop`、`restore_terminal()` 和主循环退出三处的重复代码；keyboard enhancement 失败时不再无条件设置 flag，并确保 `PopKeyboardEnhancementFlags` 失败不会短路后续的鼠标捕获和备用屏幕恢复
+
+### Bug 修复
+
+- **配置页渲染污染**: 配置页改用逐行渲染 `render_block_lines()` 替代单 `Paragraph` widget，解决部分终端在软换行时内容溢出污染相邻行的问题
+
+- **倒计时溢出**: 倒计时校准使用 `checked_add` 代替直接 `start + Duration`，防止极长倒计时场景下 `Instant` 加法溢出导致的 panic
+
+- **更新源仓库名称**: 修正 `self_update` 配置中 `repo_name` 从 `"j"` 改为 `"jcli"`，使自动更新指向正确的 GitHub 仓库
+
+- **更新网络错误回退**: 补充 `ReqwestError` 和 `sending request` 到更新失败的回退匹配列表，修复网络不通或代理场景下无法正确降级的问题
+</result
+
 # v12.10.63
 
 
