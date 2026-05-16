@@ -32,17 +32,22 @@ impl VisualLine {
     }
 }
 
+/// 代码块边框占用的字符宽度：`│ ` (左 2) + ` │` (右 2) = 4
+const CODE_BLOCK_BORDER_WIDTH: usize = 4;
+
 /// 折行引擎
 ///
 /// 使用 HashMap 稀疏缓存 + 前缀和数组实现高性能折行。
 /// - `line_visual_counts`: 每个逻辑行的视觉行数量（总是完整的）
 /// - `prefix_sums`: 前缀和数组，用于 O(log n) 的位置查找
 /// - `line_cache`: 稀疏缓存，只为视口范围内的行存储详细 VisualLine
+/// - `code_block_lines`: 每行是否在代码块内部（内容行，不含围栏行），
+///   代码块内行使用更窄的折行宽度以适配边框
 #[derive(Debug, Clone)]
 pub struct WrapEngine {
     /// 是否启用折行
     enabled: bool,
-    /// 折行宽度
+    /// 折行宽度（全局基准）
     width: usize,
     /// 稀疏视觉行缓存：逻辑行号 -> Vec<VisualLine>
     line_cache: std::collections::HashMap<usize, Vec<VisualLine>>,
@@ -54,6 +59,8 @@ pub struct WrapEngine {
     prefix_sums: Vec<usize>,
     /// 缓存是否需要更新
     dirty: bool,
+    /// 每行是否在代码块内部（内容行，不含围栏行）
+    code_block_lines: Vec<bool>,
 }
 
 impl Default for WrapEngine {
@@ -72,6 +79,7 @@ impl WrapEngine {
             line_visual_counts: Vec::new(),
             prefix_sums: vec![0],
             dirty: true,
+            code_block_lines: Vec::new(),
         }
     }
 
@@ -109,17 +117,38 @@ impl WrapEngine {
 
     /// 重建元数据（精确的视觉行计数 + 前缀和），清空详细缓存
     pub fn rebuild_cache(&mut self, lines: &[String]) {
+        self.rebuild_cache_with_code_blocks(lines, &[]);
+    }
+
+    /// 重建元数据，支持代码块行使用更窄的折行宽度。
+    ///
+    /// `cb_ranges` 为闭区间列表 `[(start, end), ...]`，表示代码块的内容行范围
+    /// （不含围栏行 ` ``` ` 本身）。
+    pub fn rebuild_cache_with_code_blocks(
+        &mut self,
+        lines: &[String],
+        cb_ranges: &[(usize, usize)],
+    ) {
         self.line_cache.clear();
         self.line_visual_counts.clear();
         self.prefix_sums.clear();
+
+        // 构建每行是否在代码块内的 bitmap
+        self.code_block_lines = vec![false; lines.len()];
+        for &(start, end) in cb_ranges {
+            for i in start..=end.min(lines.len().saturating_sub(1)) {
+                self.code_block_lines[i] = true;
+            }
+        }
 
         self.line_visual_counts.reserve(lines.len());
         self.prefix_sums.reserve(lines.len() + 1);
         self.prefix_sums.push(0);
 
         let mut sum: usize = 0;
-        for line in lines {
-            let count = self.compute_visual_line_count(line);
+        for (i, line) in lines.iter().enumerate() {
+            let w = self.effective_width(i);
+            let count = Self::compute_visual_line_count_with_width(line, w, self.enabled);
             self.line_visual_counts.push(count);
             sum += count;
             self.prefix_sums.push(sum);
@@ -128,9 +157,18 @@ impl WrapEngine {
         self.dirty = false;
     }
 
-    /// 精确计算一个逻辑行的视觉行数量（与 wrap_line 算法一致）
-    fn compute_visual_line_count(&self, line: &str) -> usize {
-        if !self.enabled {
+    /// 获取指定行的有效折行宽度（代码块内行减去边框宽度）
+    fn effective_width(&self, line_idx: usize) -> usize {
+        if self.code_block_lines.get(line_idx) == Some(&true) {
+            self.width.saturating_sub(CODE_BLOCK_BORDER_WIDTH).max(10)
+        } else {
+            self.width
+        }
+    }
+
+    /// 精确计算一个逻辑行的视觉行数量（指定宽度）
+    fn compute_visual_line_count_with_width(line: &str, width: usize, enabled: bool) -> usize {
+        if !enabled {
             return 1;
         }
         let chars: Vec<char> = line.chars().collect();
@@ -141,7 +179,7 @@ impl WrapEngine {
         let mut current_width: usize = 0;
         for ch in &chars {
             let ch_width = char_width(*ch);
-            if current_width + ch_width > self.width && current_width > 0 {
+            if current_width + ch_width > width && current_width > 0 {
                 count += 1;
                 current_width = 0;
             }
@@ -155,15 +193,28 @@ impl WrapEngine {
         let end = end.min(lines.len());
         for (i, line) in lines.iter().enumerate().skip(start).take(end - start) {
             if !self.line_cache.contains_key(&i) {
-                let vlines = self.wrap_line(line, i);
+                let w = self.effective_width(i);
+                let vlines = Self::wrap_line_with_width(line, i, w, self.enabled);
                 self.line_cache.insert(i, vlines);
             }
         }
     }
 
-    /// 将逻辑行拆分为视觉行
+    /// 将逻辑行拆分为视觉行（使用行级折行宽度）
+    #[allow(dead_code)]
     pub fn wrap_line(&self, line: &str, line_num: usize) -> Vec<VisualLine> {
-        if !self.enabled {
+        let w = self.effective_width(line_num);
+        Self::wrap_line_with_width(line, line_num, w, self.enabled)
+    }
+
+    /// 将逻辑行按指定宽度拆分为视觉行
+    fn wrap_line_with_width(
+        line: &str,
+        line_num: usize,
+        width: usize,
+        enabled: bool,
+    ) -> Vec<VisualLine> {
+        if !enabled {
             return vec![VisualLine::from_line(line, line_num)];
         }
 
@@ -187,7 +238,7 @@ impl WrapEngine {
         for ch in chars {
             let ch_width = char_width(ch);
 
-            if current_width + ch_width > self.width && !current.is_empty() {
+            if current_width + ch_width > width && !current.is_empty() {
                 result.push(VisualLine {
                     logical_line: line_num,
                     start_col,
@@ -257,8 +308,9 @@ impl WrapEngine {
             return base + vlines.len().saturating_sub(1);
         }
 
-        // 估算：基于列位置和宽度
-        let sub = logical_col / self.width.max(1);
+        // 估算：基于列位置和行级有效宽度
+        let w = self.effective_width(logical_line);
+        let sub = logical_col / w.max(1);
         base + sub.min(count.saturating_sub(1))
     }
 
@@ -276,7 +328,8 @@ impl WrapEngine {
         }
 
         // 估算 start_col
-        let start_col = sub * self.width;
+        let w = self.effective_width(logical);
+        let start_col = sub * w;
         (logical, start_col)
     }
 
@@ -299,6 +352,18 @@ impl WrapEngine {
     /// 获取指定逻辑行在前缀和中的视觉偏移（O(1)）
     pub fn visual_offset_of(&self, logical_line: usize) -> usize {
         self.prefix_sums.get(logical_line).copied().unwrap_or(0)
+    }
+
+    /// 检查指定逻辑行是否在代码块内部
+    #[allow(dead_code)]
+    pub fn is_code_block_line(&self, line_idx: usize) -> bool {
+        self.code_block_lines.get(line_idx) == Some(&true)
+    }
+
+    /// 获取指定逻辑行的有效折行宽度
+    #[allow(dead_code)]
+    pub fn line_wrap_width(&self, line_idx: usize) -> usize {
+        self.effective_width(line_idx)
     }
 }
 

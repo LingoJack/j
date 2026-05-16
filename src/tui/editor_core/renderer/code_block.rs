@@ -90,6 +90,22 @@ impl CodeBlockCache {
         }
         None
     }
+
+    /// 返回所有代码块内容行的闭区间范围（不含围栏行本身）。
+    ///
+    /// 返回值如 `[(3, 8), (12, 20)]`，表示第 3~8 行和第 12~20 行是代码块内容行。
+    pub(crate) fn content_ranges(&self) -> Vec<(usize, usize)> {
+        let mut ranges = Vec::new();
+        let mut last_end: Option<usize> = None;
+        for (start, end) in self.line_to_block.iter().flatten() {
+            // 只取内容行（不含围栏行），且每个块只取一次
+            if *end > *start && last_end != Some(*end) {
+                ranges.push((*start + 1, *end - 1));
+                last_end = Some(*end);
+            }
+        }
+        ranges
+    }
 }
 
 impl MarkdownRenderer {
@@ -146,9 +162,8 @@ impl MarkdownRenderer {
             .get_block_range(line_idx)
             .is_some_and(|(start, _)| start == line_idx);
 
-        // 行号占用宽度
-        let line_num_w = if self.show_line_numbers { 6 } else { 0 };
-        let total_width = wrap_width.saturating_sub(line_num_w).max(10);
+        // wrap_width 传入时已减去行号宽度，total_width = wrap_width
+        let total_width = wrap_width.max(10);
 
         if is_start {
             // 开始围栏：┌─ lang ──────┐
@@ -194,34 +209,34 @@ impl MarkdownRenderer {
     }
 
     /// 渲染代码块内容行（撑满 wrap_width）
-    pub(super) fn render_code_block_line(
+    ///
+    /// `text` 为要显示的文本（可能是完整的行内容，也可能是折行片段）。
+    /// `is_continuation` 为 true 时使用续行行号（空格）。
+    pub(super) fn render_code_block_line_content(
         &self,
-        line: &str,
+        text: &str,
         line_idx: usize,
         lines: &[String],
         wrap_width: usize,
+        is_continuation: bool,
     ) -> Line<'static> {
-        let line_num = self.format_line_number(line_idx);
+        let line_num = if is_continuation {
+            self.format_continuation_line_number()
+        } else {
+            self.format_line_number(line_idx)
+        };
 
-        // 应用水平滚动（使用迭代器避免 Vec<char> 分配）
-        let visible_line: String = line.chars().skip(self.horizontal_scroll).collect();
-
-        // 获取代码块语言
+        // 获取代码块语言并应用语法高亮
         let lang = self
             .get_code_block_language(line_idx, lines)
             .unwrap_or_default();
+        let highlighted_spans = (self.highlight_fn)(text, &lang, &self.theme);
 
-        // 应用语法高亮
-        let highlighted_spans = (self.highlight_fn)(&visible_line, &lang, &self.theme);
-
-        // 计算当前行的显示宽度
-        let content_width = display_width(&visible_line);
-
-        // 行号占用宽度
-        let line_num_w = if self.show_line_numbers { 6 } else { 0 };
-        // 内容区总宽度 = wrap_width - line_num_w，内部可用 = 总宽 - 4（│+sp+内容+sp+│）
-        let total_width = wrap_width.saturating_sub(line_num_w).max(10);
+        // wrap_width 传入时已减去行号宽度，total_width = wrap_width
+        // 内部可用 = total_width - 4（│+sp+内容+sp+│）
+        let total_width = wrap_width.max(10);
         let inner_width = total_width.saturating_sub(4);
+        let content_width = display_width(text);
         let fill_width = inner_width.saturating_sub(content_width);
 
         let mut spans = vec![

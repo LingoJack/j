@@ -711,8 +711,12 @@ impl MarkdownEditor {
 
     /// 重建折行缓存
     fn rebuild_wrap_cache(&mut self) {
-        self.wrap.rebuild_cache(self.buffer.lines());
-        // 同时使渲染器缓存失效
+        // 先确保代码块缓存有效，获取代码块范围
+        self.renderer.ensure_cache_valid(self.buffer.lines());
+        let cb_ranges = self.renderer.code_block_content_ranges();
+        self.wrap
+            .rebuild_cache_with_code_blocks(self.buffer.lines(), &cb_ranges);
+        // 同时使渲染器缓存失效（语法高亮等）
         self.renderer.invalidate_cache();
     }
 

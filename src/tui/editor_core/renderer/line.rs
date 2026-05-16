@@ -162,7 +162,10 @@ impl MarkdownRenderer {
             let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("{} ", num_str), self.style(self.theme.text_normal)),
+                Span::styled(
+                    format!("{} ", num_str),
+                    self.style_bold(self.theme.md_list_bullet),
+                ),
             ];
             spans.extend(rendered);
             return Line::from(spans);

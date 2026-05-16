@@ -17,7 +17,7 @@ use ratatui::{
 use super::theme::{EditorTheme, HighlightFn};
 use super::wrap_engine::VisualLine;
 use super::{search::SearchState, text_buffer::TextBuffer};
-use crate::util::text::{char_width, display_width};
+use crate::util::text::char_width;
 
 use code_block::CodeBlockCache;
 
@@ -90,6 +90,13 @@ impl MarkdownRenderer {
         if !self.code_block_cache.valid || self.code_block_cache.line_count != lines.len() {
             self.code_block_cache.build(lines);
         }
+    }
+
+    /// 返回所有代码块内容行的闭区间范围（不含围栏行本身）。
+    ///
+    /// 返回值如 `[(3, 8), (12, 20)]`，表示第 3~8 行和第 12~20 行是代码块内容行。
+    pub fn code_block_content_ranges(&self) -> Vec<(usize, usize)> {
+        self.code_block_cache.content_ranges()
     }
 
     // ========== 基础样式辅助方法 ==========
@@ -173,16 +180,11 @@ impl MarkdownRenderer {
 
         // ---- 光标行：显示源码 + 光标 ----
         // 代码块内的光标行用 wrap_width 驱动右边框对齐
-        let line_num_w = if self.show_line_numbers { 6 } else { 0 };
         let code_block_max_width = if !Self::is_code_fence_line(&line_content)
             && self.is_line_in_complete_code_block(logical_line, lines)
         {
-            Some(
-                wrap_width
-                    .saturating_sub(line_num_w)
-                    .max(10)
-                    .saturating_sub(4),
-            )
+            // wrap_width 已减去行号宽度，再减去边框 4 字符
+            Some(wrap_width.max(10).saturating_sub(4))
         } else {
             None
         };
@@ -254,47 +256,19 @@ impl MarkdownRenderer {
         // 因为 Markdown 标记可能跨越折行边界，所以续行显示源码
         // 但代码块内的续行需要保持代码块的边框样式
         if is_continuation {
-            let text = vl_text;
-
             // 检查续行是否在代码块内（非围栏行）
             let in_code_block = !Self::is_code_fence_line(line_content)
                 && self.is_line_in_complete_code_block(logical_line, lines);
 
+            // 代码块续行走统一的代码块内容渲染（带边框），不再单独处理
             if in_code_block {
-                // 代码块续行：保持左/右 │ 边框；背景统一用 bg_primary
-                let mut spans = vec![
-                    Span::styled(
-                        line_num_str,
-                        Style::default()
-                            .fg(Color::DarkGray)
-                            .bg(self.theme.bg_primary),
-                    ),
-                    Span::styled("│", self.style_code(self.theme.text_dim)),
-                    Span::styled(" ", Style::default().bg(self.theme.bg_primary)),
-                ];
-                // 续行直接显示源码片段，不语法高亮（续行是折行片段）
-                spans.push(Span::styled(
-                    text.to_string(),
-                    Style::default()
-                        .fg(self.theme.text_normal)
-                        .bg(self.theme.bg_primary),
-                ));
-                // 用 wrap_width 计算填充宽度以撑满屏幕
-                let line_num_w = if self.show_line_numbers { 6 } else { 0 };
-                let total_width = wrap_width.saturating_sub(line_num_w).max(10);
-                let inner_width = total_width.saturating_sub(4);
-                let content_width = display_width(text);
-                let fill_width = inner_width.saturating_sub(content_width);
-                spans.push(Span::styled(
-                    " ".repeat(fill_width),
-                    Style::default().bg(self.theme.bg_primary),
-                ));
-                spans.push(Span::styled(
-                    " ",
-                    Style::default().bg(self.theme.bg_primary),
-                ));
-                spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
-                return vec![Line::from(spans)];
+                return vec![self.render_code_block_line_content(
+                    vl_text,
+                    logical_line,
+                    lines,
+                    wrap_width,
+                    true, // is_continuation
+                )];
             }
 
             // 表格续行：不渲染（关键修复点，改前请先看完）。
@@ -412,11 +386,20 @@ impl MarkdownRenderer {
 
         // 检查是否在完整的代码块内
         if self.is_line_in_complete_code_block(logical_line, lines) {
-            return vec![self.render_code_block_line(
-                line_content,
+            // 代码块内容行：需要用 vl_text（折行片段）而非完整 line_content，
+            // 否则首行 VL 会渲染完整内容，续行又重复渲染尾部，造成字符重复。
+            let text_for_render = if is_continuation || line_content.chars().count() > vl.end_col {
+                // 被折行了（续行或非续行但行内容超出首个 VL 范围）
+                vl_text
+            } else {
+                line_content
+            };
+            return vec![self.render_code_block_line_content(
+                text_for_render,
                 logical_line,
                 lines,
                 wrap_width,
+                is_continuation,
             )];
         }
 
