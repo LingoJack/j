@@ -283,7 +283,7 @@ fn perform_update_internal(target: &str, interactive: bool) {
     let mut binding = self_update::backends::github::Update::configure();
     let mut binding = binding
         .repo_owner("LingoJack")
-        .repo_name("j")
+        .repo_name("jcli")
         .bin_name("j")
         .show_download_progress(true)
         .current_version(VERSION)
@@ -318,6 +318,7 @@ fn perform_update_internal(target: &str, interactive: bool) {
                 // - 403/rate limit: GitHub API 限流
                 // - decoding/TLS/IoError: Windows 上 rustls 可能遇到的问题
                 // - certificate/ssl: 证书验证失败
+                // - ReqwestError/sending request: 网络不通或代理问题
                 let should_fallback = err_str.contains("403")
                     || err_str.contains("rate limit")
                     || err_str.contains("decoding")
@@ -325,7 +326,9 @@ fn perform_update_internal(target: &str, interactive: bool) {
                     || err_str.contains("certificate")
                     || err_str.contains("ssl")
                     || err_str.contains("TLS")
-                    || err_str.contains("connection");
+                    || err_str.contains("connection")
+                    || err_str.contains("ReqwestError")
+                    || err_str.contains("sending request");
 
                 if should_fallback {
                     println!("{} {}", "更新失败:".red(), e);
