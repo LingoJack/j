@@ -257,7 +257,7 @@ pub enum SessionOpKind {
         /// 被写入的文件路径
         path: String,
     },
-    /// Shell 命令执行（Bash 工具）
+    /// Shell 命令执行（Shell 工具，变体名保留 bash 以兼容已持久化的 session 数据）
     Bash {
         /// 执行的命令
         command: String,

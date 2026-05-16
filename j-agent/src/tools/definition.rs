@@ -495,11 +495,17 @@ fn dedent(s: &str) -> String {
         return String::new();
     }
 
-    // 找出非空行的最小公共缩进
-    let min_indent = lines
+    // 找出非空行的最小公共缩进（以字节为单位，仅计算 ASCII 空白字符）
+    let min_indent_bytes = lines
         .iter()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| line.chars().take_while(|c| c.is_whitespace()).count())
+        .map(|line| {
+            // take_while 的字节长度：仅对 ASCII 空白字符计数
+            line.chars()
+                .take_while(|c| c.is_whitespace() && c.is_ascii())
+                .map(|c| c.len_utf8())
+                .sum::<usize>()
+        })
         .min()
         .unwrap_or(0);
 
@@ -507,12 +513,20 @@ fn dedent(s: &str) -> String {
     lines
         .iter()
         .map(|line| {
-            if line.trim().is_empty() {
-                String::new()
-            } else if line.len() >= min_indent {
-                line[min_indent..].to_string()
-            } else {
+            if line.trim().is_empty() || min_indent_bytes == 0 {
                 line.to_string()
+            } else {
+                // 安全地按字符跳过 min_indent_bytes 个字节
+                let byte_offset = line
+                    .char_indices()
+                    .take_while(|(i, c)| *i < min_indent_bytes && c.is_whitespace() && c.is_ascii())
+                    .map(|(_, c)| c.len_utf8())
+                    .sum::<usize>();
+                if byte_offset >= line.len() {
+                    String::new()
+                } else {
+                    line[byte_offset..].to_string()
+                }
             }
         })
         .collect::<Vec<_>>()
