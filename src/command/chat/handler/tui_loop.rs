@@ -75,23 +75,39 @@ impl Drop for TerminalGuard {
         // 使用 io::stdout() 而非 terminal.backend_mut()，
         // 因为 Drop 发生时 terminal 可能已经被 move 或 drop。
         let mut stdout = io::stdout();
-        if self.keyboard_enhancement_active {
-            let _ = execute!(
-                stdout,
-                PopKeyboardEnhancementFlags,
-                event::DisableMouseCapture,
-                event::DisableBracketedPaste,
-                LeaveAlternateScreen
-            );
-        } else {
-            let _ = execute!(
-                stdout,
-                event::DisableMouseCapture,
-                event::DisableBracketedPaste,
-                LeaveAlternateScreen
-            );
-        }
+        let _ = restore_terminal_state(&mut stdout, self.keyboard_enhancement_active);
     }
+}
+
+/// 尝试启用 keyboard enhancement。
+///
+/// 部分终端会直接忽略该协议，但 legacy WindowsAPI 会显式返回错误。
+/// 这里将其视为可选能力：失败时继续运行，只是少了更细粒度的按键区分。
+fn try_enable_keyboard_enhancement<W: io::Write>(writer: &mut W) -> bool {
+    execute!(
+        writer,
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    )
+    .is_ok()
+}
+
+/// 恢复终端状态。
+///
+/// keyboard enhancement 的 `Pop` 必须单独处理，避免其失败时短路后续恢复步骤。
+fn restore_terminal_state<W: io::Write>(
+    writer: &mut W,
+    keyboard_enhancement_active: bool,
+) -> io::Result<()> {
+    if keyboard_enhancement_active {
+        let _ = execute!(writer, PopKeyboardEnhancementFlags);
+    }
+
+    execute!(
+        writer,
+        event::DisableMouseCapture,
+        event::DisableBracketedPaste,
+        LeaveAlternateScreen
+    )
 }
 
 /// 根据当前 ChatMode (及 ConfigTab) 将鼠标滚轮事件路由到对应的导航 Action。
@@ -625,13 +641,8 @@ fn dispatch_event(
 /// panic 发生时 `TerminalGuard` 也会 Drop 恢复，此处作为双重保险。
 fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
-    let _ = execute!(
-        io::stdout(),
-        PopKeyboardEnhancementFlags,
-        event::DisableMouseCapture,
-        event::DisableBracketedPaste,
-        LeaveAlternateScreen
-    );
+    let mut stdout = io::stdout();
+    let _ = restore_terminal_state(&mut stdout, true);
 }
 
 /// Chat TUI 入口函数：初始化 panic hook，按需启动远程 WS 服务，然后进入主循环
@@ -696,12 +707,10 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         event::EnableBracketedPaste
     )?;
     // 启用 kitty keyboard protocol，使终端能区分 Shift+Enter / Ctrl+Enter 等组合键。
-    // 不支持此协议的终端（如 Terminal.app）会忽略该指令，不会报错。
-    let _ = execute!(
-        stdout,
-        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
-    );
-    guard.set_keyboard_active();
+    // 不支持该协议时继续运行，仅降级为基础按键行为。
+    if try_enable_keyboard_enhancement(&mut stdout) {
+        guard.set_keyboard_active();
+    }
 
     let mut mouse_capture_enabled = true;
 
@@ -1407,13 +1416,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // ★ 先恢复终端，再跑 SessionEnd hook（避免 hook 阻塞时终端卡在 raw mode）
     terminal::disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        PopKeyboardEnhancementFlags,
-        event::DisableMouseCapture,
-        event::DisableBracketedPaste,
-        LeaveAlternateScreen
-    )?;
+    restore_terminal_state(terminal.backend_mut(), guard.keyboard_enhancement_active)?;
     guard.disarm(); // 已手动恢复，阻止 Drop 重复执行
 
     // ★ SessionEnd hook（fire-and-forget，终端已恢复）
