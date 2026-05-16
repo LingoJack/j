@@ -213,7 +213,7 @@ uninstall: ## 卸载
 # ============================================
 # 发布相关
 # ============================================
-bump-version: ## 递增版本号（最后一位 patch，同步 j-agent）
+bump-version: ## 递增版本号（最后一位 patch，同步 j-agent 和安装脚本）
 	@echo "📌 递增版本号..."
 	@cli_ver=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	major=$$(echo $$cli_ver | cut -d. -f1); \
@@ -228,12 +228,16 @@ bump-version: ## 递增版本号（最后一位 patch，同步 j-agent）
 		sed -i '' "s/^version = \"$$cli_ver\"/version = \"$$new_version\"/" Cargo.toml; \
 		sed -i '' "s/^version = \"$$agent_ver\"/version = \"$$new_version\"/" j-agent/Cargo.toml; \
 		sed -i '' "s/\(j-agent.*version = \"\)[^\"]*\"/\1$$new_version\"/" Cargo.toml; \
+		sed -i '' "s/DEFAULT_VERSION=\"v[^\"]*\"/DEFAULT_VERSION=\"v$$new_version\"/" install.sh; \
+		sed -i '' 's/\$$DefaultVersion = "v[^"]*"/\$$DefaultVersion = "v'"$$new_version"'"/' install.ps1; \
 	else \
 		sed -i "s/^version = \"$$cli_ver\"/version = \"$$new_version\"/" Cargo.toml; \
 		sed -i "s/^version = \"$$agent_ver\"/version = \"$$new_version\"/" j-agent/Cargo.toml; \
 		sed -i "s/\(j-agent.*version = \"\)[^\"]*\"/\1$$new_version\"/" Cargo.toml; \
+		sed -i "s/DEFAULT_VERSION=\"v[^\"]*\"/DEFAULT_VERSION=\"v$$new_version\"/" install.sh; \
+		sed -i 's/\$$DefaultVersion = "v[^"]*"/\$$DefaultVersion = "v'"$$new_version"'"/' install.ps1; \
 	fi; \
-	echo "☑️ j-cli 和 j-agent 版本号已更新为 $$new_version"
+	echo "☑️ j-cli、j-agent 和安装脚本版本号已更新为 $$new_version"
 
 publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 	@echo "📦 开始发布流程..."
@@ -332,7 +336,7 @@ tag: ## 创建 git tag（基于当前版本号）
 	git push origin "$$tag"; \
 	echo "☑️ 标签 $$tag 已创建并推送。GitHub Actions 将自动构建和发布。"
 
-set-version: ## 设置指定版本号（用法：make set-version V=1.2.3，同步 j-agent）
+set-version: ## 设置指定版本号（用法：make set-version V=1.2.3，同步 j-agent 和安装脚本）
 ifndef V
 	@echo "✖️ 请指定版本号，例如: make set-version V=1.2.3"
 	@exit 1
@@ -346,12 +350,16 @@ endif
 		sed -i '' "s/^version = \"$$cli_ver\"/version = \"$(V)\"/" Cargo.toml; \
 		sed -i '' "s/^version = \"$$agent_ver\"/version = \"$(V)\"/" j-agent/Cargo.toml; \
 		sed -i '' "s/\(j-agent.*version = \"\)[^\"]*\"/\1$(V)\"/" Cargo.toml; \
+		sed -i '' "s/DEFAULT_VERSION=\"v[^\"]*\"/DEFAULT_VERSION=\"v$(V)\"/" install.sh; \
+		sed -i '' 's/\$$DefaultVersion = "v[^"]*"/\$$DefaultVersion = "v$(V)"/' install.ps1; \
 	else \
 		sed -i "s/^version = \"$$cli_ver\"/version = \"$(V)\"/" Cargo.toml; \
 		sed -i "s/^version = \"$$agent_ver\"/version = \"$(V)\"/" j-agent/Cargo.toml; \
 		sed -i "s/\(j-agent.*version = \"\)[^\"]*\"/\1$(V)\"/" Cargo.toml; \
+		sed -i "s/DEFAULT_VERSION=\"v[^\"]*\"/DEFAULT_VERSION=\"v$(V)\"/" install.sh; \
+		sed -i 's/\$$DefaultVersion = "v[^"]*"/\$$DefaultVersion = "v$(V)"/' install.ps1; \
 	fi; \
-	echo "☑️ j-cli 和 j-agent 版本号已更新为 $(V)"
+	echo "☑️ j-cli、j-agent 和安装脚本版本号已更新为 $(V)"
 
 tags: ## 查看最近的标签
 	@echo "🏷️  最近的标签:"

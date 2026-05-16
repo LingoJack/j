@@ -1,11 +1,11 @@
 # j-cli Windows 安装脚本
 # 使用方式:
 #   irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
-#   或者指定版本: $v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
+#   或者指定版本: $v="v12.10.64"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 #
 # 也可直接下载后执行:
 #   powershell -ExecutionPolicy Bypass -File install.ps1
-#   powershell -ExecutionPolicy Bypass -File install.ps1 -Version v1.0.0
+#   powershell -ExecutionPolicy Bypass -File install.ps1 -Version v12.10.64
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 
 param(
@@ -21,6 +21,7 @@ $Repo = "LingoJack/jcli"
 $BinaryName = "j"
 $InstallDir = "$env:LOCALAPPDATA\j-cli"
 $DataDir = "$env:USERPROFILE\.jdata"
+$DefaultVersion = "v12.10.65"  # 备用默认版本（publish 时自动更新）
 
 
 function Write-Info($msg) {
@@ -85,7 +86,7 @@ function Get-LatestVersion {
     }
 
     # 所有网络方法均失败，直接报错
-    Write-Err "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.ps1 -Version v1.0.0"
+    Write-Err "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.ps1 -Version $DefaultVersion"
     return
 }
 
@@ -286,17 +287,17 @@ function Show-Help {
     Write-Host "  irm https://raw.githubusercontent.com/$Repo/main/install.ps1 | iex"
     Write-Host ""
     Write-Host "指定版本安装:"
-    Write-Host '  $v="v1.0.0"; irm https://raw.githubusercontent.com/$Repo/main/install.ps1 | iex'
+    Write-Host '  $v="v12.10.64"; irm https://raw.githubusercontent.com/$Repo/main/install.ps1 | iex'
     Write-Host ""
     Write-Host "直接执行脚本:"
     Write-Host "  powershell -ExecutionPolicy Bypass -File install.ps1"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File install.ps1 -Version v1.0.0"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File install.ps1 -Version v12.10.64"
     Write-Host ""
     Write-Host "卸载:"
     Write-Host "  powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall"
     Write-Host ""
     Write-Host "参数:"
-    Write-Host "  -Version      指定安装版本 (如 v1.0.0)"
+    Write-Host "  -Version      指定安装版本 (如 v12.10.64)"
     Write-Host "  -Uninstall    卸载程序"
     Write-Host "  -Help         显示帮助信息"
 }

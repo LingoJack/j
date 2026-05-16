@@ -1,3 +1,13 @@
+# v12.10.65
+
+
+### 改进
+
+- **安装脚本版本号集中管理**: `install.sh` 和 `install.ps1` 新增 `DEFAULT_VERSION` / `$DefaultVersion` 常量，替换所有硬编码的示例版本号 `v1.0.0`，确保帮助信息和错误提示中显示真实可用版本
+- **Makefile 版本同步增强**: `bump-version` 和 `set-version` 目标新增自动同步安装脚本版本号的逻辑，发布新版本时安装脚本中的版本号自动更新
+- **更新失败提示改进**: `update.rs` 在 Windows 回退安装失败时新增 GitHub Releases 页面链接提示，方便用户手动下载
+</result
+
 # v12.10.64
 
 

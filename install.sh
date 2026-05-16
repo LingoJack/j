@@ -2,7 +2,7 @@
 
 # j-cli 安装脚本
 # 使用方式: curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
-# 或者指定版本: curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v1.0.0
+# 或者指定版本: curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v12.10.64
 
 set -e
 
@@ -11,6 +11,7 @@ REPO="LingoJack/jcli"
 BINARY_NAME="j"
 INSTALL_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"
+DEFAULT_VERSION="v12.10.65"  # 备用默认版本（publish 时自动更新）
 
 
 # 颜色输出
@@ -74,7 +75,7 @@ get_latest_version() {
     
     # 所有网络方法均失败，直接报错
     if [ -z "$latest" ]; then
-        error "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.sh v1.0.0"
+        error "无法从网络获取最新版本，请检查网络连接后重试。如需安装指定版本，请使用: install.sh $DEFAULT_VERSION"
     fi
     
     # 验证版本号格式
@@ -192,7 +193,7 @@ show_help() {
     echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sh"
     echo ""
     echo "指定版本安装:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sh -s -- v1.0.0"
+    echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sh -s -- $DEFAULT_VERSION"
     echo ""
     echo "卸载:"
     echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sh -s -- --uninstall"

@@ -621,6 +621,8 @@ fn perform_update_fallback(target: &str, interactive: bool) {
             println!(
                 "  irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex"
             );
+            println!("或访问 GitHub Releases 页面查看最新版本:");
+            println!("  https://github.com/LingoJack/jcli/releases");
             return;
         }
     };
