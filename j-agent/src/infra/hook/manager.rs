@@ -4,6 +4,8 @@ use crate::infra::hook::types::*;
 use crate::util::log::{write_error_log, write_info_log};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 // ========== HookMetrics / HookEntry ==========
 
@@ -340,7 +342,7 @@ impl HookManager {
         context: HookContext,
         disabled_hooks: Vec<String>,
     ) {
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             if let Ok(m) = manager.lock() {
                 let _ = m.execute(event, context, &disabled_hooks);
             }
@@ -377,8 +379,8 @@ impl HookManager {
 
         let mut had_modification = false;
         let mut final_result = HookResult::default();
-        let chain_start = std::time::Instant::now();
-        let chain_timeout = std::time::Duration::from_secs(MAX_CHAIN_DURATION_SECS);
+        let chain_start = Instant::now();
+        let chain_timeout = Duration::from_secs(MAX_CHAIN_DURATION_SECS);
 
         for hook_ref in &all_hooks {
             // 链总超时检查
@@ -436,7 +438,7 @@ impl HookManager {
                     break;
                 }
 
-                let hook_start = std::time::Instant::now();
+                let hook_start = Instant::now();
                 let result = execute_hook_with_provider(hook_ref.kind, &context, &self.provider);
 
                 let elapsed_ms = hook_start.elapsed().as_millis() as u64;

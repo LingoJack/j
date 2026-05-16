@@ -9,7 +9,10 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 /// WebFetchTool 参数
@@ -202,7 +205,7 @@ fn extract_text_from_response(
 }
 
 fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResult {
-    if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+    if cancelled.load(Ordering::Relaxed) {
         return ToolResult {
             output: "操作已取消".to_string(),
             is_error: true,

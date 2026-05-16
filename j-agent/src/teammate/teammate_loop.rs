@@ -7,7 +7,7 @@ use crate::storage::{
 use crate::teammate::{TeammateManager, TeammateStatus};
 use crate::tools::ToolRegistry;
 use crate::tools::derived_shared::{
-    AgentContextConfig, LlmNonStreamRequest, ToolExecContext, call_llm_non_stream,
+    AgentContextConfig, LlmNonStreamRequest, SubAgentMetrics, ToolExecContext, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
 };
 use crate::util::log::write_info_log;
@@ -73,7 +73,7 @@ pub struct TeammateLoopConfig {
     /// 父 agent 的上下文配置快照（供 select_messages + micro_compact 复用）
     pub context_config: Arc<Mutex<AgentContextConfig>>,
     /// 子 Agent metrics 累加器（与 DerivedAgentShared.sub_agent_metrics 共享）
-    pub sub_agent_metrics: Arc<Mutex<crate::tools::derived_shared::SubAgentMetrics>>,
+    pub sub_agent_metrics: Arc<Mutex<SubAgentMetrics>>,
 }
 
 /// Teammate 专用的 agent loop

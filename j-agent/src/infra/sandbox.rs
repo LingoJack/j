@@ -1,6 +1,7 @@
 use crate::util::path_utils::expand_tilde;
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::env;
+use std::path::{Component, Path, PathBuf};
 
 /// 安全沙箱：限制 AI 工具只能操作指定目录范围内的文件
 ///
@@ -23,9 +24,7 @@ impl Default for Sandbox {
 impl Sandbox {
     /// 创建沙箱，默认安全目录为 cwd
     pub fn new() -> Self {
-        let cwd = std::env::current_dir()
-            .ok()
-            .and_then(|p| p.canonicalize().ok());
+        let cwd = env::current_dir().ok().and_then(|p| p.canonicalize().ok());
         Self {
             safe_dirs: cwd.into_iter().collect(),
             enabled: true,
@@ -81,7 +80,7 @@ impl Sandbox {
         let absolute = if path.is_absolute() {
             path.to_path_buf()
         } else {
-            match std::env::current_dir() {
+            match env::current_dir() {
                 Ok(cwd) => cwd.join(path),
                 Err(_) => return false,
             }
@@ -168,10 +167,10 @@ fn normalize_path(path: &Path) -> PathBuf {
     let mut components = Vec::new();
     for comp in path.components() {
         match comp {
-            std::path::Component::ParentDir => {
+            Component::ParentDir => {
                 components.pop();
             }
-            std::path::Component::CurDir => {}
+            Component::CurDir => {}
             _ => components.push(comp),
         }
     }
@@ -185,7 +184,7 @@ mod tests {
     #[test]
     fn test_path_in_sandbox() {
         let sandbox = Sandbox::new(); // cwd 为安全目录
-        let cwd = std::env::current_dir().unwrap();
+        let cwd = env::current_dir().unwrap();
 
         // cwd 下的文件应该是安全的
         let child = cwd.join("src/main.rs");

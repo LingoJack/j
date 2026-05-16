@@ -3,6 +3,7 @@ use crate::storage::{ChatMessage, agent_data_dir};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 // ========== 常量 ==========
@@ -34,7 +35,7 @@ pub fn get_archives_dir() -> PathBuf {
 }
 
 /// 确保归档目录存在
-pub fn ensure_archives_dir() -> std::io::Result<()> {
+pub fn ensure_archives_dir() -> io::Result<()> {
     let dir = get_archives_dir();
     if !dir.exists() {
         fs::create_dir_all(&dir)?;

@@ -1,6 +1,7 @@
 use crate::constants::{HOOK_DEFAULT_LLM_TIMEOUT_SECS, HOOK_DEFAULT_TIMEOUT_SECS};
 use crate::storage::ChatMessage;
 use serde::{Deserialize, Serialize};
+use std::env;
 
 // ========== 常量 ==========
 
@@ -294,7 +295,7 @@ impl Default for HookContext {
             tool_result: None,
             tool_error: None,
             session_id: None,
-            cwd: std::env::current_dir()
+            cwd: env::current_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string()),
         }

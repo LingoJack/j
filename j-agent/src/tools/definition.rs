@@ -1,3 +1,13 @@
+use std::borrow::Cow;
+use std::env;
+use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
+
 use crate::context::compact::InvokedSkillsMap;
 use crate::infra::hook::HookManager;
 use crate::infra::skill::Skill;
@@ -5,11 +15,25 @@ use crate::llm::{FunctionObject, ToolDefinition};
 use crate::message_types::AskRequest;
 use crate::permission::queue::PermissionQueue;
 use crate::tools::tool_names;
-use schemars::JsonSchema;
-use serde::Deserialize;
-use serde_json::Value;
-use std::borrow::Cow;
-use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+
+use super::ask::AskTool;
+use super::background::{BackgroundManager, TaskOutputTool};
+use super::browser::BrowserTool;
+use super::compact_tool::CompactTool;
+#[cfg(target_os = "macos")]
+use super::computer_use::ComputerUseTool;
+use super::file::{EditFileTool, GlobTool, ReadFileTool, WriteFileTool};
+use super::grep::GrepTool;
+use super::hook::RegisterHookTool;
+use super::plan::{self, EnterPlanModeTool, ExitPlanModeTool, PlanApprovalQueue, PlanModeState};
+use super::session::SessionTool;
+use super::shell::ShellTool;
+use super::skill::LoadSkillTool;
+use super::task::{TaskManager, TaskTool};
+use super::todo::{TodoManager, TodoReadTool, TodoWriteTool};
+use super::web_fetch::WebFetchTool;
+use super::web_search::WebSearchTool;
+use super::worktree::{EnterWorktreeTool, ExitWorktreeTool, WorktreeState};
 
 // ========== 核心类型 ==========
 
@@ -132,20 +156,20 @@ pub fn parse_tool_args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<
 pub struct ToolRegistry {
     tools: Vec<Box<dyn Tool>>,
     /// 待办事项管理器
-    pub todo_manager: Arc<super::todo::TodoManager>,
+    pub todo_manager: Arc<TodoManager>,
     /// 计划模式状态
-    pub plan_mode_state: Arc<super::plan::PlanModeState>,
+    pub plan_mode_state: Arc<PlanModeState>,
     /// 工作树状态（当前未使用）
     #[allow(dead_code)]
-    pub worktree_state: Arc<super::worktree::WorktreeState>,
+    pub worktree_state: Arc<WorktreeState>,
     /// 权限请求队列
     pub permission_queue: Option<Arc<PermissionQueue>>,
     /// 计划审批队列
-    pub plan_approval_queue: Option<Arc<super::plan::PlanApprovalQueue>>,
+    pub plan_approval_queue: Option<Arc<PlanApprovalQueue>>,
 }
 
-impl std::fmt::Debug for ToolRegistry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ToolRegistry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tool_names: Vec<&str> = self.tools.iter().map(|t| t.name()).collect();
         f.debug_struct("ToolRegistry")
             .field("tool_names", &tool_names)
@@ -158,65 +182,63 @@ impl ToolRegistry {
     pub fn new(
         skills: Vec<Skill>,
         ask_tx: mpsc::Sender<AskRequest>,
-        background_manager: Arc<super::background::BackgroundManager>,
-        task_manager: Arc<super::task::TaskManager>,
+        background_manager: Arc<BackgroundManager>,
+        task_manager: Arc<TaskManager>,
         hook_manager: Arc<Mutex<HookManager>>,
         invoked_skills: InvokedSkillsMap,
-        todos_file_path: std::path::PathBuf,
+        todos_file_path: PathBuf,
     ) -> Self {
-        let todo_manager = Arc::new(super::todo::TodoManager::new_with_file_path(
-            todos_file_path,
-        ));
-        let plan_mode_state = Arc::new(super::plan::PlanModeState::new());
-        let worktree_state = Arc::new(super::worktree::WorktreeState::new());
-        let plan_approval_queue = Arc::new(super::plan::PlanApprovalQueue::new());
+        let todo_manager = Arc::new(TodoManager::new_with_file_path(todos_file_path));
+        let plan_mode_state = Arc::new(PlanModeState::new());
+        let worktree_state = Arc::new(WorktreeState::new());
+        let plan_approval_queue = Arc::new(PlanApprovalQueue::new());
 
         let tools: Vec<Box<dyn Tool>> = vec![
-            Box::new(super::shell::ShellTool {
+            Box::new(ShellTool {
                 manager: Arc::clone(&background_manager),
             }),
-            Box::new(super::file::ReadFileTool),
-            Box::new(super::file::WriteFileTool),
-            Box::new(super::file::EditFileTool),
-            Box::new(super::file::GlobTool),
-            Box::new(super::grep::GrepTool),
-            Box::new(super::web_fetch::WebFetchTool),
-            Box::new(super::web_search::WebSearchTool),
-            Box::new(super::browser::BrowserTool),
-            Box::new(super::ask::AskTool {
+            Box::new(ReadFileTool),
+            Box::new(WriteFileTool),
+            Box::new(EditFileTool),
+            Box::new(GlobTool),
+            Box::new(GrepTool),
+            Box::new(WebFetchTool),
+            Box::new(WebSearchTool),
+            Box::new(BrowserTool),
+            Box::new(AskTool {
                 ask_tx: ask_tx.clone(),
             }),
-            Box::new(super::background::TaskOutputTool {
+            Box::new(TaskOutputTool {
                 manager: Arc::clone(&background_manager),
             }),
-            Box::new(super::session::SessionTool {
+            Box::new(SessionTool {
                 manager: Arc::clone(&background_manager),
             }),
-            Box::new(super::task::TaskTool {
+            Box::new(TaskTool {
                 manager: Arc::clone(&task_manager),
             }),
-            Box::new(super::todo::TodoWriteTool {
+            Box::new(TodoWriteTool {
                 manager: Arc::clone(&todo_manager),
             }),
-            Box::new(super::todo::TodoReadTool {
+            Box::new(TodoReadTool {
                 manager: Arc::clone(&todo_manager),
             }),
-            Box::new(super::compact_tool::CompactTool),
-            Box::new(super::hook::RegisterHookTool { hook_manager }),
+            Box::new(CompactTool),
+            Box::new(RegisterHookTool { hook_manager }),
             #[cfg(target_os = "macos")]
-            Box::new(super::computer_use::ComputerUseTool::new()),
-            Box::new(super::plan::EnterPlanModeTool {
+            Box::new(ComputerUseTool::new()),
+            Box::new(EnterPlanModeTool {
                 plan_state: Arc::clone(&plan_mode_state),
             }),
-            Box::new(super::plan::ExitPlanModeTool {
+            Box::new(ExitPlanModeTool {
                 plan_state: Arc::clone(&plan_mode_state),
                 ask_tx,
                 plan_approval_queue: Some(Arc::clone(&plan_approval_queue)),
             }),
-            Box::new(super::worktree::EnterWorktreeTool {
+            Box::new(EnterWorktreeTool {
                 state: Arc::clone(&worktree_state),
             }),
-            Box::new(super::worktree::ExitWorktreeTool {
+            Box::new(ExitWorktreeTool {
                 state: Arc::clone(&worktree_state),
             }),
         ];
@@ -231,7 +253,7 @@ impl ToolRegistry {
         };
 
         if !skills.is_empty() {
-            registry.register(Box::new(super::skill::LoadSkillTool {
+            registry.register(Box::new(LoadSkillTool {
                 skills,
                 invoked_skills,
             }));
@@ -256,25 +278,25 @@ impl ToolRegistry {
     /// 执行指定名称的工具，自动处理计划模式下的权限限制
     pub fn execute(&self, name: &str, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         let (is_active, plan_file_path) = self.plan_mode_state.get_state();
-        if is_active && !super::plan::is_allowed_in_plan_mode(name) {
+        if is_active && !plan::is_allowed_in_plan_mode(name) {
             let is_plan_file_write = (name == "Write" || name == "Edit") && {
                 if let Some(ref plan_path) = plan_file_path {
-                    serde_json::from_str::<serde_json::Value>(arguments)
+                    serde_json::from_str::<Value>(arguments)
                         .ok()
                         .and_then(|v| {
                             v.get("path")
                                 .or_else(|| v.get("file_path"))
                                 .and_then(|p| p.as_str())
                                 .map(|p| {
-                                    let input_path = std::path::Path::new(p);
-                                    let plan_path_buf = std::path::Path::new(&plan_path);
+                                    let input_path = Path::new(p);
+                                    let plan_path_buf = Path::new(&plan_path);
 
                                     if p == plan_path {
                                         return true;
                                     }
 
                                     if input_path.is_relative()
-                                        && let Ok(cwd) = std::env::current_dir()
+                                        && let Ok(cwd) = env::current_dir()
                                     {
                                         let absolute_path = cwd.join(input_path);
                                         if let Ok(canonical_input) = absolute_path.canonicalize()

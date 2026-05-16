@@ -3,10 +3,13 @@ use crate::infra::hook::definition::*;
 use crate::infra::hook::types::*;
 use crate::storage::ModelProvider;
 use crate::util::log::write_info_log;
+use std::env;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex, mpsc};
+use std::thread;
+use std::time::Duration;
 
 // ========== Hook 执行分派 ==========
 
@@ -149,7 +152,7 @@ pub(crate) fn execute_llm_hook(
 
     rt.block_on(async {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .timeout(Duration::from_secs(timeout_secs))
             .build()
             .map_err(|e| format!("创建 HTTP client 失败: {}", e))?;
 
@@ -261,7 +264,7 @@ pub(crate) fn execute_shell_hook(
 
     // 目录布局下，将 hook 目录前置到 PATH，脚本可直接用文件名调用
     if let Some(ref hook_dir) = hook.dir_path {
-        let existing_path = std::env::var("PATH").unwrap_or_default();
+        let existing_path = env::var("PATH").unwrap_or_default();
         let separator = if cfg!(windows) { ";" } else { ":" };
         let new_path = if existing_path.is_empty() {
             hook_dir.display().to_string()
@@ -272,9 +275,9 @@ pub(crate) fn execute_shell_hook(
     }
 
     let mut child = cmd
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("启动 hook 进程失败: {}", e))?;
 
@@ -287,12 +290,12 @@ pub(crate) fn execute_shell_hook(
     }
 
     // 子线程中 wait_with_output（阻塞等待进程退出 + 一次性读取 stdout/stderr）
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
         let _ = tx.send(child.wait_with_output());
     });
 
-    let timeout = std::time::Duration::from_secs(hook.timeout);
+    let timeout = Duration::from_secs(hook.timeout);
     match rx.recv_timeout(timeout) {
         Ok(Ok(output)) => {
             // 捕获 stderr 并记录日志

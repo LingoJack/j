@@ -10,9 +10,9 @@ use crate::storage::{
     append_event_to_path,
 };
 use crate::tools::derived_shared::{
-    DerivedAgentShared, LlmNonStreamRequest, SubAgentHandle, SubAgentStatus, ToolExecContext,
-    call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
-    extract_tool_items,
+    AgentContextConfig, DerivedAgentShared, LlmNonStreamRequest, SubAgentHandle, SubAgentMetrics,
+    SubAgentStatus, ToolExecContext, call_llm_non_stream, create_runtime_and_client,
+    execute_tool_with_permission, extract_tool_items,
 };
 use crate::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::tools::{
@@ -24,6 +24,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::borrow::Cow;
+use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -75,11 +76,11 @@ struct SubAgentLoopParams {
     snapshot: Option<SubAgentLoopStateRefs>,
     description: String,
     /// 独立 transcript JSONL 路径：每轮消息 append 到此（崩溃安全）。
-    transcript_path: Option<std::path::PathBuf>,
+    transcript_path: Option<PathBuf>,
     /// 父 agent 的上下文配置快照（供 select_messages + micro_compact 复用）
-    context_config: crate::tools::derived_shared::AgentContextConfig,
+    context_config: AgentContextConfig,
     /// 子 Agent metrics 累加器（与 DerivedAgentShared.sub_agent_metrics 共享）
-    sub_agent_metrics: Arc<Mutex<crate::tools::derived_shared::SubAgentMetrics>>,
+    sub_agent_metrics: Arc<Mutex<SubAgentMetrics>>,
 }
 
 /// 将任意描述转为适合作为 <前缀> 显示的名字（去空白，限长度）
@@ -191,7 +192,7 @@ impl Tool for SubAgentTool {
         let system_prompt = build_sub_agent_system_prompt(base_prompt.as_deref());
 
         // worktree 隔离：提前创建（在调用线程中；失败则提前退出，避免浪费 sub_id）
-        let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
+        let worktree_info: Option<(PathBuf, String)> = if use_worktree {
             match create_agent_worktree(&description) {
                 Ok(info) => Some(info),
                 Err(e) => {

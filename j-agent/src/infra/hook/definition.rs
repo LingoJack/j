@@ -2,6 +2,8 @@ use crate::infra::hook::types::*;
 use crate::permission::JcliConfig;
 use crate::util::log::{write_error_log, write_info_log};
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -74,8 +76,8 @@ impl Clone for BuiltinHook {
     }
 }
 
-impl std::fmt::Debug for HookKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for HookKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HookKind::Shell(shell) => f
                 .debug_struct("HookKind::Shell")
@@ -303,7 +305,7 @@ impl HookDirDef {
 /// 返回用户级 hooks 目录: ~/.jdata/agent/hooks/
 pub fn hooks_dir() -> PathBuf {
     let dir = crate::constants::data_root().join("agent").join("hooks");
-    let _ = std::fs::create_dir_all(&dir);
+    let _ = fs::create_dir_all(&dir);
     dir
 }
 
@@ -320,7 +322,7 @@ pub(crate) fn load_hooks_from_dir(
     source_name: &str,
 ) -> Vec<(String, HookDirDef, PathBuf)> {
     let mut hooks = Vec::new();
-    let entries = match std::fs::read_dir(dir) {
+    let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return hooks,
     };
@@ -353,7 +355,7 @@ pub(crate) fn load_hooks_from_dir(
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        match std::fs::read_to_string(&hook_yaml) {
+        match fs::read_to_string(&hook_yaml) {
             Ok(content) => match serde_yaml::from_str::<HookDirDef>(&content) {
                 Ok(def) => {
                     if def.events.is_empty() {

@@ -634,7 +634,7 @@ impl Tool for TaskOutputTool {
                     break;
                 }
                 // ★ 检查取消信号：用户取消请求时应立即中断等待
-                if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+                if cancelled.load(Ordering::Relaxed) {
                     let info = self
                         .manager
                         .get_task_status(&params.task_id)

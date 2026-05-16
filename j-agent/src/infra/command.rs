@@ -2,6 +2,7 @@ use crate::permission::JcliConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::io::{self, Error, ErrorKind};
 use std::path::{Path, PathBuf};
 
 // ========== 常量 ==========
@@ -164,26 +165,19 @@ pub fn expand_command_mentions(
 ///
 /// 从 frontmatter 解析 name，保存到对应目录。
 /// 返回保存路径和命令名称。
-pub fn save_new_command(
-    source: CommandSource,
-    content: &str,
-) -> std::io::Result<(PathBuf, String)> {
+pub fn save_new_command(source: CommandSource, content: &str) -> io::Result<(PathBuf, String)> {
     // 解析 frontmatter 获取 name
-    let (fm_str, _body) = super::skill::split_frontmatter(content).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, "缺少 YAML frontmatter")
-    })?;
+    let (fm_str, _body) = super::skill::split_frontmatter(content)
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "缺少 YAML frontmatter"))?;
     let frontmatter: CommandFrontmatter = serde_yaml::from_str(&fm_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        Error::new(
+            ErrorKind::InvalidData,
             format!("解析 frontmatter 失败: {}", e),
         )
     })?;
 
     if frontmatter.name.is_empty() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "命令 name 不能为空",
-        ));
+        return Err(Error::new(ErrorKind::InvalidData, "命令 name 不能为空"));
     }
 
     // 验证 name 格式：只允许字母、数字、下划线、连字符
@@ -192,8 +186,8 @@ pub fn save_new_command(
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        return Err(Error::new(
+            ErrorKind::InvalidData,
             "命令 name 只允许字母、数字、下划线、连字符",
         ));
     }
