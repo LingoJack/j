@@ -15,6 +15,8 @@ use crate::command::chat::tools::classification::{
     ToolCategory, ToolStatus, get_result_summary_for_tool,
 };
 use crate::command::chat::tools::tool_names;
+use crate::markdown::highlight::highlight_code_line;
+use crate::tui::editor_core::EditorTheme;
 use crate::util::text::{
     line_number_continuation_prefix, line_number_prefix_width, wrap_text, wrap_text_with_prefix,
 };
@@ -171,6 +173,74 @@ pub fn render_tool_result_msg(params: &ToolResultRenderParams, lines: &mut Vec<L
                 expand,
             },
         );
+    } else if tool_name == tool_names::READ {
+        // Read 工具结果：带行号的代码，支持语法高亮
+        let lang = tool_args
+            .and_then(parse_file_path_from_json)
+            .map(|p| infer_lang_from_path(&p))
+            .unwrap_or("");
+        let editor_theme = EditorTheme::from(theme);
+
+        let all_lines: Vec<&str> = clean.lines().take(NORMAL_RESULT_MAX_LINES).collect();
+        for line in all_lines {
+            if let Some((prefix_w, cont_prefix)) = line_number_continuation_prefix(line) {
+                // 分离行号前缀和代码内容
+                let prefix_str: String = line.chars().take(prefix_w).collect();
+                let code_content: String = line.chars().skip(prefix_w).collect();
+                // 续行
+                for (i, wrapped) in wrap_text_with_prefix(&code_content, content_w, &cont_prefix)
+                    .into_iter()
+                    .enumerate()
+                {
+                    let mut spans = vec![Span::styled("    ", Style::default().fg(theme.text_dim))];
+                    if i == 0 {
+                        // 首行：行号前缀
+                        spans.push(Span::styled(
+                            prefix_str.clone(),
+                            Style::default().fg(theme.text_dim),
+                        ));
+                    } else {
+                        // 续行：缩进对齐
+                        spans.push(Span::styled(
+                            cont_prefix.clone(),
+                            Style::default().fg(theme.text_dim),
+                        ));
+                    }
+                    if lang.is_empty() {
+                        spans.push(Span::styled(wrapped, Style::default().fg(theme.text_dim)));
+                    } else {
+                        spans.extend(highlight_code_line(&wrapped, lang, &editor_theme));
+                    }
+                    lines.push(Line::from(spans));
+                }
+            } else {
+                // 无行号前缀的行（如空行）
+                for wrapped in wrap_text(line, content_w) {
+                    if lang.is_empty() {
+                        lines.push(Line::from(Span::styled(
+                            format!("    {}", wrapped),
+                            Style::default().fg(theme.text_dim),
+                        )));
+                    } else {
+                        let mut spans =
+                            vec![Span::styled("    ", Style::default().fg(theme.text_dim))];
+                        spans.extend(highlight_code_line(&wrapped, lang, &editor_theme));
+                        lines.push(Line::from(spans));
+                    }
+                }
+            }
+        }
+
+        let total_lines = clean.lines().count();
+        if total_lines > TOOL_RESULT_DISPLAY_MAX_LINES {
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "    ... (共 {} 行，显示前 {} 行)",
+                    total_lines, TOOL_RESULT_DISPLAY_MAX_LINES
+                ),
+                Style::default().fg(theme.text_dim),
+            )));
+        }
     } else {
         // 正常结果
         let all_lines: Vec<&str> = clean.lines().take(NORMAL_RESULT_MAX_LINES).collect();
@@ -480,4 +550,66 @@ pub(crate) fn parse_tool_label(label: &str) -> (String, bool) {
         label.split(['.', ' ']).next().unwrap_or(label).to_string()
     };
     (tool_name, is_error)
+}
+
+/// 从 tool_args JSON 中提取 file_path 字段
+fn parse_file_path_from_json(json: &str) -> Option<String> {
+    // 简单解析：查找 "file_path": "..." 或 "path": "..."
+    let patterns = ["\"file_path\"", "\"path\""];
+    for pattern in patterns {
+        if let Some(idx) = json.find(pattern) {
+            let rest = &json[idx + pattern.len()..];
+            // 跳过可能的空白和冒号
+            let rest = rest.trim_start_matches([' ', ':', '\t']);
+            // 提取引号内的字符串
+            if let Some(stripped) = rest.strip_prefix('"') {
+                let end = stripped.find('"')?;
+                return Some(stripped[..end].to_string());
+            }
+        }
+    }
+    None
+}
+
+/// 根据文件扩展名推断语法高亮语言
+fn infer_lang_from_path(path: &str) -> &'static str {
+    let path_lower = path.to_lowercase();
+    // 先检查完整文件名（如 Makefile）
+    if path_lower.ends_with("makefile") || path_lower.ends_with("justfile") {
+        return "makefile";
+    }
+    if path_lower.ends_with("dockerfile") {
+        return "dockerfile";
+    }
+    // 扩展名映射
+    let ext = path_lower.rsplit('.').next().unwrap_or("");
+    match ext {
+        "rs" => "rust",
+        "go" => "go",
+        "py" => "python",
+        "js" => "javascript",
+        "ts" => "typescript",
+        "tsx" => "tsx",
+        "jsx" => "jsx",
+        "java" => "java",
+        "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "hh" => "cpp",
+        "sh" | "bash" | "zsh" => "bash",
+        "json" => "json",
+        "yaml" | "yml" => "yaml",
+        "toml" => "toml",
+        "md" | "markdown" => "markdown",
+        "sql" => "sql",
+        "css" | "scss" | "sass" => "css",
+        "html" | "htm" => "html",
+        "xml" => "xml",
+        "kt" | "kts" => "kotlin",
+        "swift" => "swift",
+        "rb" => "ruby",
+        "php" => "php",
+        "lua" => "lua",
+        "vim" => "vim",
+        "dockerfile" => "dockerfile",
+        "makefile" => "makefile",
+        _ => "",
+    }
 }
