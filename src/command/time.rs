@@ -98,11 +98,14 @@ fn run_countdown(total_secs: u64) {
 
     for elapsed in 1..=total_secs {
         // 精确校准每秒
-        let next_tick = start + std::time::Duration::from_secs(elapsed);
-        let now = std::time::Instant::now();
-        if next_tick > now {
-            std::thread::sleep(next_tick - now);
+        let next_tick = start.checked_add(std::time::Duration::from_secs(elapsed));
+        if let Some(next_tick) = next_tick {
+            let now = std::time::Instant::now();
+            if next_tick > now {
+                std::thread::sleep(next_tick - now);
+            }
         }
+        // 如果溢出（倒计时极长），则使用简单 sleep 方式
 
         let remaining = total_secs - elapsed;
         pb.set_position(elapsed);
