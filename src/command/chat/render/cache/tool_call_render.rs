@@ -942,18 +942,7 @@ fn render_glob_grep_call_request_expanded(
 
     // path（截断显示）
     if let Some(path) = parsed.get("path").and_then(|v| v.as_str()) {
-        let display_path = if path.chars().count() > 60 {
-            // 截断中间路径，保留首尾
-            let first_part: String = path.chars().take(30).collect();
-            let last_part: String = path.chars().rev().take(25).collect();
-            format!(
-                "{}...{}",
-                first_part,
-                last_part.chars().rev().collect::<String>()
-            )
-        } else {
-            path.to_string()
-        };
+        let display_path = truncate_path(path, 60);
         render_kv_line("path", &display_path, content_w, lines, theme);
     }
 
@@ -981,7 +970,7 @@ fn render_glob_grep_call_request_expanded(
     true
 }
 
-/// Read/Write/Edit 工具展开渲染：只显示 path（截断）
+/// Read/Write/Edit 工具展开渲染
 fn render_file_tool_call_request_expanded(
     tool_name: &str,
     arguments: &str,
@@ -1001,17 +990,7 @@ fn render_file_tool_call_request_expanded(
         .and_then(|v| v.as_str());
 
     if let Some(path) = path {
-        let display_path = if path.chars().count() > 60 {
-            let first_part: String = path.chars().take(30).collect();
-            let last_part: String = path.chars().rev().take(25).collect();
-            format!(
-                "{}...{}",
-                first_part,
-                last_part.chars().rev().collect::<String>()
-            )
-        } else {
-            path.to_string()
-        };
+        let display_path = truncate_path(path, 60);
         render_kv_line("path", &display_path, content_w, lines, theme);
     }
 
@@ -1029,7 +1008,73 @@ fn render_file_tool_call_request_expanded(
         }
     }
 
+    // Edit: old_string/new_string 摘要
+    if tool_name == tool_names::EDIT {
+        if let Some(old) = parsed.get("old_string").and_then(|v| v.as_str()) {
+            let summary = summarize_string_content(old, 40);
+            render_kv_line("old", &summary, content_w, lines, theme);
+        }
+        if let Some(new) = parsed.get("new_string").and_then(|v| v.as_str()) {
+            let summary = summarize_string_content(new, 40);
+            render_kv_line("new", &summary, content_w, lines, theme);
+        }
+        // replace_all
+        if let Some(replace_all) = parsed.get("replace_all").and_then(|v| v.as_bool())
+            && replace_all
+        {
+            render_kv_line("mode", "全部替换", content_w, lines, theme);
+        }
+    }
+
     true
+}
+
+/// 截断长路径（保留首尾）
+fn truncate_path(path: &str, max_len: usize) -> String {
+    if path.chars().count() > max_len {
+        let first_part: String = path.chars().take(30).collect();
+        let last_part: String = path.chars().rev().take(25).collect();
+        format!(
+            "{}...{}",
+            first_part,
+            last_part.chars().rev().collect::<String>()
+        )
+    } else {
+        path.to_string()
+    }
+}
+
+/// 摘要字符串内容（多行显示行数 + 首行预览，单行显示长度 + 截断预览）
+fn summarize_string_content(s: &str, preview_len: usize) -> String {
+    let line_count = s.lines().count();
+    if line_count > 1 {
+        // 多行：显示行数 + 首行预览
+        let first_line = s.lines().next().unwrap_or("");
+        let preview = if first_line.chars().count() > preview_len {
+            format!(
+                "{}...",
+                first_line.chars().take(preview_len).collect::<String>()
+            )
+        } else {
+            first_line.to_string()
+        };
+        format!("{} 行: \"{}\"", line_count, preview)
+    } else {
+        // 单行：显示长度 + 截断预览
+        let char_count = s.chars().count();
+        let preview: String = if char_count > preview_len {
+            format!("{}...", s.chars().take(preview_len).collect::<String>())
+        } else if char_count == 0 {
+            String::from("(空)")
+        } else {
+            s.to_string()
+        };
+        if char_count > preview_len {
+            format!("{} 字符: \"{}\"", char_count, preview)
+        } else {
+            format!("\"{}\"", preview)
+        }
+    }
 }
 
 /// 渲染键值对行

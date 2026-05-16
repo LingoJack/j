@@ -910,13 +910,23 @@ fn render_grep_content_format(
                             format!("{:>4} │ ", line_num),
                             Style::default().fg(theme.text_dim),
                         ),
-                        Span::styled(w.to_string(), Style::default().fg(theme.text_normal)),
+                        Span::styled(
+                            w.to_string(),
+                            Style::default()
+                                .fg(theme.config_title)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                     ]));
                 } else {
                     lines.push(Line::from(vec![
                         Span::styled("      ", Style::default()),
                         Span::styled("     │ ", Style::default().fg(theme.text_dim)),
-                        Span::styled(w.to_string(), Style::default().fg(theme.text_normal)),
+                        Span::styled(
+                            w.to_string(),
+                            Style::default()
+                                .fg(theme.config_title)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                     ]));
                 }
             }
@@ -1293,11 +1303,44 @@ fn render_task_result(
 fn render_write_edit_result(
     content: &str,
     tool_args: Option<&str>,
-    _content_w: usize,
+    content_w: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
-    // 从 tool_args 提取文件路径
+    // 检测是否为失败结果（Edit 找不到匹配、匹配不唯一等）
+    let is_failure = content.contains("未找到匹配")
+        || content.contains("not unique")
+        || content.contains("failed")
+        || content.contains("Failed");
+
+    if is_failure {
+        // 失败：文件路径 + 完整错误信息（红色）
+        let file_path = tool_args.and_then(parse_file_path_from_json);
+        if let Some(path) = file_path {
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(
+                    path,
+                    Style::default()
+                        .fg(theme.config_title)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+        // 显示完整错误信息
+        let error_style = Style::default().fg(theme.toast_error_border);
+        for line in content.lines().take(ERROR_RESULT_MAX_LINES) {
+            for wrapped in wrap_text(line, content_w.saturating_sub(6)) {
+                lines.push(Line::from(Span::styled(
+                    format!("    {}", wrapped),
+                    error_style,
+                )));
+            }
+        }
+        return;
+    }
+
+    // 成功：文件路径 + 操作摘要
     let file_path = tool_args.and_then(parse_file_path_from_json);
 
     if let Some(path) = file_path {
@@ -1310,14 +1353,12 @@ fn render_write_edit_result(
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(" — ", Style::default().fg(theme.text_dim)),
-            // content 通常是 "1 file written" 或类似
             Span::styled(
                 content.lines().next().unwrap_or("").to_string(),
                 Style::default().fg(theme.text_dim),
             ),
         ]));
     } else {
-        // 无法提取路径，普通渲染
         for line in content.lines().take(NORMAL_RESULT_MAX_LINES) {
             lines.push(Line::from(Span::styled(
                 format!("    {}", line),
