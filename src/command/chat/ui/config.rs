@@ -16,10 +16,38 @@ use crate::command::chat::app::{ChatApp, CommandsMode, ConfigTab, ConfigTabHitBo
 use crate::tui::components::{separator_line, tab_bar};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
+
+/// 逐行渲染配置页内容，避免单个 Paragraph 在部分终端上发生软换行后污染相邻行。
+fn render_block_lines(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    block: Block<'_>,
+    bg: Color,
+    lines: &[Line<'_>],
+    scroll_y: u16,
+) {
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+
+    f.render_widget(Block::default().style(Style::default().bg(bg)), inner);
+
+    let start = usize::from(scroll_y).min(lines.len());
+    let end = (start + inner.height as usize).min(lines.len());
+
+    for (row, line) in lines[start..end].iter().enumerate() {
+        let line_area = Rect::new(inner.x, inner.y + row as u16, inner.width, 1);
+        let widget = Paragraph::new(line.clone()).style(Style::default().bg(bg));
+        f.render_widget(widget, line_area);
+    }
+}
 
 /// 绘制顶部 Tab 栏（支持窄屏水平滚动）
 fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
@@ -203,22 +231,18 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ];
         all_lines.append(&mut tab_header_lines);
         all_lines.append(&mut list_lines);
-        let widget = Paragraph::new(all_lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::default().fg(t.border_config))
-                    .title(Span::styled(
-                        title,
-                        Style::default()
-                            .fg(t.config_label_selected)
-                            .add_modifier(Modifier::BOLD),
-                    ))
-                    .style(Style::default().bg(bg)),
-            )
-            .scroll((app.ui.config_scroll_offset, 0));
-        f.render_widget(widget, area);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_config))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(t.config_label_selected)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(bg));
+        render_block_lines(f, area, block, bg, &all_lines, app.ui.config_scroll_offset);
         // ── 回退模式下也记录布局信息 ──
         // 回退模式的 Block 有 Borders::ALL（含 top border），所以 Tab 栏全局 Y = area.y + 1（top border）+ 1（空行）
         app.ui.config_tab_bar_y = Some(area.y + 2);
@@ -262,8 +286,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 .add_modifier(Modifier::BOLD),
         ))
         .style(Style::default().bg(bg));
-    let header_widget = Paragraph::new(header_lines).block(header_block);
-    f.render_widget(header_widget, chunks[0]);
+    render_block_lines(f, chunks[0], header_block, bg, &header_lines, 0);
 
     // ── Tools Tab 特殊处理：左右分栏 ──
     let is_tools_split = app.ui.config_tab == ConfigTab::Tools;
@@ -300,10 +323,14 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(Style::default().fg(t.border_config))
             .style(Style::default().bg(bg));
-        let left_widget = Paragraph::new(list_lines)
-            .block(left_block)
-            .scroll((app.ui.config_scroll_offset, 0));
-        f.render_widget(left_widget, h_chunks[0]);
+        render_block_lines(
+            f,
+            h_chunks[0],
+            left_block,
+            bg,
+            &list_lines,
+            app.ui.config_scroll_offset,
+        );
 
         // ── 右侧：选中工具详情 ──
         // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
@@ -326,8 +353,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     .add_modifier(Modifier::BOLD),
             ))
             .style(Style::default().bg(bg));
-        let right_widget = Paragraph::new(detail_lines).block(right_block);
-        f.render_widget(right_widget, h_chunks[1]);
+        render_block_lines(f, h_chunks[1], right_block, bg, &detail_lines, 0);
 
         // ── 记录布局信息 ──
         app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
@@ -372,10 +398,14 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(t.border_config))
         .style(Style::default().bg(bg));
-    let list_widget = Paragraph::new(list_lines)
-        .block(list_block)
-        .scroll((app.ui.config_scroll_offset, 0));
-    f.render_widget(list_widget, chunks[1]);
+    render_block_lines(
+        f,
+        chunks[1],
+        list_block,
+        bg,
+        &list_lines,
+        app.ui.config_scroll_offset,
+    );
 
     // ── 记录布局信息供鼠标点击使用 ──
     // header_block 有 Borders::TOP（占 1 行），然后内容第 0 行是空行，第 1 行是 Tab 栏
