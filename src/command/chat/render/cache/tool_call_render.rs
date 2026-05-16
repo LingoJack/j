@@ -867,6 +867,12 @@ fn render_specialized_tool_call(
             render_exit_plan_mode_request(bubble_max_width, lines, theme);
             true
         }
+        tool_names::GLOB | tool_names::GREP => {
+            render_glob_grep_call_request_expanded(tool_name, arguments, content_w, lines, theme)
+        }
+        tool_names::READ | tool_names::WRITE | tool_names::EDIT => {
+            render_file_tool_call_request_expanded(tool_name, arguments, content_w, lines, theme)
+        }
         tool_names::TASK => render_task_call_request_expanded(arguments, content_w, lines, theme),
         tool_names::TASK_OUTPUT => {
             render_task_output_call_request_expanded(arguments, content_w, lines, theme)
@@ -920,6 +926,111 @@ fn render_specialized_tool_call(
 // ──────────────────────────────────────────────────────────────
 // 9. 各工具专用展开渲染
 // ──────────────────────────────────────────────────────────────
+
+/// Glob/Grep 工具展开渲染：只显示关键参数（path + pattern）
+fn render_glob_grep_call_request_expanded(
+    tool_name: &str,
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    // path（截断显示）
+    if let Some(path) = parsed.get("path").and_then(|v| v.as_str()) {
+        let display_path = if path.chars().count() > 60 {
+            // 截断中间路径，保留首尾
+            let first_part: String = path.chars().take(30).collect();
+            let last_part: String = path.chars().rev().take(25).collect();
+            format!(
+                "{}...{}",
+                first_part,
+                last_part.chars().rev().collect::<String>()
+            )
+        } else {
+            path.to_string()
+        };
+        render_kv_line("path", &display_path, content_w, lines, theme);
+    }
+
+    // pattern（仅 Grep）
+    if tool_name == tool_names::GREP {
+        if let Some(pattern) = parsed.get("pattern").and_then(|v| v.as_str()) {
+            render_kv_line("pattern", pattern, content_w, lines, theme);
+        }
+
+        // output_mode
+        if let Some(mode) = parsed.get("output_mode").and_then(|v| v.as_str())
+            && mode != "content"
+        {
+            render_kv_line("mode", mode, content_w, lines, theme);
+        }
+
+        // context（若有）
+        if let Some(ctx) = parsed.get("context").and_then(|v| v.as_u64())
+            && ctx > 0
+        {
+            render_kv_line("context", &format!("{} 行", ctx), content_w, lines, theme);
+        }
+    }
+
+    true
+}
+
+/// Read/Write/Edit 工具展开渲染：只显示 path（截断）
+fn render_file_tool_call_request_expanded(
+    tool_name: &str,
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    // path / file_path
+    let path = parsed
+        .get("path")
+        .or_else(|| parsed.get("file_path"))
+        .and_then(|v| v.as_str());
+
+    if let Some(path) = path {
+        let display_path = if path.chars().count() > 60 {
+            let first_part: String = path.chars().take(30).collect();
+            let last_part: String = path.chars().rev().take(25).collect();
+            format!(
+                "{}...{}",
+                first_part,
+                last_part.chars().rev().collect::<String>()
+            )
+        } else {
+            path.to_string()
+        };
+        render_kv_line("path", &display_path, content_w, lines, theme);
+    }
+
+    // Read: offset/limit（若有）
+    if tool_name == tool_names::READ {
+        if let Some(offset) = parsed.get("offset").and_then(|v| v.as_u64())
+            && offset > 0
+        {
+            render_kv_line("offset", &format!("行 {}", offset), content_w, lines, theme);
+        }
+        if let Some(limit) = parsed.get("limit").and_then(|v| v.as_u64())
+            && limit > 0
+        {
+            render_kv_line("limit", &format!("{} 行", limit), content_w, lines, theme);
+        }
+    }
+
+    true
+}
 
 /// 渲染键值对行
 fn render_kv_line(
