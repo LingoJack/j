@@ -1,3 +1,28 @@
+# v12.10.62
+
+
+### 新功能
+
+- **Read 工具语法高亮**: Read 工具结果支持根据文件扩展名自动进行语法高亮显示，支持 Rust、Go、Python、JavaScript、TypeScript、Java、C/C++、Bash、JSON、YAML、TOML、Markdown、SQL 等 20+ 种语言
+
+- **Glob 工具结果树形渲染**: Glob 结果改为树形文件列表，区分文件和目录的颜色显示，自动提取公共前缀简化路径，显示文件数量统计
+
+- **Grep 工具结果结构化渲染**: Grep 结果支持三种输出模式的结构化渲染：content 模式显示文件路径+行号+匹配内容，count 模式显示文件匹配数统计，files_with_matches 模式显示文件列表，并自动汇总匹配数和文件数
+
+### 改进
+
+- **工具调用展开渲染优化**: Glob/Grep/Read/Write/Edit 工具调用在展开模式下只显示关键参数，路径过长时自动截断首尾，Edit 工具显示 old/new 字符串摘要（行数+预览）
+
+- **WebSearch 结果结构化显示**: WebSearch 结果改为序号+标题+URL+摘要的结构化布局，标题高亮显示，末尾显示结果数统计
+
+- **WebFetch 结果 Markdown 渲染**: WebFetch 结果自动检测是否为 Markdown 内容，包含标题/列表等标记时用 Markdown 渲染器渲染，否则纯文本折行显示
+
+- **Task 结果状态图标显示**: Task 结果解析 JSON 数组，显示状态图标（●/◉/○）、任务 ID、标题，不同状态使用不同颜色区分
+
+- **Write/Edit 结果路径高亮**: Write/Edit 结果高亮文件路径，失败时（找不到匹配、匹配不唯一）显示红色错误信息
+
+- **SendMessage 结果发送确认**: SendMessage 结果显示发送目标（@target 高亮）和消息预览
+
 # v12.10.61
 
 
