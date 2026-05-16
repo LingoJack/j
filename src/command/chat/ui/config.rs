@@ -118,10 +118,7 @@ fn compute_tab_hitboxes() -> Vec<ConfigTabHitBox> {
 ///   2. 固定 Tab 头部：每个 Tab 自身的摘要信息（如"当前会话"、"总开关"等）
 ///   3. 可滚动列表：只有列表项跟随选中项滚动
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    // ── Model Tab: 调整 Provider 水平滚动偏移（在不可变借用之前）──
-    if app.ui.config_tab == ConfigTab::Model {
-        model::adjust_provider_scroll_offset(app, area.width.saturating_sub(2) as usize);
-    }
+    // ── Model Tab 不再需要水平滚动偏移调整 ──
 
     let t = &app.ui.theme;
     let bg = t.bg_primary;
@@ -138,18 +135,17 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Archive => " \u{1f4e6} \u{5f52}\u{6863}\u{7ba1}\u{7406} ",
     };
 
-    // ── 收集每个 Tab 的固定头部行和可滚动列表行 ──
+    // ── 记录每个 Tab 的固定头部行和可滚动列表行 ──
     let mut tab_header_lines: Vec<Line> = Vec::new();
     let mut list_lines: Vec<Line> = Vec::new();
     let mut field_line_indices: Vec<usize> = Vec::new();
 
+    // Model tab 使用左右分栏渲染，需要提前标记
+    let is_model_split = app.ui.config_tab == ConfigTab::Model;
+
     match app.ui.config_tab {
         ConfigTab::Model => {
-            model::draw_tab_model_header(&mut tab_header_lines, app, area.width.saturating_sub(2));
-            let list = model::draw_tab_model_list(app);
-            let (item_lines, item_indices) = list.into_parts();
-            list_lines.extend(item_lines);
-            field_line_indices.extend(item_indices);
+            // Model tab 使用左右分栏，不需要单独的 header 和 list
         }
         ConfigTab::Global => {
             // Global 没有固定头部，全部是字段列表
@@ -220,7 +216,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     let fixed_h = top_border + tab_bar_lines + tab_header_h;
 
     // 如果没有可滚动列表，或终端太小，回退到整体渲染
-    if list_lines.is_empty() || area.height <= fixed_h + 1 {
+    // 注意：Model tab 虽然在 match 中没有填充 list_lines，但它使用左右分栏渲染，不走回退路径
+    if (list_lines.is_empty() && !is_model_split) || area.height <= fixed_h + 1 {
         // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
         f.render_widget(Clear, area);
         let mut all_lines: Vec<Line> = vec![
@@ -288,7 +285,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         .style(Style::default().bg(bg));
     render_block_lines(f, chunks[0], header_block, bg, &header_lines, 0);
 
-    // ── Tools Tab 特殊处理：左右分栏 ──
+    // ── Tools / Model Tab 特殊处理：左右分栏 ──
     let is_tools_split = app.ui.config_tab == ConfigTab::Tools;
 
     if is_tools_split {
@@ -363,7 +360,83 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         return;
     }
 
-    // ── 可滚动列表区域（非 Tools Tab 的通用路径）──
+    if is_model_split {
+        // ── Model Tab 左右分栏 ──
+        let left_w = model::model_providers_min_width(app);
+        let right_w = area.width.saturating_sub(left_w);
+
+        let h_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(left_w), Constraint::Min(right_w)])
+            .split(chunks[1]);
+
+        // ── 左侧：Provider 列表（可滚动）──
+        f.render_widget(Clear, h_chunks[0]);
+        let provider_list = model::draw_tab_model_providers(app);
+        let (provider_lines, provider_indices) = provider_list.into_parts();
+
+        // Provider 列表滚动：确保选中项可见
+        let inner_height = h_chunks[0].height.saturating_sub(1) as usize;
+        if let Some(&selected_line) = provider_indices.get(app.ui.config_provider_idx) {
+            let scroll = app.ui.config_scroll_offset as usize;
+            let new_scroll = if selected_line < scroll {
+                selected_line
+            } else if inner_height > 0 && selected_line >= scroll + inner_height {
+                selected_line.saturating_sub(inner_height - 1)
+            } else {
+                scroll
+            };
+            app.ui.config_scroll_offset = new_scroll as u16;
+        }
+
+        let left_block = Block::default()
+            .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_config))
+            .style(Style::default().bg(bg));
+        render_block_lines(
+            f,
+            h_chunks[0],
+            left_block,
+            bg,
+            &provider_lines,
+            app.ui.config_scroll_offset,
+        );
+
+        // ── 右侧：配置字段详情 ──
+        f.render_widget(Clear, h_chunks[1]);
+        let detail_list = model::draw_tab_model_detail(app);
+        let (detail_lines, detail_indices) = detail_list.into_parts();
+
+        let selected_provider_name = app
+            .state
+            .agent_config
+            .providers
+            .get(app.ui.config_provider_idx)
+            .map(|p| p.name.as_str())
+            .unwrap_or("");
+        let right_block = Block::default()
+            .borders(Borders::BOTTOM | Borders::RIGHT)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_config))
+            .title(Span::styled(
+                format!(" {selected_provider_name} "),
+                Style::default()
+                    .fg(t.config_label_selected)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(bg));
+        render_block_lines(f, h_chunks[1], right_block, bg, &detail_lines, 0);
+
+        // ── 记录布局信息 ──
+        app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
+        app.ui.config_list_area = Some(h_chunks[1]);
+        app.ui.config_field_lines = detail_indices;
+        app.ui.config_tab_hitboxes = compute_tab_hitboxes();
+        return;
+    }
+
+    // ── 可滚动列表区域（非 Tools / Model Tab 的通用路径）──
     // Windows 上 crossterm 差异缓冲区可能不清理旧内容，先显式清除区域
     f.render_widget(Clear, chunks[1]);
     // 可见高度 = list_area_h - 1（底部 border）

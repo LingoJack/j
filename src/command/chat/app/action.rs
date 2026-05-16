@@ -158,8 +158,6 @@ pub enum Action {
     // ========== 配置编辑 ==========
     /// 配置界面：选择上一个/下一个字段
     ConfigNavigate(CursorDirection),
-    /// 配置界面：切换上一个/下一个 provider
-    ConfigSwitchProvider(CursorDirection),
     /// 配置界面：开始编辑当前字段或触发特殊操作
     ConfigEnter,
     /// 配置编辑模式：输入字符
@@ -200,6 +198,8 @@ pub enum Action {
     ToggleMenuDisableAll,
     /// Tools tab：Tab 键切换层级（工具列表 ↔ 选项区）
     ToolsToggleLevel,
+    /// Model tab：Tab 键切换层级（Provider 列表 ↔ 配置字段）
+    ModelToggleLevel,
     /// Teammates Tab：导航
     TeammatesNavigate(CursorDirection),
     /// Teammates Tab：选中指定索引（鼠标点击）

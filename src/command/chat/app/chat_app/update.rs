@@ -90,7 +90,6 @@ impl ChatApp {
 
             // ========== 配置编辑 ==========
             Action::ConfigNavigate(dir) => self.update_config_navigate(dir),
-            Action::ConfigSwitchProvider(dir) => self.update_config_switch_provider(dir),
             Action::ConfigEnter => self.update_config_enter(),
             Action::ConfigEditChar(c) => self.update_config_edit_char(c),
             Action::ConfigEditDelete => self.update_config_edit_delete(),
@@ -113,6 +112,7 @@ impl ChatApp {
             Action::ToggleMenuEnableAll => self.update_toggle_menu_enable_all(),
             Action::ToggleMenuDisableAll => self.update_toggle_menu_disable_all(),
             Action::ToolsToggleLevel => self.update_tools_toggle_level(),
+            Action::ModelToggleLevel => self.update_model_toggle_level(),
             Action::TeammatesNavigate(dir) => self.update_teammates_navigate(dir),
             Action::TeammatesSelect(idx) => self.update_teammates_select(idx),
             Action::CompactExemptToggle => self.update_compact_exempt_toggle(),

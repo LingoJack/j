@@ -72,6 +72,10 @@ pub struct UIState {
     pub config_provider_idx: usize,
     /// 配置界面：当前选中的字段索引
     pub config_field_idx: usize,
+    /// Model tab：是否在配置字段层级（右侧面板）
+    pub model_in_fields: bool,
+    /// Model tab：配置字段焦点索引（当 model_in_fields 为 true 时使用）
+    pub model_field_idx: usize,
     /// 配置界面：是否正在编辑某个字段
     pub config_editing: bool,
     /// 配置界面：编辑缓冲区
@@ -166,8 +170,6 @@ pub struct UIState {
     pub expand_tools: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
-    /// 配置面板 Provider 子标签水平滚动偏移（可见窗口起始索引）
-    pub config_provider_scroll_offset: usize,
     /// 配置面板当前 Tab
     pub config_tab: ConfigTab,
     /// 会话列表（缓存）

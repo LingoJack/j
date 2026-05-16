@@ -7,6 +7,49 @@ use crate::constants::CONFIG_FIELDS;
 
 impl ChatApp {
     pub(super) fn update_config_navigate(&mut self, dir: CursorDirection) {
+        // Model tab 使用层级导航
+        if self.ui.config_tab == ConfigTab::Model {
+            if self.ui.model_in_fields {
+                // 字段层级：上下切换配置字段
+                let total = CONFIG_FIELDS.len();
+                if total == 0 {
+                    return;
+                }
+                match dir {
+                    CursorDirection::Up => {
+                        if self.ui.model_field_idx > 0 {
+                            self.ui.model_field_idx -= 1;
+                        }
+                    }
+                    CursorDirection::Down => {
+                        if self.ui.model_field_idx < total - 1 {
+                            self.ui.model_field_idx += 1;
+                        }
+                    }
+                }
+            } else {
+                // Provider 列表层级：上下切换 Provider
+                let count = self.state.agent_config.providers.len();
+                if count == 0 {
+                    return;
+                }
+                match dir {
+                    CursorDirection::Up => {
+                        if self.ui.config_provider_idx == 0 {
+                            self.ui.config_provider_idx = count - 1;
+                        } else {
+                            self.ui.config_provider_idx -= 1;
+                        }
+                    }
+                    CursorDirection::Down => {
+                        self.ui.config_provider_idx = (self.ui.config_provider_idx + 1) % count;
+                    }
+                }
+            }
+            return;
+        }
+
+        // 其他 Tab 保持原有逻辑
         let total_fields = super::config_tab_field_count(self);
         if total_fields == 0 {
             return;
@@ -25,27 +68,6 @@ impl ChatApp {
         }
     }
 
-    pub(super) fn update_config_switch_provider(&mut self, dir: CursorDirection) {
-        if self.ui.config_tab != ConfigTab::Model {
-            return;
-        }
-        let count = self.state.agent_config.providers.len();
-        if count > 1 {
-            match dir {
-                CursorDirection::Down => {
-                    self.ui.config_provider_idx = (self.ui.config_provider_idx + 1) % count;
-                }
-                CursorDirection::Up => {
-                    if self.ui.config_provider_idx == 0 {
-                        self.ui.config_provider_idx = count - 1;
-                    } else {
-                        self.ui.config_provider_idx -= 1;
-                    }
-                }
-            }
-        }
-    }
-
     pub(super) fn update_config_enter(&mut self) {
         use crate::command::chat::render::helpers::{
             config_field_raw_value_global, config_field_raw_value_model,
@@ -57,9 +79,13 @@ impl ChatApp {
                     self.show_toast("还没有 Provider，按 a 新增", true);
                     return;
                 }
+                // 必须在字段层级才能编辑
+                if !self.ui.model_in_fields {
+                    return;
+                }
                 // supports_vision 是布尔开关，直接 toggle
-                if self.ui.config_field_idx < CONFIG_FIELDS.len()
-                    && CONFIG_FIELDS[self.ui.config_field_idx] == "supports_vision"
+                if self.ui.model_field_idx < CONFIG_FIELDS.len()
+                    && CONFIG_FIELDS[self.ui.model_field_idx] == "supports_vision"
                     && let Some(p) = self
                         .state
                         .agent_config
@@ -76,7 +102,7 @@ impl ChatApp {
                     return;
                 }
                 self.ui.config_edit_buf =
-                    config_field_raw_value_model(self, self.ui.config_field_idx);
+                    config_field_raw_value_model(self, self.ui.model_field_idx);
                 self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
                 self.ui.config_editing = true;
             }
@@ -258,7 +284,7 @@ impl ChatApp {
         let val = self.ui.config_edit_buf.clone();
         match self.ui.config_tab {
             ConfigTab::Model => {
-                config_field_set_model(self, self.ui.config_field_idx, &val);
+                config_field_set_model(self, self.ui.model_field_idx, &val);
             }
             ConfigTab::Global => {
                 config_field_set_global(self, self.ui.config_field_idx, &val);
@@ -443,6 +469,27 @@ impl ChatApp {
             // 进入选中工具的选项区
             self.ui.tools_in_options = true;
             self.ui.tools_option_idx = 0; // 默认焦点在"启用"
+        }
+    }
+
+    /// Model tab：Tab 键切换层级（Provider 列表 ↔ 配置字段）。
+    /// 在 Provider 列表层按 Tab 进入右侧配置字段区，
+    /// 在字段区按 Tab 返回 Provider 列表。
+    pub(super) fn update_model_toggle_level(&mut self) {
+        if self.ui.config_tab != ConfigTab::Model {
+            return;
+        }
+        if self.ui.config_editing {
+            // 编辑模式下 Tab 不切换层级
+            return;
+        }
+        if self.ui.model_in_fields {
+            // 从字段区返回 Provider 列表
+            self.ui.model_in_fields = false;
+        } else if !self.state.agent_config.providers.is_empty() {
+            // 进入选中 Provider 的配置字段区
+            self.ui.model_in_fields = true;
+            self.ui.model_field_idx = 0;
         }
     }
 
