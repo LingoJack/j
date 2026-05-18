@@ -239,11 +239,18 @@ pub(crate) fn interactive_confirm(
         make_args_preview(arguments)
     };
 
-    // 截断描述（按字符边界截断，避免 UTF-8 多字节字符中间切割导致 panic）
+    // 截断描述（按显示宽度截断，正确处理 CJK 等宽字符）
     let max_char_width = inner_width(bw).saturating_sub(4);
-    let desc_display = if desc.chars().count() > max_char_width {
-        let trunc_len = inner_width(bw).saturating_sub(7);
-        let truncated: String = desc.chars().take(trunc_len).collect();
+    let desc_display = if display_width(&desc) > max_char_width {
+        let trunc_width = inner_width(bw).saturating_sub(7);
+        let truncated: String = desc
+            .chars()
+            .scan(0usize, |w, ch| {
+                let cw = crate::util::text::char_width(ch);
+                *w += cw;
+                if *w <= trunc_width { Some(ch) } else { None }
+            })
+            .collect();
         format!("{}...", truncated)
     } else {
         desc.clone()

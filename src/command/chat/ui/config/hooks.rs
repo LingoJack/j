@@ -1,5 +1,6 @@
 use crate::command::chat::app::ChatApp;
 use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
+use crate::util::text::{char_width, display_width};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -91,8 +92,16 @@ pub(super) fn draw_tab_hooks_list<'a>(app: &ChatApp) -> ItemList<'a> {
                 .add_modifier(Modifier::BOLD),
         };
 
-        let label_display: String = if entry.label.chars().count() > 30 {
-            let truncated: String = entry.label.chars().take(30).collect();
+        const LABEL_MAX: usize = 30;
+        let label_display: String = if display_width(&entry.label) > LABEL_MAX {
+            let truncated: String = entry
+                .label
+                .chars()
+                .scan(0usize, |w, ch| {
+                    *w += char_width(ch);
+                    if *w <= LABEL_MAX { Some(ch) } else { None }
+                })
+                .collect();
             format!("{truncated}...")
         } else {
             entry.label.clone()

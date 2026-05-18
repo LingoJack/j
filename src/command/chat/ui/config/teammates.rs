@@ -2,7 +2,7 @@ use crate::command::chat::app::ChatApp;
 use crate::command::chat::teammate::TeammateStatus;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use crate::tui::components::ItemList;
-use crate::util::text::sanitize_single_line_text;
+use crate::util::text::{display_width, sanitize_single_line_text};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -208,10 +208,17 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
             format!("{} {}", snap.status.icon(), snap.status.label())
         };
 
-        // 截断角色描述
+        // 截断角色描述（按显示宽度截断，正确处理 CJK 等宽字符）
         let safe_role = sanitize_single_line_text(&snap.role);
-        let role_display: String = if safe_role.chars().count() > 20 {
-            let truncated: String = safe_role.chars().take(20).collect();
+        const ROLE_MAX_WIDTH: usize = 20;
+        let role_display: String = if display_width(&safe_role) > ROLE_MAX_WIDTH {
+            let truncated: String = safe_role
+                .chars()
+                .scan(0usize, |w, ch| {
+                    *w += crate::util::text::char_width(ch);
+                    if *w <= ROLE_MAX_WIDTH { Some(ch) } else { None }
+                })
+                .collect();
             format!("{truncated}…")
         } else {
             safe_role
@@ -300,13 +307,20 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                 }
                 SubAgentStatus::Error(msg) => {
                     let safe_msg = sanitize_single_line_text(msg);
-                    let short: String = safe_msg.chars().take(28).collect();
-                    let suffix = if safe_msg.chars().count() > 28 {
+                    const ERR_MAX: usize = 28;
+                    let truncated: String = safe_msg
+                        .chars()
+                        .scan(0usize, |w, ch| {
+                            *w += crate::util::text::char_width(ch);
+                            if *w <= ERR_MAX { Some(ch) } else { None }
+                        })
+                        .collect();
+                    let suffix = if display_width(&safe_msg) > ERR_MAX {
                         "…"
                     } else {
                         ""
                     };
-                    format!("{} 错误: {}{}", snap.status.icon(), short, suffix)
+                    format!("{} 错误: {}{}", snap.status.icon(), truncated, suffix)
                 }
                 // 这些状态使用默认 icon + label 展示
                 SubAgentStatus::Initializing
@@ -317,8 +331,15 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
             };
 
             let safe_desc = sanitize_single_line_text(&snap.description);
-            let desc_display: String = if safe_desc.chars().count() > 22 {
-                let truncated: String = safe_desc.chars().take(22).collect();
+            const DESC_MAX: usize = 22;
+            let desc_display: String = if display_width(&safe_desc) > DESC_MAX {
+                let truncated: String = safe_desc
+                    .chars()
+                    .scan(0usize, |w, ch| {
+                        *w += crate::util::text::char_width(ch);
+                        if *w <= DESC_MAX { Some(ch) } else { None }
+                    })
+                    .collect();
                 format!("{truncated}…")
             } else {
                 safe_desc

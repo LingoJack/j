@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "j-cli"
-version = "12.10.66"
+version = "12.10.67"
 edition = "2024"
 rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
@@ -25,7 +25,7 @@ name = "j"
 path = "src/main.rs"
 
 [dependencies]
-j-agent = { version = "12.10.66", path = "j-agent" }
+j-agent = { version = "12.10.67", path = "j-agent" }
 clap = { version = "4", features = ["derive"] }
 rust-embed = { version = "8", features = ["include-exclude"] }
 rustyline = "17.0.2"

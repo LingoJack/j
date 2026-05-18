@@ -6,6 +6,7 @@ use crate::tui::components::{
     ItemList, TOGGLE_OFF, TOGGLE_ON, TextFieldRowCtx, ToggleRowCtx, pointer_span, text_field_row,
     toggle_row,
 };
+use crate::util::text::display_width;
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -151,7 +152,7 @@ pub(super) fn model_providers_min_width(app: &ChatApp) -> u16 {
         .agent_config
         .providers
         .iter()
-        .map(|p| p.name.chars().count())
+        .map(|p| display_width(&p.name))
         .max()
         .unwrap_or(10);
 

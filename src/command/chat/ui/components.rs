@@ -7,6 +7,7 @@ use crate::tui::components::{
     LABEL_WIDTH, TOGGLE_OFF, TOGGLE_ON, cursor_spans, desc_span, label_span, pointer_span,
     value_style,
 };
+use crate::util::text::display_width;
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -44,7 +45,7 @@ impl<'a> GlobalRowCtx<'a> {
 
 // ── 预览值（内部）───────────────────────────────────────────
 
-/// 长文本截断预览（替换换行为空格，超 40 字符截断）
+/// 长文本截断预览（替换换行为空格，超 40 显示宽度截断）
 fn render_preview_value(raw: &str) -> String {
     if raw.is_empty() {
         return "(\u{7a7a})".to_string();
@@ -53,8 +54,15 @@ fn render_preview_value(raw: &str) -> String {
         .chars()
         .map(|c| if c == '\n' { ' ' } else { c })
         .collect();
-    if flat.chars().count() > 40 {
-        let truncated: String = flat.chars().take(40).collect();
+    const MAX_WIDTH: usize = 40;
+    if display_width(&flat) > MAX_WIDTH {
+        let truncated: String = flat
+            .chars()
+            .scan(0usize, |w, ch| {
+                *w += crate::util::text::char_width(ch);
+                if *w <= MAX_WIDTH { Some(ch) } else { None }
+            })
+            .collect();
         format!("{truncated}...")
     } else {
         flat

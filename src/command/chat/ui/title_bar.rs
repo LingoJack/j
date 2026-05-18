@@ -3,7 +3,7 @@ use crate::command::chat::context::compact::estimate_tokens;
 use crate::command::chat::teammate::TeammateStatus;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use crate::util::safe_lock;
-use crate::util::text::{display_width, sanitize_single_line_text};
+use crate::util::text::{char_width, display_width, sanitize_single_line_text};
 
 /// 标题栏模型名最大显示字符数。
 const TITLE_MODEL_NAME_MAX_CHARS: usize = 20;
@@ -518,16 +518,26 @@ fn wrap_entries(
     lines
 }
 
-/// 将 subagent description 转为紧凑标签（<=20 字符，空白转 _）
+/// 将 subagent description 转为紧凑标签（<=20 显示宽度，空白转 _）
 fn short_subagent_label(description: &str) -> String {
     let cleaned: String = sanitize_single_line_text(description)
         .chars()
         .map(|c| if c.is_whitespace() { '_' } else { c })
         .collect();
-    if cleaned.chars().count() <= 20 {
+    if display_width(&cleaned) <= TITLE_MODEL_NAME_MAX_CHARS {
         cleaned
     } else {
-        let s: String = cleaned.chars().take(TITLE_MODEL_NAME_MAX_CHARS).collect();
+        let s: String = cleaned
+            .chars()
+            .scan(0usize, |w, ch| {
+                *w += char_width(ch);
+                if *w <= TITLE_MODEL_NAME_MAX_CHARS {
+                    Some(ch)
+                } else {
+                    None
+                }
+            })
+            .collect();
         format!("{}…", s)
     }
 }
