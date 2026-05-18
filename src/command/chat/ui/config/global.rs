@@ -35,11 +35,14 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
-        // --- 分隔线 + 空行（首组不画）
+        // --- 分隔线 + 空行（首组不画），右侧留 padding 不贴边
         if gi > 0 {
             list.push_raw(Line::from(""));
+            // 分隔线宽度：与 pointer + label 对齐，约 26 字符
+            const SEP_WIDTH: usize = 26;
+            let sep = "─".repeat(SEP_WIDTH);
             list.push_raw(Line::from(Span::styled(
-                "  ────────────────────────────────────",
+                format!("  {sep}"),
                 Style::default().fg(t.separator),
             )));
             list.push_raw(Line::from(""));

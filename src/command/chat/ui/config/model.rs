@@ -143,8 +143,8 @@ pub(super) fn draw_tab_model_detail<'a>(app: &ChatApp) -> ItemList<'a> {
 
 /// 计算 Model tab 左侧 Provider 列表所需的最小宽度
 pub(super) fn model_providers_min_width(app: &ChatApp) -> u16 {
-    // 基础宽度：指针(4) + marker(1) + 空格(1) + 边距
-    const BASE: usize = 8;
+    // 指针(4) + marker(1) + 空格(1) + 名称 + 右侧 padding(3) + 左右边框(2)
+    const BASE: usize = 11;
 
     let max_name_len = app
         .state
@@ -155,5 +155,5 @@ pub(super) fn model_providers_min_width(app: &ChatApp) -> u16 {
         .max()
         .unwrap_or(10);
 
-    (BASE + max_name_len).clamp(16, 30) as u16
+    (BASE + max_name_len).clamp(18, 34) as u16
 }

@@ -163,7 +163,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         }
         ConfigTab::Skills => {
             skills::draw_tab_skills_header(&mut tab_header_lines, app);
-            let list = skills::draw_tab_skills_list(app);
+            let list = skills::draw_tab_skills_list(app, area.width.saturating_sub(2) as usize);
             let (item_lines, item_indices) = list.into_parts();
             list_lines.extend(item_lines);
             field_line_indices.extend(item_indices);
@@ -179,7 +179,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             commands::draw_tab_commands_header(&mut tab_header_lines, app);
             // 选择来源模式时不显示列表
             if app.ui.commands_mode != CommandsMode::SelectSource {
-                let list = commands::draw_tab_commands_list(app);
+                let list =
+                    commands::draw_tab_commands_list(app, area.width.saturating_sub(2) as usize);
                 let (item_lines, item_indices) = list.into_parts();
                 list_lines.extend(item_lines);
                 field_line_indices.extend(item_indices);
@@ -370,7 +371,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .constraints([Constraint::Length(left_w), Constraint::Min(right_w)])
             .split(chunks[1]);
 
-        // ── 左侧：Provider 列表（可滚动）──
+        // ── 左侧：Provider 列表（可滚动，无右侧边框，靠 padding 分隔）──
         f.render_widget(Clear, h_chunks[0]);
         let provider_list = model::draw_tab_model_providers(app);
         let (provider_lines, provider_indices) = provider_list.into_parts();
@@ -390,7 +391,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         }
 
         let left_block = Block::default()
-            .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
+            .borders(Borders::LEFT | Borders::RIGHT)
             .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(Style::default().fg(t.border_config))
             .style(Style::default().bg(bg));
@@ -403,7 +404,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             app.ui.config_scroll_offset,
         );
 
-        // ── 右侧：配置字段详情 ──
+        // ── 右侧：配置字段详情（无左侧边框，靠 padding 分隔）──
         f.render_widget(Clear, h_chunks[1]);
         let detail_list = model::draw_tab_model_detail(app);
         let (detail_lines, detail_indices) = detail_list.into_parts();
@@ -416,9 +417,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .map(|p| p.name.as_str())
             .unwrap_or("");
         let right_block = Block::default()
-            .borders(Borders::BOTTOM | Borders::RIGHT)
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(t.border_config))
+            .borders(Borders::NONE)
             .title(Span::styled(
                 format!(" {selected_provider_name} "),
                 Style::default()

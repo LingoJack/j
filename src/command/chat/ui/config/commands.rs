@@ -1,10 +1,15 @@
 use crate::command::chat::app::{ChatApp, CommandsMode};
 use crate::command::chat::infra::command;
-use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
+use crate::tui::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, pointer_span};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
 };
+
+/// 描述行缩进宽度
+const DESC_INDENT: usize = 7;
+/// 右侧 padding
+const RIGHT_PAD: usize = 4;
 
 /// Commands tab 固定头部（已启用计数 + 操作提示）
 pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
@@ -125,8 +130,8 @@ fn draw_select_source_ui<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     )));
 }
 
-/// Commands tab 可滚动列表
-pub(super) fn draw_tab_commands_list<'a>(app: &ChatApp) -> ItemList<'a> {
+/// Commands tab 可滚动列表（每个命令：名称行 + 描述折行）
+pub(super) fn draw_tab_commands_list<'a>(app: &ChatApp, max_width: usize) -> ItemList<'a> {
     let t = &app.ui.theme;
     let mut list = ItemList::new(t.bg_primary);
 
@@ -139,14 +144,70 @@ pub(super) fn draw_tab_commands_list<'a>(app: &ChatApp) -> ItemList<'a> {
             .disabled_commands
             .iter()
             .any(|d| d == name);
-        list.push(toggle_list_item(&ToggleListItemCtx {
-            name: name.to_string(),
-            enabled: is_enabled,
-            selected: is_selected,
-            desc: Some(cmd.frontmatter.description.clone()),
-            tag: Some(cmd.source.label().to_string()),
-            theme: t,
-        }));
+
+        // 第一行：指针 + 圆点 + 命令名
+        let toggle_style = if is_enabled {
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_toggle_off)
+        };
+        let toggle_text = if is_enabled { TOGGLE_ON } else { TOGGLE_OFF };
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_label)
+        };
+
+        let mut name_spans = vec![
+            pointer_span(is_selected, t),
+            Span::styled(toggle_text, toggle_style),
+            Span::styled(" ", Style::default()),
+            Span::styled(name.clone(), name_style),
+        ];
+        let tag = cmd.source.label();
+        if !tag.is_empty() {
+            name_spans.push(Span::styled(
+                format!(" [{tag}]"),
+                Style::default().fg(t.config_dim),
+            ));
+        }
+        list.push(Line::from(name_spans));
+
+        // 描述行：自动折行（用 push_raw 避免 field_line_indices 被污染）
+        if !cmd.frontmatter.description.is_empty() {
+            let desc_style = Style::default().fg(t.config_dim);
+            let col_width = max_width.saturating_sub(DESC_INDENT + RIGHT_PAD);
+            if col_width == 0 {
+                continue;
+            }
+
+            let mut chars = cmd.frontmatter.description.chars().peekable();
+            let indent = " ".repeat(DESC_INDENT);
+
+            while chars.peek().is_some() {
+                let mut line_buf = String::with_capacity(col_width);
+                while line_buf.chars().count() < col_width && chars.peek().is_some() {
+                    let ch = chars.next().expect("peek ensured Some");
+                    line_buf.push(ch);
+                    if line_buf.chars().count() >= col_width {
+                        if chars.peek() == Some(&' ') {
+                            chars.next();
+                        }
+                        break;
+                    }
+                }
+                if !line_buf.is_empty() {
+                    list.push_raw(Line::from(vec![
+                        Span::styled(indent.clone(), desc_style),
+                        Span::styled(line_buf, desc_style),
+                    ]));
+                }
+            }
+        }
     }
     list
 }
