@@ -37,8 +37,15 @@ pub(super) fn draw_tab_model_providers<'a>(app: &ChatApp) -> ItemList<'a> {
         };
 
         let pointer = pointer_span(focused, t);
+        // 圆点保持固定颜色，不随选中状态变化
+        let marker_style = if is_active {
+            Style::default().fg(t.config_toggle_on)
+        } else {
+            Style::default().fg(t.config_toggle_off)
+        };
+        let marker_span = Span::styled(format!("{marker} "), marker_style);
         let name_span = Span::styled(
-            format!("{marker} {}", p.name),
+            p.name.clone(),
             if focused {
                 Style::default()
                     .fg(t.config_tab_active_fg)
@@ -53,7 +60,7 @@ pub(super) fn draw_tab_model_providers<'a>(app: &ChatApp) -> ItemList<'a> {
             },
         );
 
-        list.push(Line::from(vec![pointer, name_span]));
+        list.push(Line::from(vec![pointer, marker_span, name_span]));
     }
 
     list
