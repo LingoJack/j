@@ -5,11 +5,12 @@ use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
 };
+use unicode_width::UnicodeWidthChar;
 
 /// 描述行缩进宽度
 const DESC_INDENT: usize = 7;
-/// 右侧 padding
-const RIGHT_PAD: usize = 8;
+/// 右侧留白，避免描述贴到边框
+const RIGHT_PAD: usize = 4;
 
 /// Commands tab 固定头部（已启用计数 + 操作提示）
 pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
@@ -185,21 +186,30 @@ pub(super) fn draw_tab_commands_list<'a>(app: &ChatApp, max_width: usize) -> Ite
                 continue;
             }
 
-            let mut chars = cmd.frontmatter.description.chars().peekable();
             let indent = " ".repeat(DESC_INDENT);
+            let mut remaining = cmd.frontmatter.description.chars().peekable();
 
-            while chars.peek().is_some() {
-                let mut line_buf = String::with_capacity(col_width);
-                while line_buf.chars().count() < col_width && chars.peek().is_some() {
-                    let ch = chars.next().expect("peek ensured Some");
+            while remaining.peek().is_some() {
+                let mut line_buf = String::new();
+                let mut line_width: usize = 0;
+
+                while let Some(&ch) = remaining.peek() {
+                    let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
+                    if line_width + cw > col_width {
+                        break;
+                    }
+                    remaining.next();
                     line_buf.push(ch);
-                    if line_buf.chars().count() >= col_width {
-                        if chars.peek() == Some(&' ') {
-                            chars.next();
+                    line_width += cw;
+
+                    if line_width >= col_width {
+                        if remaining.peek() == Some(&' ') {
+                            remaining.next();
                         }
                         break;
                     }
                 }
+
                 if !line_buf.is_empty() {
                     list.push_raw(Line::from(vec![
                         Span::styled(indent.clone(), desc_style),

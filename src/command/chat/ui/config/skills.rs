@@ -4,9 +4,12 @@ use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
 };
+use unicode_width::UnicodeWidthChar;
 
 /// 描述行缩进宽度（与指针对齐后的缩进）
 const DESC_INDENT: usize = 7;
+/// 右侧留白，避免描述贴到边框
+const RIGHT_PAD: usize = 4;
 
 /// Skills tab 固定头部（已启用计数）
 pub(super) fn draw_tab_skills_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
@@ -85,28 +88,37 @@ pub(super) fn draw_tab_skills_list<'a>(app: &ChatApp, max_width: usize) -> ItemL
         // 描述行：自动折行（用 push_raw 避免 field_line_indices 被污染）
         if !skill.frontmatter.description.is_empty() {
             let desc_style = Style::default().fg(t.config_dim);
-            // 右侧留 padding，避免文字贴到右边框
-            const RIGHT_PAD: usize = 8;
             let col_width = max_width.saturating_sub(DESC_INDENT + RIGHT_PAD);
             if col_width == 0 {
                 continue;
             }
 
-            let mut chars = skill.frontmatter.description.chars().peekable();
             let indent = " ".repeat(DESC_INDENT);
+            let mut remaining = skill.frontmatter.description.chars().peekable();
 
-            while chars.peek().is_some() {
-                let mut line_buf = String::with_capacity(col_width);
-                while line_buf.chars().count() < col_width && chars.peek().is_some() {
-                    let ch = chars.next().expect("peek ensured Some");
+            while remaining.peek().is_some() {
+                let mut line_buf = String::new();
+                let mut line_width: usize = 0;
+
+                while let Some(&ch) = remaining.peek() {
+                    let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
+                    // 如果加入这个字符会超出列宽，先看是否可以在此断行
+                    if line_width + cw > col_width {
+                        break;
+                    }
+                    remaining.next();
                     line_buf.push(ch);
-                    if line_buf.chars().count() >= col_width {
-                        if chars.peek() == Some(&' ') {
-                            chars.next();
+                    line_width += cw;
+
+                    // 英文单词后的空格是自然断行点
+                    if line_width >= col_width {
+                        if remaining.peek() == Some(&' ') {
+                            remaining.next();
                         }
                         break;
                     }
                 }
+
                 if !line_buf.is_empty() {
                     list.push_raw(Line::from(vec![
                         Span::styled(indent.clone(), desc_style),
