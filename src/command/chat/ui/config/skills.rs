@@ -85,8 +85,8 @@ pub(super) fn draw_tab_skills_list<'a>(app: &ChatApp, max_width: usize) -> ItemL
         // 描述行：自动折行（用 push_raw 避免 field_line_indices 被污染）
         if !skill.frontmatter.description.is_empty() {
             let desc_style = Style::default().fg(t.config_dim);
-            // 右侧留 4 字符 padding，避免文字贴到右边框
-            const RIGHT_PAD: usize = 4;
+            // 右侧留 padding，避免文字贴到右边框
+            const RIGHT_PAD: usize = 8;
             let col_width = max_width.saturating_sub(DESC_INDENT + RIGHT_PAD);
             if col_width == 0 {
                 continue;

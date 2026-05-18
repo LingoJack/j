@@ -9,7 +9,7 @@ use ratatui::{
 /// 描述行缩进宽度
 const DESC_INDENT: usize = 7;
 /// 右侧 padding
-const RIGHT_PAD: usize = 4;
+const RIGHT_PAD: usize = 8;
 
 /// Commands tab 固定头部（已启用计数 + 操作提示）
 pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
