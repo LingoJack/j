@@ -25,8 +25,11 @@ use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::process::Command;
 
-/// 处理 notebook 命令入口：无参数启动 TUI，有参数按子命令分发
-pub fn handle_notebook(args: &[String]) {
+/// 处理 notebook/md 命令入口
+///
+/// `from_notebook_cmd=true` 表示由 `j notebook` 调用，无参数时进入 TUI 列表；
+/// `from_notebook_cmd=false` 表示由 `j md` 调用，无参数时编辑默认临时笔记。
+pub fn handle_notebook(args: &[String], from_notebook_cmd: bool) {
     // 优先检测 stdin 管道输入：非终端时读取并渲染 Markdown 到 stdout
     if !std::io::stdin().is_terminal() {
         handle_stdin_render();
@@ -34,7 +37,11 @@ pub fn handle_notebook(args: &[String]) {
     }
 
     if args.is_empty() {
-        run_notebook_tui();
+        if from_notebook_cmd {
+            run_notebook_tui();
+        } else {
+            handle_edit_default_temp_note();
+        }
         return;
     }
 
@@ -101,6 +108,31 @@ fn handle_stdin_render() {
         return;
     }
     crate::util::md_render::render_md(&input);
+}
+
+/// 默认临时笔记名前缀
+const TEMP_NOTE_PREFIX: &str = "temp_note_";
+
+/// 无参数时编辑默认临时笔记：自动选取 temp_note_{N}.md 中第一个不存在的编号
+fn handle_edit_default_temp_note() {
+    let dir = notebook_dir();
+    let _ = fs::create_dir_all(&dir);
+
+    let index = find_next_temp_note_index(&dir);
+    let note_name = format!("{}{}", TEMP_NOTE_PREFIX, index);
+    edit_note_with_editor(&note_name);
+}
+
+/// 找到下一个可用的临时笔记编号（从 0 开始递增，找到第一个不存在的）
+fn find_next_temp_note_index(dir: &std::path::Path) -> u32 {
+    let mut index = 0;
+    loop {
+        let file_name = format!("{}{}.md", TEMP_NOTE_PREFIX, index);
+        if !dir.join(&file_name).exists() {
+            return index;
+        }
+        index += 1;
+    }
 }
 
 fn is_file_path(s: &str) -> bool {

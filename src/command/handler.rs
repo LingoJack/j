@@ -145,12 +145,12 @@ command_handlers! {
 
     // ========== Markdown / 笔记本 ==========
     MdCmd { args: Vec<String> } => |self, _config| {
-        crate::command::notebook::handle_notebook(&self.args);
+        crate::command::notebook::handle_notebook(&self.args, false);
     },
 
     // ========== 笔记本别名 ==========
     NotebookCmd { args: Vec<String> } => |self, _config| {
-        crate::command::notebook::handle_notebook(&self.args);
+        crate::command::notebook::handle_notebook(&self.args, true);
     },
 
     // ========== 文件加密/解密 ==========
