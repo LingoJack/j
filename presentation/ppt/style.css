@@ -1583,7 +1583,7 @@ code{
   top:0;
   left:4%;
   transform:rotate(-2.5deg);
-  z-index:1;
+  z-index:3;
 }
 .stack-figs .sf-2{
   top:26%;
@@ -1595,7 +1595,7 @@ code{
   top:52%;
   left:6%;
   transform:rotate(-1deg);
-  z-index:3;
+  z-index:1;
 }
 
 /* hover 抬起效果 */
