@@ -146,5 +146,201 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* ================= PRINT ================= */
 @media print{
   .slide{position:relative;opacity:1!important;transform:none!important;page-break-after:always;height:100vh}
-  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview{display:none!important}
+  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview,.editor-ui{display:none!important}
 }
+
+/* ================= EDITOR MODE ================= */
+/* Editor mode is activated by pressing E in runtime.js.
+ * All editor UI uses .ed- prefix to avoid collisions with slide content. */
+
+/* --- Layout --- */
+.editor-ui{
+  position:fixed;inset:0;z-index:100;
+  display:grid;
+  grid-template-columns:220px 1fr 240px;
+  grid-template-rows:48px 1fr 32px;
+  background:var(--bg-soft);
+  font-family:var(--font-sans);
+  color:var(--text-1);
+}
+.ed-toolbar{
+  grid-column:1/-1;grid-row:1;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 12px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  gap:8px;
+}
+.ed-sidebar{
+  grid-column:1;grid-row:2;
+  overflow-y:auto;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  padding:8px;
+}
+.ed-slide-area{
+  grid-column:2;grid-row:2;
+  position:relative;
+  overflow:hidden;
+  background:var(--bg-soft);
+  /* Center the deck inside */
+  display:flex;align-items:center;justify-content:center;
+  padding:16px;
+}
+.ed-props{
+  grid-column:3;grid-row:2;
+  overflow-y:auto;
+  background:var(--surface);
+  border-left:1px solid var(--border);
+  padding:16px;
+}
+.ed-statusbar{
+  grid-column:1/-1;grid-row:3;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  font-size:11px;color:var(--text-3);
+}
+
+/* --- Deck inside editor --- */
+.editor-ui .deck{
+  position:relative;
+  /* Scale to fit inside the slide area */
+  width:1920px;height:1080px;
+  transform-origin:center center;
+  overflow:hidden;
+  background:var(--surface);
+  border-radius:8px;
+  box-shadow:var(--shadow-lg);
+  flex-shrink:0;
+}
+/* In editor, slide uses static positioning */
+.editor-ui .slide{
+  position:absolute!important;
+  transition:none!important;
+}
+.editor-ui .slide.is-active{
+  opacity:1!important;pointer-events:auto!important;transform:none!important;
+}
+/* Override deck default transform for editor */
+.editor-active .deck:not(.is-editing){
+  /* Normal presentation deck */
+}
+
+/* --- Toolbar --- */
+.ed-toolbar-left,.ed-toolbar-center,.ed-toolbar-right{display:flex;align-items:center;gap:6px}
+.ed-toolbar-title{font-weight:600;font-size:13px;color:var(--text-1);margin-left:4px;letter-spacing:.01em}
+.ed-divider{width:1px;height:20px;background:var(--border);margin:0 4px}
+
+.ed-btn{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface);color:var(--text-2);
+  font-size:12px;font-weight:500;cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s;
+  white-space:nowrap;
+}
+.ed-btn:hover{background:var(--surface-2);color:var(--text-1);border-color:var(--border-strong)}
+.ed-btn:active{background:var(--bg-soft)}
+.ed-btn-icon{padding:4px 6px}
+.ed-btn-icon svg{display:block}
+.ed-btn svg{flex-shrink:0}
+
+.ed-btn-save{
+  background:var(--accent);color:#fff;border-color:var(--accent);
+}
+.ed-btn-save:hover{
+  background:color-mix(in srgb,var(--accent) 85%,#000);border-color:color-mix(in srgb,var(--accent) 85%,#000);color:#fff;
+}
+
+/* --- Sidebar --- */
+.ed-sidebar-title{font-weight:600;font-size:12px;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;padding:8px 6px 10px;margin:0}
+.ed-slide-item{
+  display:flex;flex-direction:column;gap:4px;
+  padding:6px;border-radius:8px;cursor:pointer;
+  transition:background .15s;
+}
+.ed-slide-item:hover{background:var(--surface-2)}
+.ed-slide-item.active{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.ed-slide-item.active .ed-thumb{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent)}
+
+.ed-thumb{
+  position:relative;
+  width:100%;aspect-ratio:16/9;
+  border-radius:4px;overflow:hidden;
+  border:1.5px solid var(--border);
+  background:var(--bg);
+  transition:border-color .15s,box-shadow .15s;
+}
+.ed-mini-slide{
+  position:absolute;
+  width:1920px;height:1080px;
+  transform-origin:top left;
+  pointer-events:none;
+  /* Will be scaled by JS */
+  transform:scale(var(--thumb-scale, 0.1));
+}
+
+.ed-slide-label{
+  font-size:10px;color:var(--text-2);line-height:1.3;
+  padding:0 2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* --- Property Panel --- */
+.ed-props-title{font-weight:600;font-size:13px;color:var(--text-1);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.ed-props-empty{font-size:12px;color:var(--text-3);line-height:1.5;text-align:center;padding:40px 8px}
+.ed-props-content{}
+.ed-prop-group{margin-bottom:14px}
+.ed-prop-group label{display:block;font-size:11px;font-weight:600;color:var(--text-3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.ed-prop-row{display:flex;align-items:center;gap:8px}
+.ed-prop-row input[type="range"]{flex:1}
+.ed-prop-row span{font-size:11px;color:var(--text-2);min-width:36px;text-align:right;font-family:var(--font-mono)}
+.ed-prop-group input[type="color"]{width:100%;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer}
+.ed-prop-group input[type="text"]{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;
+  background:var(--surface);color:var(--text-1);font-family:var(--font-sans)}
+.ed-prop-group input[type="text"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 15%,transparent)}
+
+/* --- Content Editable Highlight --- */
+[contenteditable="true"]{
+  outline:1.5px dashed color-mix(in srgb,var(--accent) 40%,transparent);
+  outline-offset:2px;
+  border-radius:2px;
+  cursor:text;
+  transition:outline-color .15s;
+}
+[contenteditable="true"]:hover{
+  outline-color:color-mix(in srgb,var(--accent) 65%,transparent);
+}
+[contenteditable="true"]:focus{
+  outline-color:var(--accent);
+  outline-style:solid;
+  background:color-mix(in srgb,var(--accent) 3%,transparent);
+}
+.editor-selected{
+  outline:2px solid var(--accent)!important;
+  outline-offset:3px;
+  background:color-mix(in srgb,var(--accent) 5%,transparent)!important;
+}
+
+/* --- Toast --- */
+.ed-toast{
+  position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--text-1);color:#fff;
+  padding:10px 20px;border-radius:8px;
+  font-size:13px;font-weight:500;
+  box-shadow:var(--shadow-lg);
+  opacity:0;transition:opacity .3s,transform .3s;
+  z-index:200;pointer-events:none;
+}
+.ed-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* --- Statusbar --- */
+.ed-statusbar kbd{
+  display:inline-block;padding:1px 5px;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:3px;font-size:10px;font-family:var(--font-mono);
+  line-height:1.4;
+}
+.ed-status-right{color:var(--text-3)}

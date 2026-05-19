@@ -11,6 +11,7 @@
  *   O  slide overview grid
  *   T  cycle themes (reads data-themes on <html> or <body>)
  *   A  cycle demo animation on current slide
+ *   E  visual editor mode (WYSIWYG editing, see editor.js)
  *   URL hash #/N  deep-link to slide N (1-based)
  *   Progress bar auto-managed
  */
@@ -931,7 +932,42 @@
       if (ind) ind.textContent = a;
     }
 
+    /* ===== Editor mode (E key) =====
+     * Dynamically loads editor.js on first press, then enters visual editor.
+     * editor.js attaches to window.htmlPptEditor.
+     */
+    function loadAndEnterEditor() {
+      if (window.htmlPptEditor) {
+        if (window.htmlPptEditor.isActive()) {
+          window.htmlPptEditor.exit();
+        } else {
+          window.htmlPptEditor.enter();
+        }
+        return;
+      }
+      /* Find editor.js path relative to this runtime.js */
+      const scripts = document.querySelectorAll('script[src]');
+      let runtimeSrc = '';
+      scripts.forEach(s => { if (s.src.includes('runtime.js')) runtimeSrc = s.src; });
+      const editorSrc = runtimeSrc.replace('runtime.js', 'editor.js');
+      const script = document.createElement('script');
+      script.src = editorSrc;
+      script.onload = function () {
+        if (window.htmlPptEditor) window.htmlPptEditor.enter();
+      };
+      document.head.appendChild(script);
+    }
+
+    /* Listen for editor-exit event to restore normal navigation */
+    window.addEventListener('editor-exit', function () {
+      /* Re-show current slide through normal go() */
+      go(idx);
+    });
+
     document.addEventListener('keydown', function (e) {
+      /* If editor is active, let editor.js handle all keys */
+      if (window.htmlPptEditor && window.htmlPptEditor.isActive()) return;
+
       if (e.metaKey||e.ctrlKey||e.altKey) return;
       switch (e.key) {
         case 'ArrowRight': case ' ': case 'PageDown': case 'Enter': go(idx+1); e.preventDefault(); break;
@@ -944,6 +980,7 @@
         case 'o': case 'O': toggleOverview(); break;
         case 't': case 'T': cycleTheme(); break;
         case 'a': case 'A': cycleAnim(); break;
+        case 'e': case 'E': loadAndEnterEditor(); e.preventDefault(); break;
         case 'Escape': toggleOverview(false); toggleNotes(false); break;
       }
     });
