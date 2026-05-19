@@ -1915,84 +1915,99 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>05 · 模板代码生成引擎 — webapp-gen 全栈工作流
     </div>
-    <div class="webapp-pipe mt-m">
-      <div class="wp-row">
-        <div class="wp-step wp-init">
-          <span class="wp-num">0</span>
-          <h5>项目初始化</h5>
-          <p><code>git clone proj_template</code><br>React+TS+Tailwind / Go+Gin+GORM 骨架</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step">
-          <span class="wp-num">1</span>
-          <h5>需求分析</h5>
-          <p>Plan Mode → docs/<strong>requirement.md</strong><br>用例 + 非功能需求</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step">
-          <span class="wp-num">2</span>
-          <h5>API 设计</h5>
-          <p>docs/<strong>api-design.md</strong><br>统一信封 / 错误码 / 分页 / 鉴权</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step">
-          <span class="wp-num">3</span>
-          <h5>前端设计</h5>
-          <p>docs/<strong>frontend_design.md</strong><br>路由 / 组件 / 状态管理</p>
-        </div>
+    <div class="split s55">
+      <div class="col-text" style="justify-content:center">
+        <h4 style="margin-top:0">设计思路</h4>
+        <p>不是"AI 一次性写完一个 App"，而是一条<strong>11 步固化工作流</strong>。把 AI 不擅长的部分交给模板，AI 只做需求理解、契约定义、增量集成。</p>
+        <h4>三个关键设计</h4>
+        <ul style="line-height:1.8;padding-left:16px">
+          <li><strong>脚手架前置</strong> · 模板保证结构完整性，避免 AI 从零搭建框架</li>
+          <li><strong>原型反馈闭环</strong> · Step 4–5 先用 mock 出可视原型，用户迭代确认后再写后端</li>
+          <li><strong>三环境矩阵验收</strong> · 本地 + 单容器 + 全栈 compose，同一份测试脚本三环境都要过</li>
+        </ul>
+        <h4>jen Skill 嵌入</h4>
+        <p>Step 6 写完 SQL schema 后调 <code>@skill:jen</code> 生成 DAO 层，确定性部分从 LLM 链路剥离。</p>
       </div>
-      <div class="wp-row">
-        <div class="wp-step wp-loop">
-          <span class="wp-num">4</span>
-          <h5>原型生成</h5>
-          <p>mock 数据填充<br><code>npx tsc --noEmit</code></p>
-        </div>
-        <div class="wp-arr">⇄</div>
-        <div class="wp-step wp-loop">
-          <span class="wp-num">5</span>
-          <h5>原型反馈</h5>
-          <p><code>make run-frontend</code><br>Ask 用户审视 → 迭代</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step">
-          <span class="wp-num">6</span>
-          <h5>后端设计</h5>
-          <p>docs/<strong>backend-design.md</strong><br><span class="hl-skill">@skill: jen</span> 生成 PO/DAO</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step">
-          <span class="wp-num">7</span>
-          <h5>后端编码</h5>
-          <p>controller / service / wire DI<br>Podman MySQL 单容器</p>
-        </div>
-      </div>
-      <div class="wp-row">
-        <div class="wp-step wp-test">
-          <span class="wp-num">8</span>
-          <h5>黑盒测试</h5>
-          <p><code>scripts/api-test.sh</code><br>覆盖 CRUD + 鉴权 + 边界</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step">
-          <span class="wp-num">9</span>
-          <h5>前端编码</h5>
-          <p>替换 mock → 真实 API<br>snake_case ↔ camelCase</p>
-        </div>
-        <div class="wp-arr">→</div>
-        <div class="wp-step wp-final">
-          <span class="wp-num">10</span>
-          <h5>容器化验收</h5>
-          <p><code>podman compose up</code><br>三环境矩阵跑通才算完成</p>
-        </div>
-        <div class="wp-arr"></div>
-        <div class="wp-step wp-result">
-          <span class="wp-num">✓</span>
-          <h5>可交付制品</h5>
-          <p>github.com/LingoJack/<br>gradiation_artifact_demo</p>
+      <div class="col-visual" style="display:flex;align-items:center;overflow:visible">
+        <div class="webapp-pipe" style="margin-top:0">
+          <div class="wp-row">
+            <div class="wp-step wp-init">
+              <span class="wp-num">0</span>
+              <h5>项目初始化</h5>
+              <p><code>git clone</code> 模板<br>React+Go 骨架</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step">
+              <span class="wp-num">1</span>
+              <h5>需求分析</h5>
+              <p>一句话 → requirement.md<br>用例 + 非功能需求</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step">
+              <span class="wp-num">2</span>
+              <h5>API 设计</h5>
+              <p>REST 契约<br>统一信封 / 错误码</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step">
+              <span class="wp-num">3</span>
+              <h5>前端设计</h5>
+              <p>路由 / 组件<br>状态管理方案</p>
+            </div>
+          </div>
+          <div class="wp-row">
+            <div class="wp-step wp-loop">
+              <span class="wp-num">4</span>
+              <h5>原型生成</h5>
+              <p>mock 数据填充<br><code>npx tsc --noEmit</code></p>
+            </div>
+            <div class="wp-arr">⇄</div>
+            <div class="wp-step wp-loop">
+              <span class="wp-num">5</span>
+              <h5>原型反馈</h5>
+              <p>Ask 用户审视<br>迭代直到确认</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step">
+              <span class="wp-num">6</span>
+              <h5>后端设计</h5>
+              <p>SQL schema<br><span class="hl-skill">@skill:jen</span> → DAO</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step">
+              <span class="wp-num">7</span>
+              <h5>后端编码</h5>
+              <p>controller / service<br>Podman MySQL</p>
+            </div>
+          </div>
+          <div class="wp-row">
+            <div class="wp-step wp-test">
+              <span class="wp-num">8</span>
+              <h5>黑盒测试</h5>
+              <p><code>api-test.sh</code><br>CRUD + 鉴权 + 边界</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step">
+              <span class="wp-num">9</span>
+              <h5>前端编码</h5>
+              <p>mock → 真实 API<br>snake ↔ camelCase</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step wp-final">
+              <span class="wp-num">10</span>
+              <h5>容器化验收</h5>
+              <p><code>podman compose up</code><br>三环境矩阵</p>
+            </div>
+            <div class="wp-arr">→</div>
+            <div class="wp-step wp-result">
+              <span class="wp-num">✓</span>
+              <h5>可交付制品</h5>
+              <p>gradiation_<br>artifact_demo</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <p class="dim mt-m" style="font-size:15px;text-align:center"><strong>工作流核心</strong> · 脚手架保证<u>结构完整性</u> · 原型反馈保证<u>用户预期对齐</u> · 黑盒测试 + 三环境矩阵保证<u>部署链路可用</u> · jen Skill 嵌入 Step 6 处理模板代码</p>
     <aside class="notes">
       <p>webapp-gen 是 §5 的第二个 Skill，目标是<strong>生成完整全栈 Web 应用</strong>。</p>
       <p>它不是"AI 一次性写完一个 App"，而是一条<strong>11 步固化工作流</strong>。给大家逐步看一下。</p>
