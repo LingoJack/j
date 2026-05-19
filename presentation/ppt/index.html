@@ -1429,12 +1429,12 @@ hook.rs         storage.rs
       <h2>04 · 多 Agent 协作试验 — 轮流报数：过期快照问题
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <h4 style="margin-top:0">实验内容</h4>
-        <p style="font-size:15px;line-height:1.7">两个 Teammate 轮流报递增数字（1, 2, 3 …），验证多 Agent 之间的<strong>消息传递与唤醒</strong>能力。仅通过 SendMessage 沟通，不共享全局状态。</p>
+        <p>两个 Teammate 轮流报递增数字（1, 2, 3 …），验证多 Agent 之间的<strong>消息传递与唤醒</strong>能力。仅通过 SendMessage 沟通，不共享全局状态。</p>
         <h4 style="color:var(--bad)">发现的问题 · 过期快照导致重复消息</h4>
-        <p style="font-size:15px;line-height:1.7">1 号 Agent 进入循环时，2 号已报的"2"尚未到达其信箱。1 号快照只有 [1]，于是催促 2 号报 2 → 2 号看到 [1,2] + 催促 → 重复报 2 → <strong>对外不一致</strong>。</p>
-        <p class="dim" style="font-size:14px;margin-top:8px">根本原因：Agent Loop 长时序异步，发完 SendMessage 不原地等确认 → 下一轮基于过期快照决策。</p>
+        <p>1 号 Agent 进入循环时，2 号已报的"2"尚未到达其信箱。1 号快照只有 [1]，于是催促 2 号报 2 → 2 号看到 [1,2] + 催促 → 重复报 2 → <strong>对外不一致</strong>。</p>
+        <p class="dim" style="margin-top:8px">根本原因：Agent Loop 长时序异步，发完 SendMessage 不原地等确认 → 下一轮基于过期快照决策。</p>
       </div>
       <div class="col-visual">
         <svg viewBox="0 0 400 170" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
