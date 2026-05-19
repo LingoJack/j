@@ -58,41 +58,24 @@
     </div>
     <div class="split s55">
       <div class="col-text">
-        <p class="lead">用 Rust 写的<span class="accent">终端 Agent</span>，是本次毕业设计的代码实现的主要载体。</p>
-        <ul>
-          <li><strong>Agent 工作台</strong> · 多模型、流式输出、工具调用、权限确认</li>
-          <li><strong>别名打开</strong> · <code>j chrome</code> · <code>j vscode ./src</code></li>
-          <li><strong>日报周报</strong> · TUI 编辑、自动周数管理、Git 同步</li>
-          <li><strong>待办备忘</strong> · Markdown checkbox · 长内容预览</li>
-          <li><strong>脚本工作流</strong> · 工程化的 Skill / Hook</li>
-        </ul>
-        <h4>本项目制品分别位于四个开源仓库</h4>
-        <ul class="repo-list">
-          <li>
-            <span class="rl-label">JCLI 主项目</span>
-            <span class="rl-url">github.com/LingoJack/jcli</span>
-          </li>
-          <li>
-            <span class="rl-label">模板代码引擎 jen</span>
-            <span class="rl-url">github.com/LingoJack/model_infrax</span>
-          </li>
-          <li>
-            <span class="rl-label">生成效果演示</span>
-            <span class="rl-url">github.com/LingoJack/gradiation_artifact_demo</span>
-          </li>
-          <li>
-            <span class="rl-label">JCLI Github Pages</span>
-            <span class="rl-url">lingojack.github.io/jcli</span>
-          </li>
-        </ul>
+        <h4 style="margin-top:0"><span class="accent">jcli</span> · 主项目 · Rust · 24K LOC</h4>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-2)">本次毕设的核心载体。多模型终端 Agent，包含<strong>上下文治理</strong>（分级压缩 + 优先级窗口 + 动态 System Prompt）、<strong>面向场景强化的工具</strong>（Plan / Edit / 执行三态 / system-reminder）、<strong>多 Agent 协作</strong>（Teammate + SubAgent + SendMessage Gate），以及 Skill / Hook 工程化扩展机制。</p>
+
+        <h4><span class="accent">jen</span> · 模板代码引擎 · Go · model_infrax</h4>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-2)">自研 SQL parser + Go template，将 SQL schema 确定性生成 PO/DTO/VO/DAO 全套原子方法。按主键 / 唯一索引 / 普通索引分别派生查询方法，从根本上消除 LLM 长链路推理中的字段漂移。封装为 Skill，按需加载。</p>
+
+        <h4><span class="accent">artifact_demo</span> · 端到端验证制品</h4>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-2)">用 jcli 配合 webapp-gen 和 jen 两个 skill 从零生成的电商 Web App（React + Go + GORM + Podman），三环境矩阵验收全部通过，作为整套工具链的端到端可行性验证。</p>
+
+        <p class="note" style="margin-top:auto">三个仓库均开源 · MIT License · 右图可点击跳转</p>
       </div>
       <div class="col-visual">
         <div class="stack-figs">
-          <a class="sf sf-1" href="https://github.com/LingoJack/gradiation_artifact_demo" target="_blank" rel="noopener">
-            <img src="pics/jcli-demo.png" alt="效果演示仓库">
+          <a class="sf sf-1" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
+            <img src="pics/github-jcli.png" alt="jcli 仓库">
             <div class="caption">
-              <span class="name">artifact_demo · 生成效果演示</span>
-              <span class="url">github.com/LingoJack/gradiation_artifact_demo</span>
+              <span class="name">jcli · 主项目仓库</span>
+              <span class="url">github.com/LingoJack/jcli</span>
             </div>
           </a>
           <a class="sf sf-2" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
@@ -102,33 +85,26 @@
               <span class="url">github.com/LingoJack/model_infrax</span>
             </div>
           </a>
-          <a class="sf sf-3" href="https://lingojack.github.io/jcli/" target="_blank" rel="noopener">
-            <img src="pics/jcli-github-pages-introduce.png" alt="jcli 演示站点">
+          <a class="sf sf-3" href="https://github.com/LingoJack/gradiation_artifact_demo" target="_blank" rel="noopener">
+            <img src="pics/jcli-demo.png" alt="效果演示仓库">
             <div class="caption">
-              <span class="name">jcli · github pages 站点</span>
-              <span class="url">lingojack.github.io/jcli</span>
-            </div>
-          </a>
-          <a class="sf sf-4" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
-            <img src="pics/github-jcli.png" alt="jcli 仓库">
-            <div class="caption">
-              <span class="name">jcli · 主项目仓库</span>
-              <span class="url">github.com/LingoJack/jcli</span>
+              <span class="name">artifact_demo · 端到端验证制品</span>
+              <span class="url">github.com/LingoJack/gradiation_artifact_demo</span>
             </div>
           </a>
         </div>
       </div>
     </div>
     <div class="deck-footer">
-      <span class="mono">jcli · model_infrax · artifact_demo · pages</span>
+      <span class="mono">jcli · model_infrax · artifact_demo</span>
       <span class="slide-number" data-current="2" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>先把项目长什么样给大家看一下，等会讲设计的时候才有具体的对象。</p>
-      <p>这个项目叫 <strong>jcli</strong>，是一个用 Rust 写的命令行工作台。最核心的功能是右上那张图里的<strong>终端 Agent</strong>——多模型、流式输出、工具调用、权限确认，可以直接在仓库里读代码、改代码、跑命令。</p>
+      <p>这个项目叫 <strong>jcli</strong>，是一个用 Rust 写的命令行工作台，也是本次毕设的核心实现载体。最核心的功能是右上那张图里的<strong>终端 Agent</strong>——多模型、流式输出、工具调用、权限确认，可以直接在仓库里读代码、改代码、跑命令。</p>
       <p>除了 Agent，它还有几个比较实用的工具：<strong>别名打开</strong>，注册一次之后 j chrome、j vscode 这些都直接可用；<strong>日报周报</strong>，配 git 自动同步；<strong>待办备忘</strong>，TUI 界面 + Markdown checkbox。</p>
-      <p>右边这几张叠起来的图是项目的仓库和演示站点，<strong>都是开源的</strong>。鼠标点上去能直接跳过去。</p>
-      <p>下一页我会从最朴素的问题讲起：为什么要做 Agent，而不是直接用 ChatGPT。</p>
+      <p>右边叠起来的图对应下面三个仓库。<strong>jcli 主项目</strong>涵盖上下文治理、工具体系、多 Agent 协作、Skill 与 Hook，总共 24K 行 Rust 代码。<strong>model_infrax</strong>是 jen 代码生成引擎，用 Go 写的自研 SQL parser 加模板引擎，能把 SQL 直接生成 PO/DTO/VO/DAO 全套原子方法，封装为 Skill 按需加载。<strong>gradiation_artifact_demo</strong>是端到端验证制品——用 jcli 配合 webapp-gen 和 jen 两个 skill 从零生成的电商 Web App，React 前端 + Go 后端 + GORM + Podman，三环境矩阵验收全部通过。</p>
+      <p>三个仓库<strong>都是开源的</strong>，MIT 协议。鼠标点上去能直接跳过去。下一页我从最朴素的问题讲起：为什么要做 Agent，而不是直接用 ChatGPT。</p>
     </aside>
   </section>
 

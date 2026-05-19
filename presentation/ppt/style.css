@@ -699,23 +699,28 @@ code{
   padding:0;
   display:flex;
   flex-direction:column;
-  gap:8px;
+  gap:10px;
 }
 .repo-list li{
   display:flex;
-  align-items:baseline;
-  gap:14px;
-  padding:9px 14px;
+  flex-direction:column;
+  gap:6px;
+  padding:12px 16px;
   background:var(--surface-2);
   border:1px solid var(--border);
   border-left:2px solid var(--accent);
   border-radius:var(--radius);
 }
+.repo-list .rl-row{
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+}
 .repo-list .rl-label{
   font-size:13px;
   font-weight:600;
   color:var(--text-1);
-  min-width:130px;
+  min-width:140px;
   letter-spacing:.01em;
 }
 .repo-list .rl-url{
@@ -723,6 +728,12 @@ code{
   font-size:12.5px;
   color:var(--accent);
   word-break:break-all;
+}
+.repo-list .rl-detail{
+  font-size:12px;
+  color:var(--text-3);
+  line-height:1.6;
+  padding-left:0;
 }
 
 /* ---------- Experiment grid ---------- */
@@ -1567,30 +1578,24 @@ code{
   word-break:break-all;
 }
 
-/* 四张错位叠放 */
+/* 三张错位叠放 */
 .stack-figs .sf-1{
   top:0;
-  left:2%;
+  left:4%;
   transform:rotate(-2.5deg);
   z-index:1;
 }
 .stack-figs .sf-2{
-  top:22%;
-  left:14%;
+  top:26%;
+  left:16%;
   transform:rotate(1deg);
   z-index:2;
 }
 .stack-figs .sf-3{
-  top:44%;
-  left:4%;
+  top:52%;
+  left:6%;
   transform:rotate(-1deg);
   z-index:3;
-}
-.stack-figs .sf-4{
-  top:60%;
-  left:16%;
-  transform:rotate(1.5deg);
-  z-index:4;
 }
 
 /* hover 抬起效果 */
