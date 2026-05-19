@@ -760,7 +760,7 @@ hook.rs         storage.rs
           <tr><td>Ask</td><td class="yes">高 · 用户意图确认</td><td class="yes">Yes</td></tr>
           <tr><td>Skill</td><td class="yes">高 · 能力定义</td><td class="yes">Yes</td></tr>
         </table>
-        <p class="dim" style="font-size:12px;margin-top:8px;line-height:1.6">Bash / Edit / Read / Write 的信息价值随轮次衰减极快——第 20 轮时，第 3 轮的 Read 结果对决策几乎无价值。</p>
+        <p class="dim" style="font-size:14px;margin-top:8px;line-height:1.6">Bash / Edit / Read / Write 的信息价值随轮次衰减极快——第 20 轮时，第 3 轮的 Read 结果对决策几乎无价值。</p>
       </div>
     </div>
     <aside class="notes">
@@ -884,7 +884,7 @@ hook.rs         storage.rs
         </ul>
         <h4 style="margin-top:2px">指数退避 · API 鲁棒性</h4>
         <p>LLM API 限流、超时由指数退避 + 随机等待自动恢复，不打断工作流。</p>
-        <p class="dim" style="font-size:12px">使用场景：睡前审批 Plan → Agent 自主执行 → 早上收到可运行原型。</p>
+        <p class="dim" style="font-size:14px">使用场景：睡前审批 Plan → Agent 自主执行 → 早上收到可运行原型。</p>
       </div>
       <div class="col-visual">
         <div class="fig-shot" style="display:flex;flex-direction:column;overflow:hidden">
@@ -1112,7 +1112,7 @@ hook.rs         storage.rs
         <h4 style="margin-top:0;color:var(--bad)">问题背景 · 一个真实的卡死案例</h4>
         <p style="margin-bottom:6px">生成业务软件时，Agent 执行了 <code>npm create vite@latest my-app -- --template react-ts</code>。命令<strong>久久没有返回</strong></p>
         <p style="margin-bottom:8px">排查发现：这个命令有<strong>交互式设计</strong>，要求用户输入 Enter 确认安装。但 Agent 用的是同步 Bash —— 进程在等 stdin，Agent 在等 stdout，<strong>双方互相等待</strong>，形成死锁。</p>
-        <p class="dim" style="font-size:12px;margin-bottom:8px">这类交互式命令在包管理器中很常见：npm init、pip install、apt-get、Homebrew……Agent 必须能识别并正确处理。</p>
+        <p class="dim" style="font-size:14px;margin-bottom:8px">这类交互式命令在包管理器中很常见：npm init、pip install、apt-get、Homebrew……Agent 必须能识别并正确处理。</p>
         <h4 style="margin-top:10px">设计目标</h4>
         <p style="margin-bottom:6px">入口统一 —— Agent 调用的都是 <code>Bash</code> 工具。<strong>运行时自动识别</strong>命令特性，落到对的执行形态：</p>
         <ul style="margin:0;padding-left:18px;line-height:1.8">
@@ -1284,10 +1284,10 @@ hook.rs         storage.rs
     <div class="split s55">
       <div class="col-text">
         <h4 style="margin-top:0">设计思路</h4>
-        <p style="font-size:13px">Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
-        <p style="font-size:13px"><code>&lt;system-reminder&gt;</code> 是运行时在<strong>每轮 LLM 请求前</strong>（PreLlmRequest Hook）动态注入的消息，以 User 角色混入上下文。Agent 读到它就知道<strong>外部世界发生了什么</strong>。</p>
+        <p style="font-size:15px;line-height:1.7">Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
+        <p style="font-size:15px;line-height:1.7"><code>&lt;system-reminder&gt;</code> 是运行时在<strong>每轮 LLM 请求前</strong>（PreLlmRequest Hook）动态注入的消息，以 User 角色混入上下文。Agent 读到它就知道<strong>外部世界发生了什么</strong>。</p>
         <h4>四种注入场景</h4>
-        <ul style="font-size:12px;line-height:1.9;color:var(--text-2);padding-left:18px">
+        <ul style="font-size:14px;line-height:1.9;color:var(--text-2);padding-left:18px">
           <li><strong>background_task_completed</strong> · 后台任务跑完，结果通知</li>
           <li><strong>todo_reminder</strong> · 待办 15+ 轮未更新，软提醒拉回注意力</li>
           <li><strong>teammate 新消息</strong> · Teammate 发来消息，通知主 Agent 查看</li>
@@ -1412,7 +1412,7 @@ hook.rs         storage.rs
           <tr><td>Can SendMessage</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">No</td></tr>
           <tr><td>Can receive</td><td class="yes">main_inbox</td><td class="yes">broadcast_inbox</td><td class="no">No</td></tr>
         </table>
-        <p class="dim" style="font-size:12px;margin-top:10px;line-height:1.6"><strong>设计原则</strong>: 决策信息多放（other agent text），执行中间过程少放（tool results 不推）。SubAgent 完全隔离——不能收发消息，只回灌摘要。</p>
+        <p class="dim" style="font-size:14px;margin-top:10px;line-height:1.6"><strong>设计原则</strong>: 决策信息多放（other agent text），执行中间过程少放（tool results 不推）。SubAgent 完全隔离——不能收发消息，只回灌摘要。</p>
       </div>
     </div>
     <aside class="notes">
@@ -1431,10 +1431,10 @@ hook.rs         storage.rs
     <div class="split s55">
       <div class="col-text">
         <h4 style="margin-top:0">实验内容</h4>
-        <p>两个 Teammate 轮流报递增数字（1, 2, 3 …），验证多 Agent 之间的<strong>消息传递与唤醒</strong>能力。仅通过 SendMessage 沟通，不共享全局状态。</p>
+        <p style="font-size:15px;line-height:1.7">两个 Teammate 轮流报递增数字（1, 2, 3 …），验证多 Agent 之间的<strong>消息传递与唤醒</strong>能力。仅通过 SendMessage 沟通，不共享全局状态。</p>
         <h4 style="color:var(--bad)">发现的问题 · 过期快照导致重复消息</h4>
-        <p>1 号 Agent 进入循环时，2 号已报的"2"尚未到达其信箱。1 号快照只有 [1]，于是催促 2 号报 2 → 2 号看到 [1,2] + 催促 → 重复报 2 → <strong>对外不一致</strong>。</p>
-        <p class="dim" style="font-size:12px;margin-top:8px">根本原因：Agent Loop 长时序异步，发完 SendMessage 不原地等确认 → 下一轮基于过期快照决策。</p>
+        <p style="font-size:15px;line-height:1.7">1 号 Agent 进入循环时，2 号已报的"2"尚未到达其信箱。1 号快照只有 [1]，于是催促 2 号报 2 → 2 号看到 [1,2] + 催促 → 重复报 2 → <strong>对外不一致</strong>。</p>
+        <p class="dim" style="font-size:14px;margin-top:8px">根本原因：Agent Loop 长时序异步，发完 SendMessage 不原地等确认 → 下一轮基于过期快照决策。</p>
       </div>
       <div class="col-visual">
         <svg viewBox="0 0 400 170" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
@@ -1847,7 +1847,7 @@ hook.rs         storage.rs
             <p class="jah-hint">主键 / 唯一索引 / 普通索引 分别派生独立查询方法</p>
           </div>
         </div>
-        <p class="dim" style="font-size:12px;margin-top:6px;text-align:center">源码：<code>github.com/LingoJack/model_infrax</code></p>
+        <p class="dim" style="font-size:14px;margin-top:6px;text-align:center">源码：<code>github.com/LingoJack/model_infrax</code></p>
       </div>
     </div>
     <aside class="notes">
@@ -1864,15 +1864,15 @@ hook.rs         storage.rs
       <h2>05 · 模板代码生成引擎 — jen 实测对比
     </div>
     <div class="split s55">
-      <div class="col-text" style="font-size:14px;gap:12px">
-        <h4 style="margin-top:0;margin-bottom:2px;font-size:14px">验证方式</h4>
-        <p style="font-size:13px;line-height:1.65">51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
-        <h4 style="margin-bottom:2px;font-size:14px">关键发现 · 不只是"更快"</h4>
-        <p style="font-size:13px;line-height:1.65">两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已撑爆。</p>
-        <h4 style="margin-bottom:2px;font-size:14px">字段漂移 · 系统性风险</h4>
-        <p style="font-size:13px;line-height:1.65">11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除漂移。</p>
-        <h4 style="margin-bottom:2px;font-size:14px">结论</h4>
-        <p style="font-size:13px;line-height:1.65">确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
+      <div class="col-text" style="font-size:15px;gap:12px">
+        <h4 style="margin-top:0;margin-bottom:2px;font-size:15px">验证方式</h4>
+        <p style="font-size:15px;line-height:1.7">51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
+        <h4 style="margin-bottom:2px;font-size:15px">关键发现 · 不只是"更快"</h4>
+        <p style="font-size:15px;line-height:1.7">两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已撑爆。</p>
+        <h4 style="margin-bottom:2px;font-size:15px">字段漂移 · 系统性风险</h4>
+        <p style="font-size:15px;line-height:1.7">11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除漂移。</p>
+        <h4 style="margin-bottom:2px;font-size:15px">结论</h4>
+        <p style="font-size:15px;line-height:1.7">确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
       </div>
       <div class="col-visual">
         <div style="margin-top:0">
@@ -1992,7 +1992,7 @@ hook.rs         storage.rs
         </div>
       </div>
     </div>
-    <p class="dim mt-m" style="font-size:13px;text-align:center"><strong>工作流核心</strong> · 脚手架保证<u>结构完整性</u> · 原型反馈保证<u>用户预期对齐</u> · 黑盒测试 + 三环境矩阵保证<u>部署链路可用</u> · jen Skill 嵌入 Step 6 处理模板代码</p>
+    <p class="dim mt-m" style="font-size:15px;text-align:center"><strong>工作流核心</strong> · 脚手架保证<u>结构完整性</u> · 原型反馈保证<u>用户预期对齐</u> · 黑盒测试 + 三环境矩阵保证<u>部署链路可用</u> · jen Skill 嵌入 Step 6 处理模板代码</p>
     <aside class="notes">
       <p>webapp-gen 是 §5 的第二个 Skill，目标是<strong>生成完整全栈 Web 应用</strong>。</p>
       <p>它不是"AI 一次性写完一个 App"，而是一条<strong>11 步固化工作流</strong>。给大家逐步看一下。</p>
@@ -2084,19 +2084,19 @@ hook.rs         storage.rs
     <div class="grid g2" style="gap:16px">
       <div>
         <h4>上下文窗口治理</h4>
-        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">分级消息窗口 + 多级压缩（micro / auto）+ 豁免高价值消息 + 动态 System Prompt 追加。把上下文当作推荐系统：决策信息多放、执行中间过程少放，让 Agent 长期低幻觉运行。</p>
+        <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">分级消息窗口 + 多级压缩（micro / auto）+ 豁免高价值消息 + 动态 System Prompt 追加。把上下文当作推荐系统：决策信息多放、执行中间过程少放，让 Agent 长期低幻觉运行。</p>
       </div>
       <div>
         <h4>面向场景强化的工具</h4>
-        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / system-reminder 状态感知注入 / Hook 14 事件守工程规范。</p>
+        <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / system-reminder 状态感知注入 / Hook 14 事件守工程规范。</p>
       </div>
       <div>
         <h4>多 Agent 协作试验</h4>
-        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>SendMessage Gate</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
+        <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>SendMessage Gate</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
       </div>
       <div>
         <h4>模板代码生成引擎</h4>
-        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65"><strong>jen</strong>：SQL → Go DAO 全套原子方法。51 张表实测：token <strong>↓ 50×</strong>、耗时 <strong>↓ 27×</strong>、字段一致性 <strong>100%</strong>。<br><strong>webapp-gen</strong>：脚手架 + 原型驱动 + 三环境矩阵验收。两者均封装为 Skill 按需加载。</p>
+        <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65"><strong>jen</strong>：SQL → Go DAO 全套原子方法。51 张表实测：token <strong>↓ 50×</strong>、耗时 <strong>↓ 27×</strong>、字段一致性 <strong>100%</strong>。<br><strong>webapp-gen</strong>：脚手架 + 原型驱动 + 三环境矩阵验收。两者均封装为 Skill 按需加载。</p>
       </div>
     </div>
     <p class="dim mt-l" style="font-size:14px;text-align:center;line-height:1.7">所有代码开源 · MIT License · <code>github.com/LingoJack/jcli</code> · <code>model_infrax</code> · <code>gradiation_artifact_demo</code></p>
