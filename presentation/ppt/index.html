@@ -282,7 +282,7 @@
       <h2>01 · 项目与背景 — ReAct 核心循环
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">Agent 不是一次推理出全部答案。它<span class="accent">逐轮思考、调工具、读结果、再思考</span>。</p>
         <ul>
           <li><strong>Thought</strong> · 读当前上下文，决定下一步</li>
@@ -345,7 +345,7 @@
       <h2>01 · 项目与背景 — ReAct 逐帧演示
     </div>
     <div class="split s64">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">用户的需求<span class="accent">不是机器指令</span>。Agent 需要先把它<span class="accent">翻译</span>成可执行的工具调用。</p>
         <ul>
           <li>"总结" → 需要看目录结构</li>
@@ -395,7 +395,7 @@
       <h2>01 · 项目与背景 — ReAct 逐帧演示
     </div>
     <div class="split s64">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">Agent 先<span class="accent">列目录</span>看全貌 —— 这是面对未知项目最常见的第一步。</p>
         <ul>
           <li>选择工具 <code>Bash</code>，因为要枚举文件</li>
@@ -454,7 +454,7 @@
       <h2>01 · 项目与背景 — ReAct 逐帧演示
     </div>
     <div class="split s64">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">运行时<span class="accent">在真实 shell 里执行</span> tool call，把 stdout 序列化为 tool-result 消息，写回上下文。</p>
         <ul>
           <li>12 个条目，足够建立粗略地图</li>
@@ -523,7 +523,7 @@ hook.rs         storage.rs
       <h2>01 · 项目与背景 — ReAct 逐帧演示
     </div>
     <div class="split s64">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">Agent 看完目录，决定<span class="accent">深入 app.rs</span> —— 它是名字最像入口的文件。</p>
         <ul>
           <li>选 Read 而非 Bash cat —— 结构化输出、自动行号</li>
@@ -594,7 +594,7 @@ hook.rs         storage.rs
       <h2>01 · 项目与背景 — ReAct 逐帧演示
     </div>
     <div class="split s64">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">经过 <span class="accent">3 轮工具调用</span>（ls + Read app.rs + Grep "pub struct"），Agent 拼出全貌。</p>
         <ul>
           <li>窗口最终占用 <strong>38%</strong></li>
@@ -659,7 +659,7 @@ hook.rs         storage.rs
       <h2>02 · 上下文治理与状态感知 — 问题与治理路径
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <p class="lead">上一章的 ReAct 循环已经展示：每轮工具调用的结果都会<span class="accent">永久占用</span>上下文 token。轮次越多，窗口越满，Agent 开始幻觉、重复操作、忘记目标。</p>
         <h4>两条治理路径</h4>
         <ul>
@@ -839,7 +839,7 @@ hook.rs         storage.rs
       <h2>02 · 上下文治理与状态感知 — 动态 System Prompt 与鲁棒性
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <h4 style="margin-top:0">动态 System Prompt</h4>
         <p>System Prompt 尾部根据当前状态<strong>动态追加</strong>信息——后台任务状态、Teammate 存在、过期 TODO 提醒、交互式 Session。即使原始上下文已被压缩，Agent 仍能感知正在发生的持续性事件。</p>
         <p class="note">核心思路：让 Agent 在压缩后仍能<strong>感知当前正在发生的持续性事件</strong>，避免遗忘正在运行的后台任务或协作队友。</p>
@@ -875,7 +875,7 @@ hook.rs         storage.rs
       <h2>02 · 上下文治理与状态感知 — 治理成果：长程运行实测
     </div>
     <div class="split s55">
-      <div class="col-text" style="gap:6px">
+      <div class="col-text" style="gap:6px;justify-content:center">
         <h4 style="margin-top:0">三重保障的协同效果</h4>
         <ul style="line-height:1.7;margin:0">
           <li><strong>分级压缩</strong> · micro 快速替换旧工具结果，auto 深度摘要清空窗口</li>
@@ -913,7 +913,7 @@ hook.rs         storage.rs
       <h2>03 · 面向场景强化的工具 — 从最小 Agent 到渐进增强
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <h4 style="margin-top:0">最小 Agent：4 个工具即可工作</h4>
         <p>Bash + Read + Write + LoadSkill — 能读文件、写文件、执行命令、按需加载技能。<strong>理论上够用。</strong></p>
         <h4 style="color:var(--bad)">问题：基础工具覆盖不了的场景</h4>
@@ -1282,12 +1282,12 @@ hook.rs         storage.rs
       <h2>03 · 面向场景强化的工具 — &lt;system-reminder&gt; 状态感知注入
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="justify-content:center">
         <h4 style="margin-top:0">设计思路</h4>
-        <p style="font-size:15px;line-height:1.7">Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
-        <p style="font-size:15px;line-height:1.7"><code>&lt;system-reminder&gt;</code> 是运行时在<strong>每轮 LLM 请求前</strong>（PreLlmRequest Hook）动态注入的消息，以 User 角色混入上下文。Agent 读到它就知道<strong>外部世界发生了什么</strong>。</p>
+        <p>Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
+        <p><code>&lt;system-reminder&gt;</code> 是运行时在<strong>每轮 LLM 请求前</strong>（PreLlmRequest Hook）动态注入的消息，以 User 角色混入上下文。Agent 读到它就知道<strong>外部世界发生了什么</strong>。</p>
         <h4>四种注入场景</h4>
-        <ul style="font-size:14px;line-height:1.9;color:var(--text-2);padding-left:18px">
+        <ul style="line-height:1.9;color:var(--text-2);padding-left:18px">
           <li><strong>background_task_completed</strong> · 后台任务跑完，结果通知</li>
           <li><strong>todo_reminder</strong> · 待办 15+ 轮未更新，软提醒拉回注意力</li>
           <li><strong>teammate 新消息</strong> · Teammate 发来消息，通知主 Agent 查看</li>
@@ -1864,15 +1864,15 @@ hook.rs         storage.rs
       <h2>05 · 模板代码生成引擎 — jen 实测对比
     </div>
     <div class="split s55">
-      <div class="col-text" style="font-size:15px;gap:12px">
-        <h4 style="margin-top:0;margin-bottom:2px;font-size:15px">验证方式</h4>
-        <p style="font-size:15px;line-height:1.7">51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
-        <h4 style="margin-bottom:2px;font-size:15px">关键发现 · 不只是"更快"</h4>
-        <p style="font-size:15px;line-height:1.7">两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已撑爆。</p>
-        <h4 style="margin-bottom:2px;font-size:15px">字段漂移 · 系统性风险</h4>
-        <p style="font-size:15px;line-height:1.7">11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除漂移。</p>
-        <h4 style="margin-bottom:2px;font-size:15px">结论</h4>
-        <p style="font-size:15px;line-height:1.7">确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
+      <div class="col-text" style="gap:12px">
+        <h4 style="margin-top:0;margin-bottom:2px">验证方式</h4>
+        <p>51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
+        <h4 style="margin-bottom:2px">关键发现 · 不只是"更快"</h4>
+        <p>两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已撑爆。</p>
+        <h4 style="margin-bottom:2px">字段漂移 · 系统性风险</h4>
+        <p>11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除漂移。</p>
+        <h4 style="margin-bottom:2px">结论</h4>
+        <p>确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
       </div>
       <div class="col-visual">
         <div style="margin-top:0">
