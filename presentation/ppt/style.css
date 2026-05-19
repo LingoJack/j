@@ -151,8 +151,8 @@ body{
   text-align:center;
   box-shadow:none;
 }
-.arch .cell h4{font-size:15px;margin:0 0 6px;color:var(--text-1);font-weight:600}
-.arch .cell p{font-size:13px;color:var(--text-3);margin:0;line-height:1.5}
+.arch .cell h4{font-size:16px;margin:0 0 6px;color:var(--text-1);font-weight:600}
+.arch .cell p{font-size:14px;color:var(--text-3);margin:0;line-height:1.5}
 .arch .tier.hl .cell{border-top:2px solid var(--accent)}
 
 /* ---------- rule rows ---------- */
