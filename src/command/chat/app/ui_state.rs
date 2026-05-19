@@ -220,6 +220,10 @@ pub struct UIState {
     pub help_scroll_offset: usize,
     /// 配置面板列表区域（chunks[1]），用于鼠标点击检测
     pub config_list_area: Option<Rect>,
+    /// Model tab 左侧 Provider 列表区域（用于鼠标点击检测）
+    pub config_provider_area: Option<Rect>,
+    /// Model tab 左侧 Provider 列表每项的行号索引（每帧更新）
+    pub config_provider_lines: Vec<usize>,
     /// 配置面板 Tab 栏的全局 Y 坐标（屏幕行号）
     pub config_tab_bar_y: Option<u16>,
     /// 配置面板可交互项的行号列表（每帧更新，与 field_line_indices 同步）

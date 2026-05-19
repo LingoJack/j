@@ -13,9 +13,10 @@ use ratatui::{
 };
 
 /// Model tab：左侧 Provider 列表
-pub(super) fn draw_tab_model_providers<'a>(app: &ChatApp) -> ItemList<'a> {
+pub(super) fn draw_tab_model_providers<'a>(app: &ChatApp, area_width: u16) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new(t.bg_primary);
+    let item_bg = t.bg_primary;
+    let mut list = ItemList::new(item_bg);
     let provider_count = app.state.agent_config.providers.len();
 
     if provider_count == 0 {
@@ -31,37 +32,44 @@ pub(super) fn draw_tab_model_providers<'a>(app: &ChatApp) -> ItemList<'a> {
         let is_active = i == app.state.agent_config.active_index;
         let focused = !app.ui.model_in_fields && is_current;
 
-        let marker = if is_active {
-            TOGGLE_ON.to_string()
-        } else {
-            TOGGLE_OFF.to_string()
-        };
-
+        // 箭头和圆点不参与高亮，使用统一风格
         let pointer = pointer_span(focused, t);
-        // 圆点保持固定颜色，不随选中状态变化
         let marker_style = if is_active {
             Style::default().fg(t.config_toggle_on)
         } else {
             Style::default().fg(t.config_toggle_off)
         };
+        let marker = if is_active { TOGGLE_ON } else { TOGGLE_OFF };
         let marker_span = Span::styled(format!("{marker} "), marker_style);
-        let name_span = Span::styled(
-            p.name.clone(),
-            if focused {
-                Style::default()
-                    .fg(t.config_tab_active_fg)
-                    .bg(t.config_tab_active_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else if is_current {
-                Style::default()
-                    .fg(t.config_label_selected)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.config_tab_inactive)
-            },
-        );
 
-        list.push(Line::from(vec![pointer, marker_span, name_span]));
+        let name_style = if focused {
+            Style::default()
+                .fg(t.config_tab_active_fg)
+                .bg(t.config_tab_active_bg)
+                .add_modifier(Modifier::BOLD)
+        } else if is_current {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_tab_inactive)
+        };
+        let name_span = Span::styled(p.name.clone(), name_style);
+
+        if focused {
+            // name 及填充空白带高亮背景，延伸到行尾
+            // pointer 占 4 字符宽（"  ❯ "），marker 占 2 字符宽（"● "）
+            let used: usize = 4 + 2 + display_width(p.name.as_str());
+            let pad = (area_width as usize).saturating_sub(used);
+            list.push(Line::from(vec![
+                pointer,
+                marker_span,
+                name_span,
+                Span::styled(" ".repeat(pad), Style::default().bg(t.config_tab_active_bg)),
+            ]));
+        } else {
+            list.push(Line::from(vec![pointer, marker_span, name_span]));
+        }
     }
 
     list

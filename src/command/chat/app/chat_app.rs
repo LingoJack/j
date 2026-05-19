@@ -588,6 +588,8 @@ impl ChatApp {
                 help_area_inner: None,
                 help_scroll_offset: 0,
                 config_list_area: None,
+                config_provider_area: None,
+                config_provider_lines: Vec::new(),
                 config_tab_bar_y: None,
                 config_field_lines: Vec::new(),
                 config_tab_hitboxes: Vec::new(),

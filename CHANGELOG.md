@@ -1,3 +1,11 @@
+# v12.10.68
+
+
+### 改进
+- **Model Provider 鼠标点击**: Model 配置页面左侧 Provider 列表现在支持鼠标点击选中，双击已选中的 Provider 可进入字段编辑。
+- **Provider 选中高亮延伸**: Model Provider 列表中选中项的高亮背景色现在延伸到行尾，视觉反馈更加完整清晰。
+</result
+
 # v12.10.67
 
 

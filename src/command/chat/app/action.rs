@@ -188,6 +188,8 @@ pub enum Action {
     ConfigSwitchTabTo(ConfigTab),
     /// 配置界面：选中指定字段（鼠标点击）
     ConfigFieldSelect(usize),
+    /// 配置界面：选中指定 Provider（鼠标点击 Model tab 左侧列表）
+    ConfigProviderSelect(usize),
     /// 工具/Skill 开关：导航（统一使用 config_field_idx）
     ToggleMenuNavigate(CursorDirection),
     /// 工具/Skill 开关：切换当前项

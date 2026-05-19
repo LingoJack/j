@@ -156,7 +156,31 @@ fn config_mouse_click(app: &mut ChatApp, col: u16, row: u16) -> Option<Action> {
         return None; // 点击了 Tab 栏但不在任何 Tab 上
     }
 
-    // ── 2. 检测列表项点击 ──
+    // ── 2. 检测 Model tab 左侧 Provider 列表点击 ──
+    if app.ui.config_tab == ConfigTab::Model
+        && let Some(provider_area) = app.ui.config_provider_area
+        && is_point_in_rect(col, row, provider_area)
+    {
+        let provider_lines = &app.ui.config_provider_lines;
+        if provider_lines.is_empty() {
+            return None;
+        }
+        let inner_y = (row - provider_area.y) as usize;
+        // Provider 列表无滚动偏移，每项占一行
+        let clicked_idx = match provider_lines.binary_search(&inner_y) {
+            Ok(idx) => idx,
+            Err(0) => return None,
+            Err(idx) => idx - 1,
+        };
+        let current = app.ui.config_provider_idx;
+        if clicked_idx == current && !app.ui.model_in_fields {
+            // 再次点击已选中的 Provider（且已在 Provider 层级）：视为确认进入字段编辑
+            return Some(Action::ModelToggleLevel);
+        }
+        return Some(Action::ConfigProviderSelect(clicked_idx));
+    }
+
+    // ── 3. 检测列表项点击 ──
     let list_area = app.ui.config_list_area?;
     if !is_point_in_rect(col, row, list_area) {
         return None;

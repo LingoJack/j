@@ -373,7 +373,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
         // ── 左侧：Provider 列表（可滚动，无右侧边框，靠 padding 分隔）──
         f.render_widget(Clear, h_chunks[0]);
-        let provider_list = model::draw_tab_model_providers(app);
+        let provider_list = model::draw_tab_model_providers(app, h_chunks[0].width);
         let (provider_lines, provider_indices) = provider_list.into_parts();
 
         // Provider 列表滚动：确保选中项可见
@@ -430,6 +430,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         // ── 记录布局信息 ──
         app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
         app.ui.config_list_area = Some(h_chunks[1]);
+        app.ui.config_provider_area = Some(h_chunks[0]);
+        app.ui.config_provider_lines = provider_indices;
         app.ui.config_field_lines = detail_indices;
         app.ui.config_tab_hitboxes = compute_tab_hitboxes();
         return;
@@ -484,6 +486,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     // 所以 Tab 栏的全局 Y = chunks[0].y + 1（top border） + 1（空行）= chunks[0].y + 2
     app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
     app.ui.config_list_area = Some(chunks[1]);
+    app.ui.config_provider_area = None;
+    app.ui.config_provider_lines.clear();
     app.ui.config_field_lines = field_line_indices;
     app.ui.config_tab_hitboxes = compute_tab_hitboxes();
 }

@@ -397,6 +397,18 @@ impl ChatApp {
         }
     }
 
+    /// 配置界面：鼠标点击 Model tab 左侧 Provider 列表选中指定 Provider
+    pub(super) fn update_config_provider_select(&mut self, idx: usize) {
+        let count = self.state.agent_config.providers.len();
+        if idx < count {
+            self.ui.config_provider_idx = idx;
+            // 切换到 Provider 层级（左侧面板聚焦）
+            self.ui.model_in_fields = false;
+            // 重置右侧字段索引
+            self.ui.model_field_idx = 0;
+        }
+    }
+
     pub(super) fn update_toggle_menu_navigate(&mut self, dir: CursorDirection) {
         // Tools tab 使用层级导航
         if self.ui.config_tab == ConfigTab::Tools {

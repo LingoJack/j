@@ -107,6 +107,7 @@ impl ChatApp {
             Action::ConfigSwitchTab(dir) => self.update_config_switch_tab(dir),
             Action::ConfigSwitchTabTo(tab) => self.update_config_switch_tab_to(tab),
             Action::ConfigFieldSelect(idx) => self.update_config_field_select(idx),
+            Action::ConfigProviderSelect(idx) => self.update_config_provider_select(idx),
             Action::ToggleMenuNavigate(dir) => self.update_toggle_menu_navigate(dir),
             Action::ToggleMenuToggle => self.update_toggle_menu_toggle(),
             Action::ToggleMenuEnableAll => self.update_toggle_menu_enable_all(),
