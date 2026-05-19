@@ -145,13 +145,37 @@ pub fn get_result_summary_for_tool(
     // 工具特性化摘要
     match tool_name {
         tool_names::READ => get_read_summary(content, tool_args),
+        tool_names::WRITE => get_write_summary(content, tool_args),
+        tool_names::EDIT => get_edit_summary(content, tool_args),
         tool_names::SHELL => get_bash_summary(content, tool_args),
+        tool_names::GLOB => get_glob_summary(content, tool_args),
+        tool_names::GREP => get_grep_summary(content, tool_args),
+        tool_names::WEB_FETCH => get_web_fetch_summary(content, tool_args),
+        tool_names::WEB_SEARCH => get_web_search_summary(content, tool_args),
+        tool_names::BROWSER => get_browser_summary(content, tool_args),
+        tool_names::ASK => "用户已回答".to_string(),
+        tool_names::TASK_OUTPUT => get_task_output_result_summary(content, tool_args),
         tool_names::TODO_WRITE => get_todo_write_summary(content, tool_args),
         tool_names::TODO_READ => get_todo_read_summary(content),
         tool_names::TASK => get_task_summary(content, tool_args),
         tool_names::AGENT => get_agent_summary(content, tool_args),
         tool_names::TEAMMATE => get_teammate_summary(content, tool_args),
         tool_names::COMPACT => get_compact_summary(content),
+        tool_names::REGISTER_HOOK => "钩子已注册".to_string(),
+        tool_names::LOAD_SKILL => get_load_skill_result_summary(tool_args),
+        tool_names::SEND_MESSAGE => "消息已发送".to_string(),
+        tool_names::WORK_DONE => get_work_done_result_summary(tool_args),
+        tool_names::ENTER_PLAN_MODE | tool_names::EXIT_PLAN_MODE => {
+            get_plan_result_summary(tool_name)
+        }
+        tool_names::ENTER_WORKTREE | tool_names::EXIT_WORKTREE => {
+            get_worktree_result_summary(tool_name)
+        }
+        tool_names::LOAD_TOOL => get_load_tool_result_summary(tool_args),
+        tool_names::SESSION => "会话操作完成".to_string(),
+        tool_names::IGNORE_MESSAGE => "消息已忽略".to_string(),
+        #[cfg(target_os = "macos")]
+        tool_names::COMPUTER_USE => get_computer_use_result_summary(tool_args),
         _ => get_generic_summary(content),
     }
 }
@@ -398,4 +422,291 @@ fn short_path(path: &str, max_len: usize) -> String {
         result = parts.last().unwrap_or(&"").to_string();
     }
     format!("…/{}", result)
+}
+
+/// Write 工具摘要：显示文件路径和字符数
+fn get_write_summary(content: &str, tool_args: Option<&str>) -> String {
+    let file_path = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("path")
+                .and_then(|p| p.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(path) = file_path {
+        let short = short_path(&path, 40);
+        // content 通常是工具的返回信息，如 "文件已写入" 等
+        let first_line = content.lines().next().unwrap_or("");
+        if first_line.is_empty() {
+            format!("写入 {}", short)
+        } else {
+            let truncated: String = first_line.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+            format!("写入 {}: {}", short, truncated)
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// Edit 工具摘要：显示文件路径和编辑结果
+fn get_edit_summary(content: &str, tool_args: Option<&str>) -> String {
+    let file_path = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("path")
+                .and_then(|p| p.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(path) = file_path {
+        let short = short_path(&path, 40);
+        let first_line = content.lines().next().unwrap_or("");
+        if first_line.is_empty() {
+            format!("编辑 {}", short)
+        } else {
+            let truncated: String = first_line.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+            format!("编辑 {}: {}", short, truncated)
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// Glob 工具摘要：显示搜索模式和匹配数量
+fn get_glob_summary(content: &str, tool_args: Option<&str>) -> String {
+    let pattern = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("pattern")
+                .and_then(|p| p.as_str().map(|s| s.to_string()))
+        });
+
+    // 统计匹配的文件数（每行一个文件路径）
+    let match_count = content.lines().filter(|l| !l.trim().is_empty()).count();
+
+    if let Some(pat) = pattern {
+        let short: String = pat.chars().take(30).collect();
+        let suffix = if pat.chars().count() > 30 { "…" } else { "" };
+        format!("{}{} → {} 个匹配", short, suffix, match_count)
+    } else {
+        format!("{} 个匹配", match_count)
+    }
+}
+
+/// Grep 工具摘要：显示搜索模式和匹配数量
+fn get_grep_summary(content: &str, tool_args: Option<&str>) -> String {
+    let pattern = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("pattern")
+                .and_then(|p| p.as_str().map(|s| s.to_string()))
+        });
+
+    let lines = content.lines().count();
+
+    if let Some(pat) = pattern {
+        let short: String = pat.chars().take(30).collect();
+        let suffix = if pat.chars().count() > 30 { "…" } else { "" };
+        if lines > 1 {
+            format!("{}{} → {} 行匹配", short, suffix, lines)
+        } else {
+            format!("{}{}", short, suffix)
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// WebFetch 工具摘要：显示 URL
+fn get_web_fetch_summary(content: &str, tool_args: Option<&str>) -> String {
+    let url = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| v.get("url").and_then(|u| u.as_str().map(|s| s.to_string())));
+
+    let lines = content.lines().count();
+
+    if let Some(u) = url {
+        let short: String = u.chars().take(50).collect();
+        let suffix = if u.chars().count() > 50 { "…" } else { "" };
+        if lines > 1 {
+            format!("{}{} ({} 行)", short, suffix, lines)
+        } else {
+            format!("{}{}", short, suffix)
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// WebSearch 工具摘要：显示搜索关键词和结果数量
+fn get_web_search_summary(content: &str, tool_args: Option<&str>) -> String {
+    let query = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("query")
+                .and_then(|q| q.as_str().map(|s| s.to_string()))
+        });
+
+    // 尝试统计结果数量（通常每条结果包含 URL）
+    let result_count = content.lines().filter(|l| l.contains("http")).count();
+
+    if let Some(q) = query {
+        let short: String = q.chars().take(30).collect();
+        let suffix = if q.chars().count() > 30 { "…" } else { "" };
+        if result_count > 0 {
+            format!("{}{} → {} 条结果", short, suffix, result_count)
+        } else {
+            format!("{}{}", short, suffix)
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// Browser 工具摘要：显示操作和 URL
+fn get_browser_summary(content: &str, tool_args: Option<&str>) -> String {
+    let parsed = tool_args.and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok());
+
+    if let Some(ref v) = parsed {
+        let action = v.get("action").and_then(|a| a.as_str()).unwrap_or("");
+        let url = v.get("url").and_then(|u| u.as_str());
+
+        match action {
+            "open" | "navigate" => {
+                if let Some(u) = url {
+                    let short: String = u.chars().take(40).collect();
+                    let suffix = if u.chars().count() > 40 { "…" } else { "" };
+                    format!("{}: {}{}", action, short, suffix)
+                } else {
+                    format!("{}: {}", action, get_generic_summary(content))
+                }
+            }
+            "screenshot" | "snapshot" | "content" => {
+                let first_line = content.lines().next().unwrap_or("");
+                if first_line.is_empty() {
+                    action.to_string()
+                } else {
+                    let truncated: String =
+                        first_line.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+                    format!("{}: {}", action, truncated)
+                }
+            }
+            _ => {
+                let first_line = content.lines().next().unwrap_or("");
+                if first_line.is_empty() {
+                    action.to_string()
+                } else {
+                    let truncated: String =
+                        first_line.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+                    truncated
+                }
+            }
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// TaskOutput 工具摘要：显示 task_id
+fn get_task_output_result_summary(content: &str, tool_args: Option<&str>) -> String {
+    let task_id = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("task_id")
+                .and_then(|t| t.as_str().map(|s| s.to_string()))
+        });
+
+    let first_line = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+
+    if let Some(id) = task_id {
+        if first_line.is_empty() {
+            format!("获取任务 {} 输出", id)
+        } else {
+            let truncated: String = first_line.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+            format!("任务 {}: {}", id, truncated)
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// LoadSkill 工具摘要：显示技能名
+fn get_load_skill_result_summary(tool_args: Option<&str>) -> String {
+    let name = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("name")
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(n) = name {
+        format!("技能已加载: {}", n)
+    } else {
+        "技能已加载".to_string()
+    }
+}
+
+/// WorkDone 工具摘要：显示摘要信息
+fn get_work_done_result_summary(tool_args: Option<&str>) -> String {
+    tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("summary")
+                .and_then(|s| s.as_str().map(|s| s.to_string()))
+        })
+        .map(|s| {
+            let truncated: String = s.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+            format!("完成: {}", truncated)
+        })
+        .unwrap_or_else(|| "工作完成".to_string())
+}
+
+/// Plan 工具摘要：进入/退出计划模式
+fn get_plan_result_summary(tool_name: &str) -> String {
+    if tool_name == tool_names::ENTER_PLAN_MODE {
+        "进入计划模式".to_string()
+    } else {
+        "退出计划模式".to_string()
+    }
+}
+
+/// Worktree 工具摘要：进入/退出工作树
+fn get_worktree_result_summary(tool_name: &str) -> String {
+    if tool_name == tool_names::ENTER_WORKTREE {
+        "进入工作树".to_string()
+    } else {
+        "退出工作树".to_string()
+    }
+}
+
+/// LoadTool 工具摘要：显示工具名
+fn get_load_tool_result_summary(tool_args: Option<&str>) -> String {
+    let name = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("name")
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(n) = name {
+        format!("工具已加载: {}", n)
+    } else {
+        "工具已加载".to_string()
+    }
+}
+
+/// ComputerUse 工具摘要：显示操作类型
+#[cfg(target_os = "macos")]
+fn get_computer_use_result_summary(tool_args: Option<&str>) -> String {
+    let action = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("action")
+                .and_then(|a| a.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(a) = action {
+        format!("计算机操作: {}", a)
+    } else {
+        "计算机操作完成".to_string()
+    }
 }

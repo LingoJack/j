@@ -490,6 +490,19 @@ pub(crate) fn extract_tool_description_from_args(
             .and_then(|v| v.as_str())
             .map(|s| format!("计算机操作: {}", s)),
 
+        // ── LoadTool ──
+        tool_names::LOAD_TOOL => parsed
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("加载工具: {}", s)),
+
+        // ── Session ──
+        tool_names::SESSION => parsed
+            .get("action")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("会话: {}", s))
+            .or_else(|| Some("会话操作".to_string())),
+
         _ => None,
     }
 }
