@@ -1709,60 +1709,24 @@ hook.rs         storage.rs
     <p class="ch-sub">把高度模板化的代码交给确定性生成器，LLM 只做需求理解和增量集成。jen 处理数据层，webapp-gen 驱动全栈工作流。</p>
   </section>
 
-  <!-- ============ §5.0 模板代码生成引擎：核心观察 ============ -->
-  <section class="slide" data-title="Template Engine · observation">
+  <!-- ============ §5.1 问题 ============ -->
+  <section class="slide" data-title="Template Engine · problem">
     <div class="title-bar">
-      <h2>05 · 模板代码生成引擎 — 核心观察
+      <h2>05 · 模板代码生成引擎 — 问题
     </div>
     <div class="split s55">
-      <div class="col-text">
-        <h4 style="margin-top:0">观察 · DDL 是数据层代码的<strong>充分输入</strong></h4>
-        <p>DAO 层和 Model 层的代码对<strong>业务的可操作独立发挥空间有限</strong>。只要知道 DDL，就可以推断出：</p>
+      <div class="col-text" style="justify-content:center">
+        <h4 style="margin-top:0;color:var(--bad)">让 LLM 写模板代码的代价</h4>
+        <p>业务系统中存在大量<strong>高度模板化</strong>的代码——PO / DTO / VO / DAO、CRUD 方法、列表查询。它们<strong>占比高</strong>，但<strong>业务含量有限</strong>。让 LLM 逐字生成，会怎样？</p>
+        <h4 style="margin-top:16px">51 张表 DAO 生成实测（论文 §7.4）</h4>
         <ul style="line-height:1.8">
-          <li><strong>索引情况</strong> · 主键 → GetByPK，唯一索引 → GetByUK，普通索引 → GetByIdx</li>
-          <li><strong>字段名 & 类型映射</strong> · MySQL bigint → Go int64，varchar → string，可空 → *指针</li>
-          <li><strong>可能的查询场景</strong> · 索引组合决定查询方法集，CRUD 是通用骨架</li>
-          <li><strong>数据结构定义</strong> · PO / DTO / VO 的字段完全由 schema 列决定</li>
+          <li><strong>11 个字段遗漏</strong> · 247 / 258，字段一致性仅 95.7%</li>
+          <li><strong>4 个索引方法缺失</strong> · 22 / 26，写到第 30 张表时已忘了第 5 张的唯一索引</li>
+          <li><strong>24M token · 53 min</strong> · LLM 调用 582 次，工具调用 2,006 次</li>
+          <li><strong>67 次上下文压缩</strong> · 长链路推理撑爆上下文窗口</li>
         </ul>
-        <h4>推论</h4>
-        <p>既然 DDL 是充分输入，这些代码<strong>不需要 LLM 推理</strong>——交给确定性生成器即可。LLM 只负责需求理解 + 准备 schema + 验收产物。</p>
-        <p class="note">右侧：一份 DDL 如何推导出 Model struct + DAO 方法集 —— 一目了然。</p>
-      </div>
-      <div class="col-visual">
-        <div class="fig-shot" style="display:flex;flex-direction:column;overflow:hidden">
-          <img src="pics/jen_code.png" alt="DDL 推导 Model + DAO 对应关系" style="flex:1;min-height:0;object-fit:contain;object-position:center top;border-radius:4px;border:1px solid var(--border)">
-          <div class="shot-caption">DDL → Model struct（字段名、类型映射） + DAO 方法集（按索引派生查询）</div>
-        </div>
-      </div>
-    </div>
-    <aside class="notes">
-      <p>第五章讲<strong>模板代码生成引擎</strong>。先说一个核心观察。</p>
-      <p>大家看右边这张图。左边是一份 SQL 的 CREATE TABLE 语句——有字段定义、主键、唯一索引、普通索引。右边是对应生成的 Go 代码：上面是 Model struct（PO），下面是 DAO 层的查询方法。</p>
-      <p>你会发现——<strong>从左边到右边，几乎不需要任何"创造性决策"</strong>。字段名直接映射，类型有固定对应关系（bigint → int64，varchar → string），索引类型决定了该生成什么查询方法（主键 → GetByPK，唯一索引 → GetByUK，普通索引 → GetByIdx）。业务逻辑对这些代码的<strong>可操作独立发挥空间非常有限</strong>。</p>
-      <p>换句话说，<strong>DDL 是数据层代码的充分输入</strong>——只要拿到 DDL，就可以确定性地推导出 Model 和 DAO 的全部代码。</p>
-      <p>既然如此，这些代码<strong>不需要 LLM 来逐字推理</strong>。LLM 写这些代码反而容易出问题——51 张表实测，LLM 漏了 11 个字段、4 个索引方法，烧了 24M token、跑了 53 分钟。我们把这部分确定性代码交给自研的模板生成器 jen，LLM 只负责需求理解 + 准备 schema + 验收产物。</p>
-      <p>下一页看 LLM 直接生成 vs jen 的实测对比。</p>
-    </aside>
-  </section>
-
-  <!-- ============ §5.1 模板代码生成引擎：为什么需要它 ============ -->
-  <section class="slide" data-title="Template Engine · why">
-    <div class="title-bar">
-      <h2>05 · 模板代码生成引擎 — 确定性代码的模板化生成
-    </div>
-    <div class="split s55">
-      <div class="col-text">
-        <h4 style="margin-top:0">what · 目标</h4>
-        <p>把高度<strong>模板化、不侵入业务</strong>的代码——例如 PO/DTO/VO/DAO、CRUD 方法、列表查询——交给<strong>确定性生成器</strong>，而不是让 LLM 现场逐字写。</p>
-        <h4>Why · 为什么这件事值得做</h4>
-        <ul>
-          <li><strong>占比高</strong>：业务系统中模板代码常占大部分</li>
-          <li><strong>规则强</strong>：字段名、类型映射、CRUD 方法签名几乎可推导</li>
-          <li><strong>易出错</strong>：LLM 写时容易字段漂移、类型错、方法名不一致</li>
-          <li><strong>耗 token</strong>：51 张表用 LLM 直生 ≈ 24M token / 53 min（论文 §7.4）</li>
-        </ul>
-        <h4>How · 两层落地</h4>
-        <p><strong>① jen</strong>：自研 SQL parser + Go template，把 SQL → PO/DTO/VO/DAO/Tool。<br><strong>② webapp-gen</strong>：脚手架 + 原型驱动工作流，把"项目骨架"模板化。<br>两者都<strong>封装为 Skill</strong>——按需加载、不污染上下文。</p>
+        <h4 style="margin-top:16px">本质</h4>
+        <p>这不是随机错误，是<strong>长链路推理的系统性风险</strong>——LLM 是概率模型，每一步都有漂移可能；模板代码字段多、重复度高，累积误差不可避免。</p>
       </div>
       <div class="col-visual">
         <div class="fig" data-fig="图 · 模板化生成 vs LLM 现场生成">
@@ -1810,15 +1774,50 @@ hook.rs         storage.rs
       </div>
     </div>
     <aside class="notes">
-      <p>上一页讲完核心观察——DDL 是数据层代码的充分输入。这一页看<strong>两条路径的对比</strong>。</p>
-      <p>上面是 LLM 直接生成——SQL 进去，LLM 逐字推理，出来 PO/DTO/VO/DAO。问题：字段漂移、token 高、慢。51 张表烧了 24M token、跑了 53 分钟。</p>
-      <p>下面是模板化生成——SQL 进去，自研 parser 解析，模板渲染，直接出代码。100% 字段对齐、token 只要 1/50、27 倍加速。</p>
-      <p>关键差异在于：LLM 是概率模型，每一步都有漂移风险；模板是确定性的，schema 是唯一事实源，字段不可能遗漏。</p>
-      <p>下一页详细讲 jen 的架构。</p>
+      <p>第五章讲<strong>模板代码生成引擎</strong>。先说问题。</p>
+      <p>业务系统里有大量高度模板化的代码——PO/DTO/VO/DAO、CRUD 方法、列表查询。它们占比高，但业务含量有限。让 LLM 逐字生成会怎样？</p>
+      <p>51 张表的 DAO 生成实测：LLM 漏了 11 个字段、4 个索引方法，烧了 24M token、跑了 53 分钟，触发了 67 次压缩。写到第 30 张表时，Agent 已经忘了第 5 张表的唯一索引。</p>
+      <p>右边是两条路径的对比。上面是 LLM 直接生成——字段漂移、token 高、慢。下面是模板化生成——100% 字段对齐、token 只要 1/50、27 倍加速。关键差异：LLM 是概率模型，每一步都有漂移风险；模板是确定性的，schema 是唯一事实源。</p>
+      <p>但问题来了——为什么我们确信模板化可以覆盖这些代码？下一页讲核心观察。</p>
     </aside>
   </section>
 
-  <!-- ============ §5.2 jen 架构 ============ -->
+  <!-- ============ §5.2 核心观察 ============ -->
+  <section class="slide" data-title="Template Engine · observation">
+    <div class="title-bar">
+      <h2>05 · 模板代码生成引擎 — 核心观察
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">观察 · DDL 是数据层代码的<strong>充分输入</strong></h4>
+        <p>DAO 层和 Model 层的代码对<strong>业务的可操作独立发挥空间有限</strong>。只要拿到 DDL，就可以推断出：</p>
+        <ul style="line-height:1.8">
+          <li><strong>索引情况</strong> · 主键 → GetByPK，唯一索引 → GetByUK，普通索引 → GetByIdx</li>
+          <li><strong>字段名 & 类型映射</strong> · MySQL bigint → Go int64，varchar → string，可空 → 指针</li>
+          <li><strong>查询场景</strong> · 索引组合决定查询方法集，CRUD 是通用骨架</li>
+          <li><strong>数据结构</strong> · PO / DTO / VO 的字段完全由 schema 列决定</li>
+        </ul>
+        <h4>推论</h4>
+        <p>既然 DDL 是充分输入，这些代码<strong>不需要 LLM 推理</strong>——交给确定性生成器（jen），封装为 Skill 按需加载。LLM 只负责需求理解 + 准备 schema + 验收产物。</p>
+        <p class="note">右侧：一份 DDL 如何推导出 Model struct + DAO 方法集。</p>
+      </div>
+      <div class="col-visual">
+        <div class="fig-shot" style="display:flex;flex-direction:column;overflow:hidden">
+          <img src="pics/jen_code.png" alt="DDL 推导 Model + DAO 对应关系" style="flex:1;min-height:0;object-fit:contain;object-position:center top;border-radius:4px;border:1px solid var(--border)">
+          <div class="shot-caption">DDL → Model struct（字段名、类型映射） + DAO 方法集（按索引派生查询）</div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>上一页讲了问题——让 LLM 直写模板代码代价很高。这一页回答：为什么我们确信模板化可行？</p>
+      <p>大家看右边这张图。左边是一份 SQL 的 CREATE TABLE 语句——有字段定义、主键、唯一索引、普通索引。右边是对应生成的 Go 代码：上面是 Model struct（PO），下面是 DAO 层的查询方法。</p>
+      <p>你会发现——<strong>从左边到右边，几乎不需要任何"创造性决策"</strong>。字段名直接映射，类型有固定对应关系，索引类型决定了该生成什么查询方法。业务逻辑对这些代码的<strong>可操作独立发挥空间非常有限</strong>。</p>
+      <p>换句话说，<strong>DDL 是数据层代码的充分输入</strong>。既然如此，这些代码不需要 LLM 来逐字推理。我们把它交给确定性生成器 jen，封装为 Skill 按需加载。</p>
+      <p>下一页看 jen 的架构设计。</p>
+    </aside>
+  </section>
+
+  <!-- ============ §5.3 jen 架构 ============ -->
   <section class="slide" data-title="jen Architecture">
     <div class="title-bar">
       <h2>05 · 模板代码生成引擎 — jen 架构
@@ -1895,7 +1894,7 @@ hook.rs         storage.rs
     </aside>
   </section>
 
-  <!-- ============ §5.3 jen 实测对比 ============ -->
+  <!-- ============ §5.4 jen 实测对比 ============ -->
   <section class="slide" data-title="jen Benchmark">
     <div class="title-bar">
       <h2>05 · 模板代码生成引擎 — jen 实测对比
@@ -1904,10 +1903,10 @@ hook.rs         storage.rs
       <div class="col-text" style="gap:12px">
         <h4 style="margin-top:0;margin-bottom:2px">验证方式</h4>
         <p>51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
-        <h4 style="margin-bottom:2px">关键发现 · 不只是"更快"</h4>
-        <p>两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已撑爆。</p>
+        <h4 style="margin-bottom:2px">关键发现 · 速度上更快，且代码质量更高</h4>
+        <p>两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已频繁处在较高水位。</p>
         <h4 style="margin-bottom:2px">字段漂移 · 系统性风险</h4>
-        <p>11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除漂移。</p>
+        <p>11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除这类代码生成中可能的漂移。</p>
         <h4 style="margin-bottom:2px">结论</h4>
         <p>确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
       </div>
@@ -1947,7 +1946,7 @@ hook.rs         storage.rs
     </aside>
   </section>
 
-  <!-- ============ §5.4 webapp-gen 完整工作流 ============ -->
+  <!-- ============ §5.5 webapp-gen 完整工作流 ============ -->
   <section class="slide" data-title="webapp-gen Flow">
     <div class="title-bar">
       <h2>05 · 模板代码生成引擎 — webapp-gen 全栈工作流
@@ -1955,7 +1954,7 @@ hook.rs         storage.rs
     <div class="split s55">
       <div class="col-text" style="justify-content:center">
         <h4 style="margin-top:0">设计思路</h4>
-        <p>不是"AI 一次性写完一个 App"，而是一条<strong>11 步固化工作流</strong>。把 AI 不擅长的部分交给模板，AI 只做需求理解、契约定义、增量集成。</p>
+        <p>不是"AI 一次性写完一个 App"，而是一条<strong>11 步固化工作流</strong>。把大模型不擅长的部分交给模板，专注需求理解、契约定义、业务逻辑、增量集成。</p>
         <h4>三个关键设计</h4>
         <ul style="line-height:1.8;padding-left:16px">
           <li><strong>脚手架前置</strong> · 模板保证结构完整性，避免 AI 从零搭建框架</li>
