@@ -57,50 +57,50 @@
       <h2>01 · 项目与背景 — jcli · AI 终端工作站
     </div>
     <div class="split s55">
-      <div class="col-text">
-        <h4 style="margin-top:0"><span class="accent">jcli</span> · 主项目 · Rust · 5.2 万行</h4>
-        <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-2)">本次毕设的核心载体。多模型终端 Agent，包含<strong>上下文治理</strong>（分级压缩 + 优先级窗口 + 动态 System Prompt）、<strong>面向场景强化的工具</strong>（Plan / Edit / 执行三态 / system-reminder）、<strong>多 Agent 协作</strong>（Teammate + SubAgent + SendMessage Gate），以及 Skill / Hook 工程化扩展机制。</p>
+      <div class="col-text" style="overflow:hidden">
+        <h4 style="margin-top:0;margin-bottom:2px"><span class="accent">jcli</span> · 主项目 · Rust · 5.2 万行</h4>
+        <p style="margin:0 0 2px;font-size:13px;line-height:1.6;color:var(--text-2)">多模型终端 Agent。包含<strong>上下文治理</strong>（分级压缩 + 优先级窗口 + 动态 System Prompt）、<strong>面向场景强化的工具</strong>（Plan / Edit / 执行三态 / system-reminder）、<strong>多 Agent 协作</strong>（Teammate + SubAgent），以及 Skill / Hook 工程化扩展机制。</p>
         <ul class="repo-list">
           <li>
             <div class="rl-row"><span class="rl-label">jcli · 主项目</span><span class="rl-url">github.com/LingoJack/jcli</span></div>
           </li>
         </ul>
 
-        <h4><span class="accent">jen</span> · 模板代码引擎 · Go · model_infrax</h4>
-        <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-2)">自研 SQL parser + Go template，将 SQL schema 确定性生成 PO/DTO/VO/DAO 全套原子方法。按主键 / 唯一索引 / 普通索引分别派生查询方法，从根本上消除 LLM 长链路推理中的字段漂移。封装为 Skill，按需加载。</p>
+        <h4 style="margin-bottom:2px"><span class="accent">jen</span> · 模板代码引擎 · Go · model_infrax</h4>
+        <p style="margin:0 0 2px;font-size:13px;line-height:1.6;color:var(--text-2)">自研 SQL parser + Go template，将 SQL schema 确定性生成 PO/DTO/VO/DAO 全套方法。按主键 / 唯一索引 / 普通索引分别派生查询方法，消除 LLM 长链路推理中的字段漂移。封装为 Skill，按需加载。</p>
         <ul class="repo-list">
           <li>
             <div class="rl-row"><span class="rl-label">jen · 模板代码引擎</span><span class="rl-url">github.com/LingoJack/model_infrax</span></div>
           </li>
         </ul>
 
-        <h4><span class="accent">artifact_demo</span> · 端到端验证制品</h4>
-        <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-2)">用 jcli 配合 webapp-gen 和 jen 两个 skill 从零生成的电商 Web App（React + Go + GORM + Podman），三环境矩阵验收全部通过，作为整套工具链的端到端可行性验证。</p>
+        <h4 style="margin-bottom:2px"><span class="accent">artifact_demo</span> · 端到端验证制品</h4>
+        <p style="margin:0 0 2px;font-size:13px;line-height:1.6;color:var(--text-2)">用 jcli 配合 webapp-gen 和 jen 从零生成的电商 Web App（React + Go + GORM + Podman），三环境矩阵验收全部通过。</p>
         <ul class="repo-list">
           <li>
             <div class="rl-row"><span class="rl-label">artifact_demo · 验证制品</span><span class="rl-url">github.com/LingoJack/gradiation_artifact_demo</span></div>
           </li>
         </ul>
 
-        <p class="note" style="margin-top:auto">三个仓库均开源 · MIT License · 右图可点击跳转</p>
+        <p class="note" style="margin-top:auto">三个仓库均已开源 · MIT License</p>
       </div>
       <div class="col-visual">
         <div class="stack-figs">
-          <a class="sf sf-3" href="https://github.com/LingoJack/gradiation_artifact_demo" target="_blank" rel="noopener">
+          <a class="sf sf-3" style="width:68%;top:40%" href="https://github.com/LingoJack/gradiation_artifact_demo" target="_blank" rel="noopener">
             <img src="pics/jcli-demo.png" alt="效果演示仓库">
             <div class="caption">
               <span class="name">artifact_demo · 端到端验证制品</span>
               <span class="url">github.com/LingoJack/gradiation_artifact_demo</span>
             </div>
           </a>
-          <a class="sf sf-2" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
+          <a class="sf sf-2" style="width:68%;top:18%" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
             <img src="pics/github-model-infrax.png" alt="model_infrax 仓库">
             <div class="caption">
               <span class="name">model_infrax · 模板代码引擎</span>
               <span class="url">github.com/LingoJack/model_infrax</span>
             </div>
           </a>
-          <a class="sf sf-1" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
+          <a class="sf sf-1" style="width:68%" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
             <img src="pics/github-jcli.png" alt="jcli 仓库">
             <div class="caption">
               <span class="name">jcli · 主项目仓库</span>
@@ -732,14 +732,14 @@ hook.rs         storage.rs
       <h2>02 · 上下文治理与状态感知 — 分级压缩与豁免机制
     </div>
     <div class="split s55">
-      <div class="col-text">
-        <h4 style="margin-top:0">Micro 压缩 · 快速替换</h4>
-        <p>将相对久远的工具调用结果<strong>替换为占位符</strong>，仅保留"调用了什么"而丢弃具体内容。速度快、token 释放量大，适合窗口接近上限时紧急腾空间。</p>
-        <h4>Auto 压缩 · 深度摘要</h4>
-        <p>调用 LLM 将整个对话历史总结为精简摘要，然后<strong>清空窗口 + 写入摘要</strong>。成本较高但压缩彻底，适合 Agent 已运行很久需要"大扫除"的场景。</p>
-        <h4>豁免机制 · 保护关键信息</h4>
-        <p>无论 micro 还是 auto，以下消息<strong>不被压缩</strong>：</p>
-        <ul>
+      <div class="col-text" style="overflow:hidden">
+        <h4 style="margin-top:0;margin-bottom:2px">Micro 压缩 · 快速替换</h4>
+        <p style="margin-bottom:2px">将久远的工具调用结果<strong>替换为占位符</strong>，仅保留"调用了什么"而丢弃内容。速度快、token 释放量大，适合窗口接近上限时紧急腾空间。</p>
+        <h4 style="margin-bottom:2px">Auto 压缩 · 深度摘要</h4>
+        <p style="margin-bottom:2px">调用 LLM 将对话历史总结为精简摘要，然后<strong>清空窗口 + 写入摘要</strong>。成本较高但压缩彻底，适合 Agent 运行很久需要"大扫除"的场景。</p>
+        <h4 style="margin-bottom:2px">豁免机制 · 保护关键信息</h4>
+        <p style="margin-bottom:2px">无论 micro 还是 auto，以下消息<strong>不被压缩</strong>：</p>
+        <ul style="line-height:1.5;margin:0;padding-left:18px">
           <li>用户消息 · 需求源头</li>
           <li>Agent 纯文本回复 · 决策记录</li>
           <li>TodoWrite / Plan / Skill · 方向性信息</li>
@@ -1684,17 +1684,17 @@ hook.rs         storage.rs
       <h2>04 · 多 Agent 协作 — SubAgent：低上下文成本的调研委派
     </div>
     <div class="split s55">
-      <div class="col-text">
-        <h4 style="margin-top:0">上下文隔离</h4>
-        <p>独立消息窗口，不继承父 Agent 历史。SubAgent 以 <code>prompt</code> 为唯一起点，在自己的窗口里 Read / Grep / WebFetch。</p>
-        <h4>工具隔离</h4>
-        <p>独立 <code>ToolRegistry</code>，排除 <code>Teammate</code> / <code>Agent</code> 工具（防递归）。可选 <code>worktree</code> 创建独立 git 工作树。</p>
-        <h4>结果回灌</h4>
-        <p>执行完毕后，仅回灌精简摘要到主 Agent：</p>
-        <ul>
+      <div class="col-text" style="overflow:hidden">
+        <h4 style="margin-top:0;margin-bottom:2px">上下文隔离</h4>
+        <p style="margin-bottom:2px">独立消息窗口，不继承父 Agent 历史。以 <code>prompt</code> 为唯一起点，在独立窗口里 Read / Grep / WebFetch。</p>
+        <h4 style="margin-bottom:2px">工具隔离</h4>
+        <p style="margin-bottom:2px">独立 <code>ToolRegistry</code>，排除 <code>Teammate</code> / <code>Agent</code> 工具（防递归）。可选 <code>worktree</code> 创建独立 git 工作树。</p>
+        <h4 style="margin-bottom:2px">结果回灌</h4>
+        <p style="margin-bottom:2px">执行完毕后，仅回灌精简摘要到主 Agent：</p>
+        <ul style="line-height:1.5;margin:0;padding-left:18px">
           <li><code>display</code> — clean text + sender_name</li>
-          <li><code>context</code> — XML-wrapped <code>&lt;SubAgent@Name&gt;摘要&lt;/SubAgent@Name&gt;</code></li>
-          <li>工具结果<strong>不推入</strong> context（token 占用高、价值低）</li>
+          <li><code>context</code> — <code>&lt;SubAgent@Name&gt;摘要&lt;/SubAgent@Name&gt;</code></li>
+          <li>工具结果<strong>不推入</strong> context（token 高、价值低）</li>
         </ul>
       </div>
       <div class="col-visual">
@@ -1941,13 +1941,13 @@ hook.rs         storage.rs
       <h2>05 · 模板代码生成引擎 — jen 实测对比
     </div>
     <div class="split s55">
-      <div class="col-text" style="gap:12px">
+       <div class="col-text" style="overflow:hidden">
         <h4 style="margin-top:0;margin-bottom:2px">验证方式</h4>
-        <p>51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
-        <h4 style="margin-bottom:2px">关键发现 · 速度上更快，且代码质量更高</h4>
-        <p>两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已频繁处在较高水位。</p>
+        <p style="margin-bottom:2px">51 张表 DAO 全生成。同一份 schema.sql，对照：<strong>①</strong> Agent 逐文件写；<strong>②</strong> Agent 加载 jen Skill，调 jen + 验收。</p>
+        <h4 style="margin-bottom:2px">速度更快，代码质量更高</h4>
+        <p style="margin-bottom:2px">两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为负担</strong>。67 次 compact 说明上下文已频繁高水位。</p>
         <h4 style="margin-bottom:2px">字段漂移 · 系统性风险</h4>
-        <p>11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除这类代码生成中可能的漂移。</p>
+        <p style="margin-bottom:2px">11 个字段遗漏、4 个索引方法缺失——写到第 30 张表时 Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本消除漂移。</p>
         <h4 style="margin-bottom:2px">结论</h4>
         <p>确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
       </div>
