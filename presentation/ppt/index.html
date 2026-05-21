@@ -850,26 +850,26 @@ hook.rs         storage.rs
         <p class="note" style="margin-top:4px">软提醒，不强打断——Agent 在下一轮推理时自然看到，可暂时忽略处理更紧急的事。</p>
       </div>
       <div class="col-visual">
-        <div class="arch" style="margin-top:0;width:100%">
-          <div class="tier"><div class="tname">静态基础</div>
-            <div class="cells"><div class="cell"><h4>项目规范</h4><p>AGENTS.md</p></div>
-              <div class="cell"><h4>工具定义</h4><p>Tool Schema</p></div>
-              <div class="cell"><h4>环境信息</h4><p>OS / Shell</p></div>
-              <div class="cell"><h4>Skill</h4><p>按需加载</p></div>
+        <div class="arch" style="margin-top:0;width:100%;gap:8px;font-size:13px">
+          <div class="tier" style="gap:8px"><div class="tname" style="padding:8px;font-size:11px">静态基础</div>
+            <div class="cells" style="gap:6px"><div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">项目规范</h4><p style="font-size:11px;margin:0">AGENTS.md</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">工具定义</h4><p style="font-size:11px;margin:0">Tool Schema</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">环境信息</h4><p style="font-size:11px;margin:0">OS / Shell</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">Skill</h4><p style="font-size:11px;margin:0">按需加载</p></div>
             </div>
           </div>
-          <div class="tier hl"><div class="tname">Layer 1 · System Prompt 占位符</div>
-            <div class="cells"><div class="cell"><h4>后台任务</h4><p>Task / BackgroundJob</p></div>
-              <div class="cell"><h4>Teammate</h4><p>协作队友状态</p></div>
-              <div class="cell"><h4>TODO</h4><p>过期未更新提醒</p></div>
-              <div class="cell"><h4>Session</h4><p>交互式任务</p></div>
+          <div class="tier hl" style="gap:8px"><div class="tname" style="padding:8px;font-size:11px">Layer 1 · System Prompt 占位符</div>
+            <div class="cells" style="gap:6px"><div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">后台任务</h4><p style="font-size:11px;margin:0">Task / BackgroundJob</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">Teammate</h4><p style="font-size:11px;margin:0">协作队友状态</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">TODO</h4><p style="font-size:11px;margin:0">过期未更新提醒</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">Session</h4><p style="font-size:11px;margin:0">交互式任务</p></div>
             </div>
           </div>
-          <div class="tier" style="border-top:2px solid var(--accent);background:#fdfcf8"><div class="tname" style="color:var(--accent)">Layer 2 · system-reminder 消息</div>
-            <div class="cells"><div class="cell"><h4>任务完成</h4><p>background_task_completed</p></div>
-              <div class="cell"><h4>TODO 过期</h4><p>todo_reminder</p></div>
-              <div class="cell"><h4>队友消息</h4><p>teammate 新消息</p></div>
-              <div class="cell"><h4>Skill 重新注入</h4><p>invoked_skills</p></div>
+          <div class="tier" style="border-top:2px solid var(--accent);background:#fdfcf8;gap:8px"><div class="tname" style="color:var(--accent);padding:8px;font-size:11px">Layer 2 · system-reminder 消息</div>
+            <div class="cells" style="gap:6px"><div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">任务完成</h4><p style="font-size:11px;margin:0">background_task_completed</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">TODO 过期</h4><p style="font-size:11px;margin:0">todo_reminder</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">队友消息</h4><p style="font-size:11px;margin:0">teammate 新消息</p></div>
+              <div class="cell" style="padding:10px 8px"><h4 style="font-size:13px;margin:0 0 2px">Skill 重新注入</h4><p style="font-size:11px;margin:0">invoked_skills</p></div>
             </div>
           </div>
         </div>
@@ -1055,7 +1055,7 @@ hook.rs         storage.rs
       <h2>03 · 面向场景强化的工具 — 清空窗口按计划执行
     </div>
     <div class="split s55">
-      <div class="col-text" style="gap:4px">
+      <div class="col-text" style="gap:4px;overflow:hidden;display:flex;flex-direction:column">
         <p class="lead" style="font-size:18px">窗口从 65% <span class="accent">回到 12%</span>：调研产生的 30+ 工具结果全部丢弃。</p>
         <ul style="line-height:1.7;margin:0">
           <li>Agent 重新启动，上下文只含 plan.md</li>
@@ -1214,7 +1214,7 @@ hook.rs         storage.rs
       <div class="col-visual">
         <div class="fig" data-fig="图 · 执行三态：横轴时间，纵向三泳道，虚线箭头为自动流转">
           <h4 style="font-size:14px;font-weight:600;color:var(--text-1);margin:0 0 8px;letter-spacing:.02em">运行时自动流转</h4>
-          <svg viewBox="0 0 400 280" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+          <svg viewBox="0 0 420 270" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
             <defs>
               <marker id="ah-e1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
@@ -1236,13 +1236,12 @@ hook.rs         storage.rs
             <line x1="278" y1="45" x2="296" y2="45" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
             <rect x="296" y="34" width="80" height="22" fill="#f3faf5" stroke="#1e5e3a" stroke-width="1.2"/>
             <text x="336" y="49" text-anchor="middle" fill="#1e5e3a">stdout/err</text>
-            <text x="144" y="75" text-anchor="middle" fill="#6b7a8f" font-size="9">快命令：阻塞等完返回</text>
+            <text x="200" y="75" text-anchor="middle" fill="#6b7a8f" font-size="9">快命令：阻塞等完返回</text>
 
             <!-- Auto-promote -->
             <path d="M224,56 Q224,96 224,130" stroke="#7a5b00" stroke-width="1.4" stroke-dasharray="3,2" fill="none" marker-end="url(#ah-e2)"/>
             <text x="248" y="87" fill="#7a5b00" font-size="9">&gt; 30s</text>
-            <text x="248" y="99" fill="#7a5b00" font-size="9">adopt_process</text>
-            <text x="248" y="111" fill="#7a5b00" font-size="9">(不 kill)</text>
+            <text x="248" y="99" fill="#7a5b00" font-size="9">auto → bg</text>
 
             <!-- Lane 2: Background -->
             <text x="6" y="144" font-weight="600" fill="#0d1b2a" font-size="11">Background</text>
@@ -1261,15 +1260,15 @@ hook.rs         storage.rs
             <rect x="98" y="182" width="76" height="22" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
             <text x="136" y="197" text-anchor="middle">PTY → sid</text>
             <line x1="174" y1="193" x2="190" y2="193" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
-            <rect x="190" y="182" width="130" height="22" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.2"/>
-            <text x="255" y="197" text-anchor="middle" fill="#7a5b00">stdin ⇄ stdout · loop</text>
-            <line x1="320" y1="193" x2="334" y2="193" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
-            <rect x="334" y="182" width="42" height="22" fill="#fdf6f6" stroke="#7a1f1f" stroke-width="1.2"/>
-            <text x="355" y="197" text-anchor="middle" fill="#7a1f1f">quit</text>
-            <text x="255" y="220" text-anchor="middle" fill="#6b7a8f" font-size="9">portable_pty · drop writer → SIGHUP</text>
+            <rect x="190" y="182" width="120" height="22" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.2"/>
+            <text x="250" y="197" text-anchor="middle" fill="#7a5b00">stdin ⇄ stdout</text>
+            <line x1="310" y1="193" x2="324" y2="193" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
+            <rect x="324" y="182" width="42" height="22" fill="#fdf6f6" stroke="#7a1f1f" stroke-width="1.2"/>
+            <text x="345" y="197" text-anchor="middle" fill="#7a1f1f">quit</text>
+            <text x="250" y="220" text-anchor="middle" fill="#6b7a8f" font-size="9">portable_pty · drop writer → SIGHUP</text>
 
-            <line x1="10" y1="234" x2="390" y2="234" stroke="#e5e9f2" stroke-width="0.8"/>
-            <text x="10" y="250" fill="#6b7a8f" font-size="9">— 实线 · 显式调用    - - 虚线 · 自动流转    constants: DEFAULT_TIMEOUT=120 · AUTO_BG=30 · INTERACTIVE_SILENCE</text>
+            <line x1="10" y1="234" x2="410" y2="234" stroke="#e5e9f2" stroke-width="0.8"/>
+            <text x="10" y="250" fill="#6b7a8f" font-size="8.5">— 实线：显式调用　- - 虚线：自动流转　DEFAULT_TIMEOUT=120s · AUTO_BG=30s</text>
           </svg>
         </div>
       </div>
