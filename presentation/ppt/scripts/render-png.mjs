@@ -12,10 +12,12 @@ const OUT_DIR   = process.argv[3] || path.join(PPT_DIR, 'ppt-png');
 
 const fileUrl = 'file://' + path.resolve(HTML_PATH);
 
-// 16:9 — render at html-ppt design size 1920x1080 with 1.33x DPI for sharp 2560x1440 output
-// This matches the html-ppt skill's render.sh which uses --window-size=1920,1080
-const W = 1920, H = 1080;
-const SCALE = 4/3;
+// 16:9 — use a smaller CSS viewport so content fills the frame like it does in
+// a real browser (macOS Retina default viewport ≈ 1440-1470 CSS px wide).
+// deviceScaleFactor is increased proportionally so the output PNG is still
+// high-resolution (≈ 2880 x 1620, > 1080p).
+const W = 1440, H = 810;
+const SCALE = 2;
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
