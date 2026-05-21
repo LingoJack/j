@@ -8,10 +8,10 @@
     - 截图素材：presentation/ppt/pics/
     - 自定义样式：presentation/ppt/style.css
 
-  幻灯片结构（27 张内容页 + Cover/Thanks）：
+  幻灯片结构（28 张内容页 + Cover/Thanks）：
     §01 项目与背景（9 页）— 项目介绍 / Agenda / ChatBot vs Agent / ReAct 演示 5 帧
     §02 上下文治理与状态感知（5 页）— 问题 / 窗口膨胀 / 压缩系统 / 优先级漏斗 / 动态 System Prompt
-    §03 面向场景强化的工具（11 页）— 总览 / Grep&Ask / Plan+Edit / Plan 工作流 3 帧 / 执行三态 2 帧 / TodoWrite / Hook
+    §03 面向场景强化的工具（12 页）— 总览 / Grep&Ask / Plan+审批 / Plan执行 / Edit精确替换+批量二阶段握手 / 执行三态 2 帧 / TodoWrite / Hook
     §04 多 Agent 协作试验（6 页）— 总览 / 消息设计 / 轮流报数 / 续写接龙 / 协作开发 / SubAgent
     §05 模板代码生成引擎（4 页）— 动机 / jen 架构 / 实测对比 / webapp-gen
     §06 总结与展望（2 页）— 仓库 / 四大贡献
@@ -836,15 +836,20 @@ hook.rs         storage.rs
   <!-- ============ 6. Dynamic System Prompt ============ -->
   <section class="slide" data-title="Dynamic System Prompt">
     <div class="title-bar">
-      <h2>02 · 上下文治理与状态感知 — 动态 System Prompt 与鲁棒性
+      <h2>02 · 上下文治理与状态感知 — 动态状态感知：两层注入机制
     </div>
     <div class="split s55">
       <div class="col-text" style="justify-content:center">
-        <h4 style="margin-top:0">动态 System Prompt</h4>
-        <p>System Prompt 尾部根据当前状态<strong>动态追加</strong>信息——后台任务状态、Teammate 存在、过期 TODO 提醒、交互式 Session。即使原始上下文已被压缩，Agent 仍能感知正在发生的持续性事件。</p>
-        <p>核心思路：让 Agent 在压缩后仍能<strong>感知当前正在发生的持续性事件</strong>，避免遗忘正在运行的后台任务或协作队友。</p>
+        <h4 style="margin-top:0">问题</h4>
+        <p>Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
+        <h4>两层注入</h4>
+        <ul style="line-height:1.7;margin:0;padding-left:18px">
+          <li><strong>System Prompt 占位符</strong> · 模板中 <code>{{.background_tasks}}</code>、<code>{{.teammates}}</code> 等在<strong>每轮请求前</strong>替换为实时状态快照</li>
+          <li><strong>&lt;system-reminder&gt; 消息</strong> · 突发事件（后台任务完成 / TODO 过期 / Teammate 新消息）以 User 角色<strong>按需注入</strong></li>
+        </ul>
+        <p class="note" style="margin-top:4px">软提醒，不强打断——Agent 在下一轮推理时自然看到，可暂时忽略处理更紧急的事。</p>
       </div>
-      <div class="col-visual" style="display:flex;align-items:center">
+      <div class="col-visual">
         <div class="arch" style="margin-top:0;width:100%">
           <div class="tier"><div class="tname">静态基础</div>
             <div class="cells"><div class="cell"><h4>项目规范</h4><p>AGENTS.md</p></div>
@@ -853,19 +858,28 @@ hook.rs         storage.rs
               <div class="cell"><h4>Skill</h4><p>按需加载</p></div>
             </div>
           </div>
-          <div class="tier hl"><div class="tname">动态追加</div>
+          <div class="tier hl"><div class="tname">Layer 1 · System Prompt 占位符</div>
             <div class="cells"><div class="cell"><h4>后台任务</h4><p>Task / BackgroundJob</p></div>
               <div class="cell"><h4>Teammate</h4><p>协作队友状态</p></div>
               <div class="cell"><h4>TODO</h4><p>过期未更新提醒</p></div>
               <div class="cell"><h4>Session</h4><p>交互式任务</p></div>
             </div>
           </div>
+          <div class="tier" style="border-top:2px solid var(--accent);background:#fdfcf8"><div class="tname" style="color:var(--accent)">Layer 2 · system-reminder 消息</div>
+            <div class="cells"><div class="cell"><h4>任务完成</h4><p>background_task_completed</p></div>
+              <div class="cell"><h4>TODO 过期</h4><p>todo_reminder</p></div>
+              <div class="cell"><h4>队友消息</h4><p>teammate 新消息</p></div>
+              <div class="cell"><h4>Skill 重新注入</h4><p>invoked_skills</p></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>动态 System Prompt 是上下文治理的第三层保障。System Prompt 的尾部会根据当前状态动态追加信息——后台任务在跑、有 Teammate 存在、TODO 很久没更新了、有交互式 Session 在进行。即使这些事件的原始上下文已经被压缩掉了，Agent 仍然能感知到它们。</p>
-      <p>下一页会展示三重保障组合后的实测效果。</p>
+      <p>这一页讲动态状态感知——上下文治理的第三层保障。核心问题：Agent 每轮推理只能看到上下文窗口内的内容，一旦信息被压缩或滚出窗口，Agent 就彻底失去感知。</p>
+      <p>两层注入机制。<strong>第一层</strong>是 System Prompt 里的<strong>占位符替换</strong>——模板中有 <code>{{.background_tasks}}</code>、<code>{{.session_state}}</code>、<code>{{.teammates}}</code> 这些占位符，每轮请求前 Hook 把它们替换成实时状态：哪些后台任务在跑、工具注册了什么、Teammate 在干什么。这确保 Agent 每轮都能看到当前环境的完整快照。</p>
+      <p><strong>第二层</strong>是 <code>&lt;system-reminder&gt;</code> 消息注入。当有突发事件——后台任务完成、Teammate 发来新消息、待办清单太久没更新——运行时构建一条消息，以 User 角色插入上下文。</p>
+      <p>关键设计：<strong>软提醒，不强打断</strong>。Agent 不是被中断的，而是在下一轮推理时自然看到。如果正在处理更紧急的事，可以选择暂时忽略。</p>
     </aside>
   </section>
 
@@ -961,10 +975,10 @@ hook.rs         storage.rs
     </aside>
   </section>
 
-  <!-- ============ 9. Plan + Edit + approve ============ -->
-  <section class="slide" data-title="Plan · Edit · approve">
+  <!-- ============ 9. Plan + approve ============ -->
+  <section class="slide" data-title="Plan · approve">
     <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — Plan + Edit + 审批清空上下文
+      <h2>03 · 面向场景强化的工具 — Plan 调研 + 审批清空上下文
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -977,12 +991,11 @@ hook.rs         storage.rs
           <li style="color:var(--good)"><strong>② 批准并清空上下文</strong> — 仅保留 plan.md，丢弃调研产物 ← 推荐</li>
           <li><strong>③ 驳回</strong> — 留在 Plan Mode 修改</li>
         </ul>
-        <h4 style="margin-bottom:2px">Edit — 精确替换</h4>
-        <p style="margin-bottom:2px"><strong style="color:var(--bad)">问题：</strong>Write 只能全文覆写，改 1 行也要全发 500 行。</p>
-        <p><strong style="color:var(--good)">方案：</strong>Edit 基于精确字符串匹配做局部替换，只发 diff。</p>
+        <h4 style="margin-bottom:2px">窗口回收效果</h4>
+        <p>调研阶段大量工具结果（Read / Grep / Bash）在执行阶段<strong>全部丢弃</strong>，仅保留一份 plan.md（~1.2K tokens）。窗口从 <strong>65% → 12%</strong>，执行阶段拥有充足空间。</p>
       </div>
       <div class="col-visual">
-        <svg viewBox="0 0 440 300" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+        <svg viewBox="0 0 440 250" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
           <defs>
             <marker id="pa1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/></marker>
           </defs>
@@ -1010,31 +1023,30 @@ hook.rs         storage.rs
           <text x="372" y="78" text-anchor="middle" fill="#1e5e3a" font-size="9">window: 12%</text>
           <path d="M275,58 L310,58" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
 
-          <!-- 分隔线 -->
-          <line x1="10" y1="142" x2="430" y2="142" stroke="#e5e9f2" stroke-width="1"/>
+          <!-- 下方效果对比 -->
+          <line x1="10" y1="148" x2="430" y2="148" stroke="#e5e9f2" stroke-width="1"/>
+          <text x="220" y="168" text-anchor="middle" font-weight="600" fill="var(--text-1)" font-size="11">窗口回收</text>
 
-          <!-- Edit 对比 -->
-          <text x="220" y="160" text-anchor="middle" font-weight="600" fill="var(--text-1)" font-size="12">Write vs Edit</text>
-          <!-- Write: 全文 -->
-          <text x="10" y="185" font-weight="600" fill="#7a1f1f" font-size="10">Write (全文覆写)</text>
-          <rect x="10" y="192" width="420" height="20" fill="#fef3f3" stroke="#7a1f1f" stroke-width="1" rx="2"/>
-          <text x="220" y="206" text-anchor="middle" fill="#7a1f1f" font-size="9">500 行全文 → 全部发给 LLM → 全部写回</text>
-          <!-- Edit: diff -->
-          <text x="10" y="232" font-weight="600" fill="#1e5e3a" font-size="10">Edit (精确替换)</text>
-          <rect x="10" y="239" width="180" height="20" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
-          <text x="100" y="253" text-anchor="middle" fill="#7a5b00" font-size="9">old_string (匹配)</text>
-          <path d="M190,249 L210,249" stroke="#1e5e3a" stroke-width="1.3" marker-end="url(#pa1)"/>
-          <rect x="215" y="239" width="180" height="20" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
-          <text x="305" y="253" text-anchor="middle" fill="#1e5e3a" font-size="9">new_string (替换)</text>
-          <text x="220" y="280" text-anchor="middle" fill="var(--text-3)" font-size="9">只发 diff · token 1/N · 不触碰无关行</text>
+          <!-- 调研阶段 -->
+          <rect x="10" y="182" width="200" height="24" fill="#fef3f3" stroke="#7a1f1f" stroke-width="1" rx="2"/>
+          <text x="110" y="198" text-anchor="middle" fill="#7a1f1f" font-size="9">调研阶段：30+ 工具结果 · window 65%</text>
+
+          <!-- CLEAR 箭头 -->
+          <path d="M210,194 L225,194" stroke="#7a1f1f" stroke-width="1.3" marker-end="url(#pa1)"/>
+
+          <!-- 执行阶段 -->
+          <rect x="230" y="182" width="200" height="24" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
+          <text x="330" y="198" text-anchor="middle" fill="#1e5e3a" font-size="9">执行阶段：plan.md · window 12%</text>
+
+          <text x="220" y="232" text-anchor="middle" fill="var(--text-3)" font-size="9">丢弃调研中间产物 · 保留方向性计划 · 窗口干净执行</text>
         </svg>
       </div>
     </div>
     <aside class="notes">
-      <p>这一页讲三个紧密相关的机制：Plan、审批、Edit。</p>
+      <p>这一页讲 Plan + 审批清空上下文。</p>
       <p><strong>Plan</strong>解决 LLM 边想边改的问题。进入 Plan 模式后工具集被限制为只读，Agent 只能调研不能改代码。调研完后制定自包含执行计划，用户审批。关键操作是<strong>清空上下文</strong>——把几十 K 的调研结果全丢掉，只留 plan.md。</p>
       <p><strong>审批三选项</strong>：① 批准 ② 批准并清空上下文（推荐）③ 驳回。推荐选项 ②，因为调研阶段的信息对执行阶段是噪音——窗口从 65% 回到 12%。</p>
-      <p><strong>Edit</strong>解决 Write 的粗粒度问题。Write 要全文覆写，Edit 只需要指定"把这段旧字符串替换成这段新字符串"，精确、高效。右下方对比图：Write 是 500 行全发，Edit 只发匹配和替换的两小段。</p>
+      <p>下一页讲 Edit 工具——另一个核心工具，解决 Write 的粗粒度问题。</p>
     </aside>
   </section>
 
@@ -1098,6 +1110,84 @@ hook.rs         storage.rs
       <p>第三阶段 —— 关键操作。<strong>窗口被清空</strong>。原本 65% 的调研产物全部丢弃。新的上下文里只有一份 plan.md，1.2K token 左右。窗口占用回到 12%。</p>
       <p>Agent 重新启动，工具集恢复完整。它<strong>对照 plan 一步一步做</strong>：step 1 创建 ui_state.rs、step 2 创建 chat_state.rs ……</p>
       <p>这个机制的代价是 Agent <strong>忘掉了调研细节</strong>。但收益更大 —— 执行阶段窗口干净，不被中间产物干扰，错误率显著下降。这就是 clear and approve 的本质。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 9.5. Edit — 精确替换 ============ -->
+  <section class="slide" data-title="Edit · replace">
+    <div class="title-bar">
+      <h2>03 · 面向场景强化的工具 — Edit：精确替换与凭证确认的批量机制
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0;margin-bottom:2px">精确字符串匹配</h4>
+        <p style="margin-bottom:6px">基于 <code>old_string</code> 在文件中做<strong>精确匹配</strong>，替换为 <code>new_string</code>。只发送变更部分，不触碰文件其他内容。匹配失败时返回<strong>诊断提示</strong>（缩进、空白、行尾差异），帮助快速定位问题。</p>
+        <h4 style="margin-bottom:2px">唯一性约束</h4>
+        <p style="margin-bottom:6px"><code>old_string</code> 在文件中必须<strong>唯一匹配</strong>。匹配多次时返回带上下文的预览，提示加更多上下文使其唯一。</p>
+        <h4 style="margin-bottom:2px">批量替换 · 凭证确认机制</h4>
+        <p>当 <code>replace_all=true</code> 时，基于<strong>当前文件内容生成摘要凭证</strong>，强制先预览再执行：</p>
+        <ul style="line-height:1.6;margin:0;padding-left:18px">
+          <li><strong>① 预览</strong> — 返回全部匹配位置 + <code>confirm_token</code>（由文件内容摘要生成）</li>
+          <li><strong>② 确认</strong> — 回传 token 才执行替换。文件内容变化 → 摘要不匹配 → 凭证失效 → 强制重新预览</li>
+        </ul>
+        <p class="note" style="margin-top:4px">凭证绑定文件快照，AI 无法预先伪造——必须先看到真实匹配才能拿到凭证。</p>
+      </div>
+      <div class="col-visual">
+        <svg viewBox="0 0 440 280" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+          <defs>
+            <marker id="ed1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/></marker>
+          </defs>
+
+          <!-- 精确匹配示意 -->
+          <text x="220" y="14" text-anchor="middle" font-weight="600" fill="var(--text-1)" font-size="12">精确字符串匹配</text>
+          <text x="10" y="36" font-weight="600" fill="#1e5e3a" font-size="10">Edit 操作</text>
+          <rect x="10" y="42" width="180" height="22" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="100" y="57" text-anchor="middle" fill="#7a5b00" font-size="9">old_string (精确匹配)</text>
+          <path d="M190,53 L210,53" stroke="#1e5e3a" stroke-width="1.3" marker-end="url(#ed1)"/>
+          <rect x="215" y="42" width="180" height="22" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
+          <text x="305" y="57" text-anchor="middle" fill="#1e5e3a" font-size="9">new_string (替换)</text>
+          <text x="220" y="82" text-anchor="middle" fill="var(--text-3)" font-size="9">匹配失败 → 诊断提示 · 匹配多次 → 建议加上下文</text>
+
+          <!-- 分隔线 -->
+          <line x1="10" y1="98" x2="430" y2="98" stroke="#e5e9f2" stroke-width="1"/>
+
+          <!-- 批量替换凭证确认 -->
+          <text x="220" y="118" text-anchor="middle" font-weight="600" fill="var(--text-1)" font-size="11">批量替换 · replace_all 凭证确认</text>
+
+          <!-- 文件摘要 -->
+          <rect x="10" y="132" width="120" height="34" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5" rx="3"/>
+          <text x="70" y="148" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="10">当前文件</text>
+          <text x="70" y="162" text-anchor="middle" fill="#1e3a8a" font-size="9">digest(file_content)</text>
+
+          <path d="M130,149 L148,149" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#ed1)"/>
+
+          <!-- 阶段1: 预览 -->
+          <rect x="152" y="128" width="130" height="60" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5" rx="3"/>
+          <text x="217" y="146" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="10">① 预览</text>
+          <text x="217" y="160" text-anchor="middle" fill="#6b7a8f" font-size="9">返回全部匹配</text>
+          <text x="217" y="174" text-anchor="middle" fill="#1e3a8a" font-size="9">+ confirm_token</text>
+
+          <path d="M282,158 L300,158" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#ed1)"/>
+
+          <!-- 阶段2: 确认 -->
+          <rect x="304" y="128" width="126" height="60" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.5" rx="3"/>
+          <text x="367" y="146" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="10">② 确认执行</text>
+          <text x="367" y="160" text-anchor="middle" fill="#6b7a8f" font-size="9">回传 token</text>
+          <text x="367" y="174" text-anchor="middle" fill="#1e5e3a" font-size="9">校验 → 替换</text>
+
+          <!-- 失效路径 -->
+          <text x="220" y="210" text-anchor="middle" fill="#7a1f1f" font-size="9">文件变化 → 摘要不匹配 → token 失效 → 重新预览</text>
+
+          <!-- 安全说明 -->
+          <rect x="10" y="224" width="420" height="28" fill="#fbf8f0" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="220" y="242" text-anchor="middle" fill="#7a5b00" font-size="9">凭证由文件内容摘要生成 · AI 无法预先伪造 · 必须先看真实匹配才能拿到</text>
+        </svg>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>这一页讲 Edit 工具的两个核心设计。</p>
+      <p><strong>精确字符串匹配</strong>：基于 old_string 在文件中做精确匹配，替换为 new_string。只发变更部分，不触碰文件其他内容。匹配失败时返回诊断提示（缩进、空白、行尾差异），帮助快速定位问题。匹配多次时提示加更多上下文使其唯一。</p>
+      <p><strong>批量替换的凭证确认机制</strong>是核心安全设计。当 replace_all=true 时，不是直接执行，而是基于当前文件内容生成摘要凭证（confirm_token）。先返回全部匹配位置的预览和凭证，AI 回传凭证才执行替换。关键是：凭证绑定的是文件内容快照——如果两次调用之间文件发生了变化，摘要就不匹配了，凭证自动失效，强制重新预览。AI 无法预先伪造凭证，因为凭证依赖于它必须先看到的真实匹配结果。</p>
     </aside>
   </section>
 
@@ -1276,55 +1366,7 @@ hook.rs         storage.rs
     </aside>
   </section>
 
-  <!-- ============ 12.5. SYSTEM REMINDER ============ -->
-  <section class="slide" data-title="System Reminder">
-    <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — &lt;system-reminder&gt; 状态感知注入
-    </div>
-    <div class="split s55">
-      <div class="col-text" style="justify-content:center">
-        <h4 style="margin-top:0">设计思路</h4>
-        <p>Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
-        <p><code>&lt;system-reminder&gt;</code> 是运行时在<strong>每轮 LLM 请求前</strong>（PreLlmRequest Hook）动态注入的消息，以 User 角色混入上下文。Agent 读到它就知道<strong>外部世界发生了什么</strong>。</p>
-        <h4>四种注入场景</h4>
-        <ul style="line-height:1.9;color:var(--text-2);padding-left:18px">
-          <li><strong>background_task_completed</strong> · 后台任务跑完，结果通知</li>
-          <li><strong>todo_reminder</strong> · 待办 15+ 轮未更新，软提醒拉回注意力</li>
-          <li><strong>teammate 新消息</strong> · Teammate 发来消息，通知主 Agent 查看</li>
-          <li><strong>invoked_skills 附件</strong> · 压缩后重新注入已加载的技能指令</li>
-        </ul>
-      </div>
-      <div class="col-visual">
-        <div class="term" style="margin-top:0">
-          <div class="term-bar"><span>LLM 上下文（每轮请求前）</span><span>inject</span></div>
-          <div class="term-body" style="font-size:10px;line-height:1.5">
-            <div style="color:#6b7a8f;margin-bottom:4px">… 前面的对话历史 …</div>
-            <div class="bubble agent is-new" style="margin-bottom:4px">
-              <div class="who"><span>system_prompt</span><span class="tag">占位符替换</span></div>
-              <div class="body" style="font-family:var(--font-mono);font-size:9px">&lt;session_status&gt;<br>{{.session_state}} &nbsp;← <span style="color:#1e5e3a">工具状态摘要</span><br>{{.tasks}} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← <span style="color:#1e5e3a">活跃任务列表</span><br>{{.background_tasks}} ← <span style="color:#1e5e3a">后台任务</span><br>{{.teammates}} &nbsp;&nbsp;&nbsp;&nbsp;← <span style="color:#1e5e3a">协作状态</span><br>&lt;/session_status&gt;</div>
-            </div>
-            <div class="bubble tool-result is-new">
-              <div class="who"><span>User role</span><span class="tag">system-reminder</span></div>
-              <div class="body" style="font-family:var(--font-mono);font-size:9px">&lt;system-reminder&gt;<br>&lt;background_task_completed&gt;<br>&nbsp;&lt;task_id&gt;bg_3&lt;/task_id&gt;<br>&nbsp;&lt;status&gt;completed&lt;/status&gt;<br>&nbsp;&lt;result&gt;Build succeeded&lt;/result&gt;<br>&lt;/background_task_completed&gt;<br>&lt;/system-reminder&gt;</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#system-reminder #state-awareness</span>
-      <span class="slide-number" data-current="20" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>这一页讲 <strong>&lt;system-reminder&gt;</strong> —— 一个让 Agent 在长任务中<strong>保持状态感知</strong>的机制。</p>
-      <p>核心问题：Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩摘要了、或者滚出窗口了，Agent 就<strong>彻底失去感知</strong>。比如后台跑了一个 cargo build，跑完的时候 Agent 已经在干别的了，它不知道 build 完成了、结果是什么。再比如待办清单写了 4 件事，Agent 一头扎进第 2 件，忘了后面还有 3 件。</p>
-      <p>解决方案是 <strong>&lt;system-reminder&gt;</strong>。它不是静态的系统提示词，而是<strong>每轮 LLM 请求前</strong>，由 PreLlmRequest Hook 动态构建、以 User 角色注入的消息。</p>
-      <p>有两层机制。<strong>第一层</strong>是 system_prompt 里的<strong>占位符替换</strong>——system_prompt 模板里有 <code>{{.background_tasks}}</code>、<code>{{.session_state}}</code>、<code>{{.teammates}}</code> 这些占位符。每轮请求前，Hook 把它们替换成实时状态：哪些后台任务在跑、工具注册了什么、Teammate 在干什么。这确保 Agent 每轮都能看到<strong>当前环境的完整快照</strong>。</p>
-      <p><strong>第二层</strong>是 <code>&lt;system-reminder&gt;</code> 消息注入。当有<strong>突发事件</strong>时——后台任务完成、Teammate 发来新消息、待办清单太久没更新——运行时会构建一条 &lt;system-reminder&gt; 消息，以 User 角色插入上下文。</p>
-      <p>右边上面展示的是第一层——system_prompt 中的占位符替换。下面展示的是第二层——一个后台任务完成的通知，Agent 读到就知道 build 跑完了、结果如何。</p>
-      <p>这个设计的关键是<strong>软提醒，不强打断</strong>。Agent 不是被中断的，而是在下一轮推理时自然看到这些信息。如果它正在处理更紧急的事，可以选择暂时忽略。</p>
-    </aside>
-  </section>
+
 
   <!-- ============ §04 分隔页 ============ -->
   <section class="slide chapter-divider" data-title="§04 Divider">
