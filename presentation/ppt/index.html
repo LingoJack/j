@@ -2186,6 +2186,28 @@ hook.rs         storage.rs
 
 </div>
 
+<script src="speaker-notes.js"></script>
+<script>
+// Populate speaker notes from SPEAKER_NOTES_XML before Reveal.js initializes
+(function(){
+  if (!window.SPEAKER_NOTES_XML) return;
+  var parser = new DOMParser();
+  var xml = parser.parseFromString(SPEAKER_NOTES_XML, 'text/xml');
+  var map = {};
+  xml.querySelectorAll('note').forEach(function(n){
+    var k = n.getAttribute('slide');
+    if(k) map[k] = n.textContent.trim();
+  });
+  document.querySelectorAll('section[data-title]').forEach(function(sec){
+    var title = sec.getAttribute('data-title');
+    var text = map[title];
+    if(text === undefined || !text) return;
+    var aside = sec.querySelector('aside.notes');
+    if(!aside) return;
+    aside.textContent = text;
+  });
+})();
+</script>
 <script src="../../.jcli/skills/html-ppt-skill/assets/runtime.js"></script>
 </body>
 </html>
