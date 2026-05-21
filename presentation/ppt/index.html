@@ -1861,28 +1861,28 @@ hook.rs         storage.rs
   <!-- ============ §5.3 jen 架构 ============ -->
   <section class="slide" data-title="jen Architecture">
     <div class="title-bar">
-      <h2>05 · 模板代码生成引擎 — jen 架构
+      <h2>05 · 模板代码生成引擎 — jen 原理
     </div>
     <div class="jen-top-bottom">
       <div class="jtb-row">
         <div class="jtb-col">
-          <span class="jtb-label">设计初衷</span>
-          <p>复杂业务软件中存在大量<strong>"机械代码"</strong>——PO/DTO/VO/DAO、CRUD 接口——业务含量有限，但对字段命名、类型映射高度相关。LLM 逐字生成消耗大量 token，还容易引入字段遗漏和命名漂移。</p>
+          <span class="jtb-label">① 输入</span>
+          <p>建表 SQL 或直连数据库。提取表名、列定义、索引定义作为<strong>唯一事实源</strong>。</p>
         </div>
         <div class="jtb-col">
-          <span class="jtb-label">核心思路</span>
-          <p><strong>互补而非替代。</strong>LLM 擅长需求理解和流程调度，模板生成器擅长确定性输出。Agent 只负责准备 schema + 验收结果，不逐字写模板代码。</p>
+          <span class="jtb-label">② 解析</span>
+          <p>自研 SQL parser 提取<strong>索引语义</strong>——主键 / 唯一索引 / 普通索引——并做 MySQL→Go 类型映射和可空字段指针推导。</p>
         </div>
         <div class="jtb-col">
-          <span class="jtb-label">为什么自研 parser</span>
-          <p>需要精确提取<strong>索引语义</strong>——主键 / 唯一索引 / 普通索引各自能派生什么查询方法。通用 parser 的 AST 里这些信息是隐式的。还要处理 MySQL→Go 类型映射和可空字段指针推导。</p>
+          <span class="jtb-label">③ 渲染</span>
+          <p>结构化 Schema 拼入 Go template。5 个 generator 分别产出 PO/DTO/VO/DAO/Tool，支持 itea-go 和 gorm 两套框架。</p>
         </div>
         <div class="jtb-col">
-          <span class="jtb-label">按索引派生方法</span>
-          <p>主键→<code>GetByPK</code>，唯一索引→<code>GetByUK</code>，普通索引→<code>GetByIdx</code>。<strong>LLM 最容易漏的环节</strong>——实测 26 个索引 LLM 漏了 4 个。</p>
+          <span class="jtb-label">④ 产物</span>
+          <p>按索引派生查询方法：主键→<code>GetByPK</code>，唯一索引→<code>GetByUK</code>，普通索引→<code>GetByIdx</code>。确定性输出，零漂移。</p>
         </div>
       </div>
-      <div class="jtb-diagram">
+      <div class="jtb-diagram" style="flex:1">
         <div class="jen-arch-h">
           <div class="jah-stage">
             <span class="jah-tag">① 输入</span>
@@ -1928,10 +1928,8 @@ hook.rs         storage.rs
       </div>
     </div>
     <aside class="notes">
-      <p>先讲设计初衷——为什么要做 jen。复杂业务软件里有很多"机械代码"，PO/DTO/VO/DAO 这些，业务含量有限，但跟字段命名、类型映射强相关。LLM 逐字生成容易字段漂移、前后端不一致。</p>
-      <p>核心思路是<strong>互补而非替代</strong>——LLM 擅长需求理解和流程调度，模板生成器擅长确定性输出。Agent 只负责准备 schema 和验收结果，不逐字写模板代码。</p>
-      <p>自研 parser 的原因是需要<strong>精确提取索引语义</strong>——主键、唯一索引、普通索引分别能派生什么查询方法。通用 parser 的 AST 里这些信息是隐式的，必须自己走一遍。</p>
-      <p>最终产物的关键是<strong>按索引派生方法</strong>。这是 LLM 直写最容易漏的环节——51 张表实测 26 个索引 LLM 漏了 4 个。下一页看实测数据。</p>
+      <p>jen 的原理就是这四步。① 输入 schema.sql，② 自研 parser 解析出结构化的 Schema（表、列、索引、MySQL→Go 类型映射），③ 把 Schema 拼入 Go template，5 个 generator 分别生成 PO/DTO/VO/DAO/Tool，④ 最终产物是按索引语义派生的原子方法集——主键派生 GetByPK，唯一索引派生 GetByUK，普通索引派生 GetByIdx。</p>
+      <p>核心价值：<strong>确定性输出，不漂移</strong>。51 张表实测 LLM 直写漏了 11 个字段、4 个索引方法，jen 零遗漏。下一页看实测数据。</p>
     </aside>
   </section>
 
