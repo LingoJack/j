@@ -2171,39 +2171,42 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>06 · 总结与展望 — 四项主要工作
     </div>
-    <div style="display:flex;gap:0;flex:1;min-height:0;overflow:hidden">
-      <!-- 左组：单 Agent，花括号包裹 -->
-      <div style="flex:1;display:flex;flex-direction:column;position:relative">
-        <div style="display:flex;gap:14px;flex:1;padding:0 28px 0 14px">
-          <div style="flex:1">
-            <h4 style="margin-top:0">上下文治理与状态感知</h4>
-            <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">分级消息窗口 + 多级压缩 + 豁免高价值消息 + 动态状态感知注入。让 Agent 在长任务中<strong>持续低幻觉运行</strong>。</p>
-          </div>
-          <div style="flex:1">
-            <h4 style="margin-top:0">面向场景强化的工具</h4>
-            <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">Grep / Ask / Plan / Edit / 执行三态 / system-reminder / Hook。共同保障单 Agent 的<strong>长时间工程闭环</strong>。</p>
-          </div>
+    <div style="display:flex;flex:1;min-height:0;overflow:hidden;gap:0">
+      <!-- 四行内容 -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:0;justify-content:center;padding-right:18px">
+        <div style="padding:14px 0">
+          <h4 style="margin:0">上下文治理与状态感知</h4>
+          <p class="dim" style="margin:4px 0 0;font-size:15px;line-height:1.6">分级消息窗口 + 多级压缩 + 豁免高价值消息 + 动态状态感知注入。让 Agent 在长任务中<strong>持续低幻觉运行</strong>。</p>
         </div>
-        <!-- 右侧花括号 -->
-        <svg viewBox="0 0 24 120" style="position:absolute;right:0;top:50%;transform:translateY(-50%);height:80%;width:24px" preserveAspectRatio="none">
-          <path d="M20,0 C8,0 4,15 4,30 L4,45 C4,55 0,60 0,60 C4,60 4,65 4,75 L4,90 C4,105 8,120 20,120" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-        </svg>
-        <p style="position:absolute;right:-6px;top:50%;transform:translateY(-50%) rotate(90deg);white-space:nowrap;font-size:13px;font-weight:600;color:var(--accent);letter-spacing:1px">单 Agent 长时运行增强</p>
+        <div style="padding:14px 0">
+          <h4 style="margin:0">面向场景强化的工具</h4>
+          <p class="dim" style="margin:4px 0 0;font-size:15px;line-height:1.6">Grep / Ask / Plan / Edit / 执行三态 / system-reminder / Hook。共同保障单 Agent 的<strong>长时间工程闭环</strong>。</p>
+        </div>
+        <div style="padding:14px 0">
+          <h4 style="margin:0">多 Agent 协作机制</h4>
+          <p class="dim" style="margin:4px 0 0;font-size:15px;line-height:1.6">有了单 Agent 能力，多 Agent 协作需要<strong>消息同步与上下文隔离</strong>。Teammate + SubAgent + SendMessage Gate，三组实验全部通过。</p>
+        </div>
+        <div style="padding:14px 0">
+          <h4 style="margin:0">模板代码生成引擎</h4>
+          <p class="dim" style="margin:4px 0 0;font-size:15px;line-height:1.6">即使有了多 Agent，业务软件中仍有<strong>规则确定但不适合 LLM 推理的部分</strong>。jen 以 schema 为事实源确定性生成，token ↓50×、耗时 ↓27×、字段一致性 100%。</p>
+        </div>
       </div>
-
-      <!-- 右组：③④ 并排 -->
-      <div style="flex:1;display:flex;gap:14px;padding-left:24px">
-        <div style="flex:1">
-          <h4 style="margin-top:0">多 Agent 协作机制</h4>
-          <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">有了单 Agent 能力，多 Agent 协作需要<strong>消息同步与上下文隔离</strong>。Teammate + SubAgent + SendMessage Gate，三组实验全部通过。</p>
-        </div>
-        <div style="flex:1">
-          <h4 style="margin-top:0">模板代码生成引擎</h4>
-          <p class="dim" style="margin-top:6px;font-size:15px;line-height:1.65">即使有了多 Agent，业务软件中仍有<strong>规则确定但不适合 LLM 推理的部分</strong>。jen 以 schema 为事实源确定性生成，token ↓50×、耗时 ↓27×、字段一致性 100%。</p>
-        </div>
+      <!-- 右侧花括号，只括前两行 -->
+      <div style="width:70px;flex-shrink:0;position:relative">
+        <svg viewBox="0 0 36 100" style="position:absolute;top:25%;width:36px;height:25%;right:36px" preserveAspectRatio="none">
+          <path d="M4,0 Q4,25 18,25 Q36,25 36,50 Q36,75 18,75 Q4,75 4,100" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+        </svg>
+        <p style="position:absolute;top:33%;right:0;font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap">单 Agent</p>
       </div>
     </div>
-    <p class="dim" style="margin-top:12px;font-size:14px;text-align:center;line-height:1.6;color:var(--text-2)">单 Agent 长时运行能力 → 多 Agent 协作同步 → 确定性生成补位 LLM 短板</p>
+    <!-- 底部递进线：只用箭头 -->
+    <p style="margin-top:14px;font-size:14px;text-align:center;color:var(--text-2)">
+      <span style="color:var(--accent);font-weight:500">单 Agent 增强</span>
+      <span style="margin:0 12px;color:var(--accent)">→</span>
+      <span style="color:var(--text-2)">多 Agent 协作</span>
+      <span style="margin:0 12px;color:var(--accent)">→</span>
+      <span style="color:var(--text-2)">确定性生成补位</span>
+    </p>
     <aside class="notes">
       <p>做个总结，四项工作之间有一条<strong>递进线</strong>。</p>
       <p><strong>左边花括号里的两项</strong>都属于<strong>单 Agent 的长时运行增强</strong>。上下文治理解决遗忘和幻觉，工具强化解决场景问题——两者一起保障单个 Agent 能长时间稳定完成工程任务。</p>
