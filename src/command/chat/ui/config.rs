@@ -1,6 +1,7 @@
 //! 配置界面 UI 模块
 //!
 //! 将各 Tab 的渲染逻辑拆分到独立子模块，便于维护和扩展。
+//! 支持鼠标选区复制。
 
 mod archive;
 mod commands;
@@ -13,6 +14,9 @@ mod teammates;
 mod tools;
 
 use crate::command::chat::app::{ChatApp, CommandsMode, ConfigTab, ConfigTabHitBox};
+use crate::tui::components::selection::{
+    compute_line_selection_range, rebuild_spans_with_selection,
+};
 use crate::tui::components::{separator_line, tab_bar};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -47,6 +51,55 @@ fn render_block_lines(
         let widget = Paragraph::new(line.clone()).style(Style::default().bg(bg));
         f.render_widget(widget, line_area);
     }
+}
+
+/// 逐行渲染配置页内容，支持鼠标选区高亮。
+///
+/// 与 `render_block_lines` 功能相同，但对选区范围内的行应用高亮样式。
+/// 返回 inner rect 供调用方缓存。
+fn render_block_lines_with_selection(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    block: Block<'_>,
+    bg: Color,
+    lines: &[Line<'static>],
+    scroll_y: u16,
+    selection: Option<&crate::command::chat::app::MouseSelection>,
+) -> Rect {
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    if inner.width == 0 || inner.height == 0 {
+        return inner;
+    }
+
+    f.render_widget(Block::default().style(Style::default().bg(bg)), inner);
+
+    let start = usize::from(scroll_y).min(lines.len());
+    let end = (start + inner.height as usize).min(lines.len());
+
+    let sel_fg = Color::White;
+    let sel_bg = Color::DarkGray;
+
+    for (row, line) in lines[start..end].iter().enumerate() {
+        let line_idx = scroll_y as usize + row;
+        let display_spans = if let Some(sel) = selection {
+            let (sel_start, sel_end) =
+                compute_line_selection_range(line_idx, sel.anchor, sel.current);
+            if sel_start < sel_end {
+                rebuild_spans_with_selection(&line.spans, 0, sel_start, sel_end, sel_fg, sel_bg)
+            } else {
+                line.spans.to_vec()
+            }
+        } else {
+            line.spans.to_vec()
+        };
+        let line_area = Rect::new(inner.x, inner.y + row as u16, inner.width, 1);
+        let widget = Paragraph::new(Line::from(display_spans)).style(Style::default().bg(bg));
+        f.render_widget(widget, line_area);
+    }
+
+    inner
 }
 
 /// 绘制顶部 Tab 栏（支持窄屏水平滚动）
@@ -122,6 +175,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     let t = &app.ui.theme;
     let bg = t.bg_primary;
+
+    // 鼠标选区引用
+    let mouse_selection = app.ui.mouse_selection.as_ref();
 
     let title = match app.ui.config_tab {
         ConfigTab::Model => " \u{2699}\u{fe0f} \u{6a21}\u{578b}\u{914d}\u{7f6e} ",
@@ -240,13 +296,24 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     .add_modifier(Modifier::BOLD),
             ))
             .style(Style::default().bg(bg));
-        render_block_lines(f, area, block, bg, &all_lines, app.ui.config_scroll_offset);
+        let inner = render_block_lines_with_selection(
+            f,
+            area,
+            block,
+            bg,
+            &all_lines,
+            app.ui.config_scroll_offset,
+            mouse_selection,
+        );
         // ── 回退模式下也记录布局信息 ──
         // 回退模式的 Block 有 Borders::ALL（含 top border），所以 Tab 栏全局 Y = area.y + 1（top border）+ 1（空行）
         app.ui.config_tab_bar_y = Some(area.y + 2);
         app.ui.config_list_area = None; // 无独立列表区域
         app.ui.config_field_lines = field_line_indices;
         app.ui.config_tab_hitboxes = compute_tab_hitboxes();
+        app.ui.config_lines_cache = Some(all_lines);
+        app.ui.config_content_inner = Some(inner);
+        app.ui.config_content_scroll = app.ui.config_scroll_offset;
         return;
     }
 
@@ -351,13 +418,24 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     .add_modifier(Modifier::BOLD),
             ))
             .style(Style::default().bg(bg));
-        render_block_lines(f, h_chunks[1], right_block, bg, &detail_lines, 0);
+        let detail_inner = render_block_lines_with_selection(
+            f,
+            h_chunks[1],
+            right_block,
+            bg,
+            &detail_lines,
+            0,
+            mouse_selection,
+        );
 
         // ── 记录布局信息 ──
         app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
         app.ui.config_list_area = Some(h_chunks[0]);
         app.ui.config_field_lines = field_line_indices;
         app.ui.config_tab_hitboxes = compute_tab_hitboxes();
+        app.ui.config_lines_cache = Some(detail_lines);
+        app.ui.config_content_inner = Some(detail_inner);
+        app.ui.config_content_scroll = 0;
         return;
     }
 
@@ -425,7 +503,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     .add_modifier(Modifier::BOLD),
             ))
             .style(Style::default().bg(bg));
-        render_block_lines(f, h_chunks[1], right_block, bg, &detail_lines, 0);
+        let detail_inner = render_block_lines_with_selection(
+            f,
+            h_chunks[1],
+            right_block,
+            bg,
+            &detail_lines,
+            0,
+            mouse_selection,
+        );
 
         // ── 记录布局信息 ──
         app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
@@ -434,6 +520,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         app.ui.config_provider_lines = provider_indices;
         app.ui.config_field_lines = detail_indices;
         app.ui.config_tab_hitboxes = compute_tab_hitboxes();
+        app.ui.config_lines_cache = Some(detail_lines);
+        app.ui.config_content_inner = Some(detail_inner);
+        app.ui.config_content_scroll = 0;
         return;
     }
 
@@ -472,13 +561,14 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(t.border_config))
         .style(Style::default().bg(bg));
-    render_block_lines(
+    let list_inner = render_block_lines_with_selection(
         f,
         chunks[1],
         list_block,
         bg,
         &list_lines,
         app.ui.config_scroll_offset,
+        mouse_selection,
     );
 
     // ── 记录布局信息供鼠标点击使用 ──
@@ -490,4 +580,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     app.ui.config_provider_lines.clear();
     app.ui.config_field_lines = field_line_indices;
     app.ui.config_tab_hitboxes = compute_tab_hitboxes();
+    app.ui.config_lines_cache = Some(list_lines);
+    app.ui.config_content_inner = Some(list_inner);
+    app.ui.config_content_scroll = app.ui.config_scroll_offset;
 }
