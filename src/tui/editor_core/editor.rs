@@ -86,6 +86,11 @@ struct RenderMeta {
     vl_map: Vec<RenderedVL>,
     /// 当前屏幕顶部对应的渲染行索引（在 vl_map 中的偏移）
     map_index: usize,
+    /// 上一次渲染时的实际渲染行总数（用于鼠标滚动计算 max_offset）
+    /// 注意：wrap_engine 的 visual_line_count() 是源码行的视觉行计数，
+    /// 但表格等元素渲染后会产生更多行。此字段存储实际渲染输出行数，
+    /// 确保鼠标滚动能到达表格底部。
+    rendered_line_count: usize,
 }
 
 /// 编辑器主结构
@@ -907,8 +912,10 @@ impl MarkdownEditor {
         let (end_logical, _) = self.wrap.visual_to_logical(last_visible_visual);
 
         // 扩展范围以处理边界情况，确保光标行在范围内
-        let render_start = start_logical.saturating_sub(2).min(cursor_row);
-        let render_end = (end_logical + 3).min(line_count).max(cursor_row + 1);
+        let base_render_start = start_logical.saturating_sub(2).min(cursor_row);
+        let base_render_end = (end_logical + 3).min(line_count).max(cursor_row + 1);
+        let (render_start, render_end) =
+            expand_render_range_for_tables(self.buffer.lines(), base_render_start, base_render_end);
 
         // 为视口范围构建详细视觉行缓存（只构建未缓存的行）
         self.wrap
@@ -919,6 +926,19 @@ impl MarkdownEditor {
 
         let mut all_visual_lines: Vec<Line<'static>> = Vec::new();
         let mut all_vl_meta: Vec<RenderedVL> = Vec::new();
+
+        // wrap_engine 的视觉行索引 → all_visual_lines 实际索引的映射表。
+        //
+        // 背景：表格等 Markdown 元素渲染时，一行源码可能产出多行渲染输出
+        //（如表格首行渲染出整个表格），而续行/后续源码行返回 vec![]（0 行）。
+        // wrap_engine 按源码行宽度计算视觉行数，与实际渲染输出不一致。
+        //
+        // 映射表中的每一项 `visual_map[i]` 表示 wrap_engine 第 i 个视觉行
+        // 在 all_visual_lines 中的起始索引。对于输出 0 行的视觉行（表格续行），
+        // 使用前一个视觉行的索引，这样当 scroll_offset 落在表格范围内时，
+        // 视口会正确定位到表格渲染输出的起始位置，而不是跳过整个表格。
+        let mut visual_map: Vec<usize> = Vec::new();
+        let mut last_output_idx: usize = 0;
 
         for logical_line in render_start..render_end {
             let is_cursor_line = logical_line == cursor_row;
@@ -939,18 +959,33 @@ impl MarkdownEditor {
                     wrap_width,
                     is_insert_mode,
                 );
-                let n = rendered.len();
-                let meta_entry = RenderedVL {
-                    logical_line,
-                    start_col: vl.start_col,
-                    end_col: vl.end_col,
-                };
-                for _ in 0..n {
-                    all_vl_meta.push(meta_entry.clone());
+
+                if rendered.is_empty() {
+                    // 表格续行/后续源码行：输出 0 行，复用前一个映射位置
+                    visual_map.push(last_output_idx);
+                } else {
+                    // 有输出的视觉行：记录在 all_visual_lines 中的起始位置
+                    visual_map.push(all_visual_lines.len());
+                    let n = rendered.len();
+                    let meta_entry = RenderedVL {
+                        logical_line,
+                        start_col: vl.start_col,
+                        end_col: vl.end_col,
+                    };
+                    for _ in 0..n {
+                        all_vl_meta.push(meta_entry.clone());
+                    }
+                    all_visual_lines.extend(rendered);
+                    last_output_idx = visual_map.last().copied().unwrap_or(0);
                 }
-                all_visual_lines.extend(rendered);
             }
         }
+
+        redistribute_visual_map_for_expanded_blocks(
+            &mut visual_map,
+            all_visual_lines.len(),
+            content_height,
+        );
 
         // Visual 模式：对选区范围内的行应用精确字符级高亮
         if *self.vim.mode() == Mode::Visual {
@@ -991,14 +1026,25 @@ impl MarkdownEditor {
         }
 
         // 提取可见范围
-        let scroll_in_rendered = self.viewport.scroll_offset.saturating_sub(visual_offset);
-        let visible_start = scroll_in_rendered.min(all_visual_lines.len().saturating_sub(1));
-        let visible_end = (scroll_in_rendered + content_height).min(all_visual_lines.len());
+        // 使用 visual_map 将 wrap_engine 的 scroll_offset 映射到 all_visual_lines。
+        // 对表格这类“源码视觉行数 < 实际渲染行数”的块，上面已经把连续的重复映射
+        // 重新分布到整段渲染输出内，避免只能跳到块首或块尾。
+        let scroll_local = self.viewport.scroll_offset.saturating_sub(visual_offset);
+
+        let visible_start = if scroll_local < visual_map.len() {
+            visual_map[scroll_local]
+        } else {
+            // 超出映射范围（文件末尾滚动），使用 all_visual_lines 的末尾
+            all_visual_lines.len().saturating_sub(content_height)
+        };
+        let visible_start = visible_start.min(all_visual_lines.len().saturating_sub(1));
+        let visible_end = (visible_start + content_height).min(all_visual_lines.len());
 
         // 保存渲染行元数据映射，用于鼠标点击定位
         // rendered_vl_map_index 是当前屏幕顶部对应的渲染行索引
         self.render_meta.vl_map = all_vl_meta;
         self.render_meta.map_index = visible_start;
+        self.render_meta.rendered_line_count = all_visual_lines.len();
 
         let mut lines_to_render: Vec<Line<'static>> = if visible_start < all_visual_lines.len() {
             all_visual_lines[visible_start..visible_end].to_vec()
@@ -1594,4 +1640,153 @@ fn visual_line_selection_range(
     }
 
     (0, 0)
+}
+
+/// 如果渲染窗口落在表格内部，扩展到整张表的源码范围。
+///
+/// 表格渲染不是逐行进行的，而是由表格首行一次性产出整张表；
+/// 如果窗口只覆盖到表格中后段源码行，缺少首行时就拿不到任何表格输出。
+fn expand_render_range_for_tables(
+    lines: &[String],
+    render_start: usize,
+    render_end: usize,
+) -> (usize, usize) {
+    if lines.is_empty() || render_start >= render_end {
+        return (render_start, render_end);
+    }
+
+    let scan_end = render_end.min(lines.len());
+    let mut expanded_start = render_start.min(lines.len().saturating_sub(1));
+    let mut expanded_end = scan_end;
+
+    for line_idx in render_start..scan_end {
+        if let Some((table_start, table_end)) = find_table_range_in_lines(lines, line_idx) {
+            expanded_start = expanded_start.min(table_start);
+            expanded_end = expanded_end.max(table_end + 1);
+        }
+    }
+
+    (expanded_start, expanded_end.min(lines.len()))
+}
+
+fn find_table_range_in_lines(lines: &[String], line_idx: usize) -> Option<(usize, usize)> {
+    let line = lines.get(line_idx)?;
+    if !is_table_row(line) {
+        return None;
+    }
+
+    let mut start_idx = line_idx;
+    while start_idx > 0
+        && lines
+            .get(start_idx - 1)
+            .is_some_and(|line| is_table_row(line))
+    {
+        start_idx -= 1;
+    }
+
+    let mut end_idx = line_idx;
+    while end_idx + 1 < lines.len()
+        && lines
+            .get(end_idx + 1)
+            .is_some_and(|line| is_table_row(line))
+    {
+        end_idx += 1;
+    }
+
+    if end_idx.saturating_sub(start_idx) < 1 {
+        return None;
+    }
+
+    Some((start_idx, end_idx))
+}
+
+fn is_table_row(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.contains('|')
+}
+
+/// 将连续的重复 visual_map 映射重新分布到实际渲染输出中。
+///
+/// 表格这类块会出现“源码侧多个视觉行，对应渲染侧一整段输出”的情况：
+/// 首个源码视觉行产出整张表，后续源码视觉行输出为空，于是它们在 `visual_map`
+/// 中都会指向同一个起点。若不重分布，滚动会卡在块首，只能依赖额外特判跳到块尾。
+///
+/// 这里按视口高度把这段起点分散到 `[block_start, block_end - viewport_height]`，
+/// 让滚动能覆盖整段实际渲染内容，最后一个槽位稳定落在块尾可见位置。
+fn redistribute_visual_map_for_expanded_blocks(
+    visual_map: &mut [usize],
+    rendered_line_count: usize,
+    viewport_height: usize,
+) {
+    if visual_map.is_empty() || viewport_height == 0 {
+        return;
+    }
+
+    let mut run_start = 0;
+    while run_start < visual_map.len() {
+        let block_start = visual_map[run_start];
+        let mut run_end = run_start + 1;
+        while run_end < visual_map.len() && visual_map[run_end] == block_start {
+            run_end += 1;
+        }
+
+        let run_len = run_end - run_start;
+        let block_end = if run_end < visual_map.len() {
+            visual_map[run_end]
+        } else {
+            rendered_line_count
+        };
+        let block_height = block_end.saturating_sub(block_start);
+        let max_visible_start = block_height.saturating_sub(viewport_height);
+
+        if run_len > 1 && max_visible_start > 0 {
+            let denominator = run_len - 1;
+            for (offset, slot) in visual_map[run_start..run_end].iter_mut().enumerate() {
+                let distributed = offset * max_visible_start / denominator;
+                *slot = block_start + distributed;
+            }
+        }
+
+        run_start = run_end;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{expand_render_range_for_tables, redistribute_visual_map_for_expanded_blocks};
+
+    #[test]
+    fn expand_render_range_for_tables_includes_full_table_when_viewport_hits_tail() {
+        let lines = vec![
+            "intro".to_string(),
+            "| header | value |".to_string(),
+            "|--------|-------|".to_string(),
+            "| row1   | a     |".to_string(),
+            "| row2   | b     |".to_string(),
+            "| row3   | c     |".to_string(),
+            "tail".to_string(),
+        ];
+
+        let (render_start, render_end) = expand_render_range_for_tables(&lines, 4, 6);
+
+        assert_eq!((render_start, render_end), (1, 6));
+    }
+
+    #[test]
+    fn redistribute_visual_map_spreads_expanded_block_to_bottom() {
+        let mut visual_map = vec![3, 3, 3, 23];
+
+        redistribute_visual_map_for_expanded_blocks(&mut visual_map, 24, 6);
+
+        assert_eq!(visual_map, vec![3, 10, 17, 23]);
+    }
+
+    #[test]
+    fn redistribute_visual_map_keeps_non_overflowing_block_unchanged() {
+        let mut visual_map = vec![8, 8, 12];
+
+        redistribute_visual_map_for_expanded_blocks(&mut visual_map, 14, 8);
+
+        assert_eq!(visual_map, vec![8, 8, 12]);
+    }
 }

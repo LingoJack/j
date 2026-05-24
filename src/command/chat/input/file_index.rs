@@ -494,17 +494,17 @@ impl Drop for FileIndex {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::FileIndex;
 
     #[test]
     fn fuzzy_match_basic() {
-        assert_eq!(fuzzy_match("main.rs", "mai"), Some(0));
-        assert_eq!(fuzzy_match("main.rs", "mrs"), Some(2)); // m..r..s, 间隔 2
-        assert_eq!(fuzzy_match("main.rs", "xyz"), None);
+        assert_eq!(FileIndex::fuzzy_match("main.rs", "mai"), Some(0));
+        assert_eq!(FileIndex::fuzzy_match("main.rs", "mrs"), Some(4)); // m..r..s, 间隔 4
+        assert_eq!(FileIndex::fuzzy_match("main.rs", "xyz"), None);
     }
 
     #[test]
     fn fuzzy_match_empty_filter() {
-        assert_eq!(fuzzy_match("anything", ""), Some(0));
+        assert_eq!(FileIndex::fuzzy_match("anything", ""), Some(0));
     }
 }

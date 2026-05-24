@@ -11,7 +11,6 @@ use ratatui::{
 
 use crate::markdown::parser::parse_table_from_source;
 use crate::markdown::render::table::render_table;
-use crate::util::text::display_width;
 
 use super::MarkdownRenderer;
 
@@ -96,8 +95,6 @@ impl MarkdownRenderer {
 
         let line_num = self.format_line_number(line_idx);
         let cont_num = self.format_continuation_line_number();
-        let line_num_width = display_width(&line_num);
-        let content_width = wrap_width.saturating_sub(line_num_width);
 
         // 收集表格源码行
         let source_lines: Vec<&str> = lines[ctx.start_idx..=ctx.end_idx]
@@ -111,12 +108,8 @@ impl MarkdownRenderer {
         };
 
         // 使用共享层渲染表格
-        let table_lines = render_table(
-            &table_data,
-            &table_data.alignments,
-            content_width,
-            &self.theme,
-        );
+        let table_lines =
+            render_table(&table_data, &table_data.alignments, wrap_width, &self.theme);
 
         // 给每行添加行号前缀
         let mut result = Vec::with_capacity(table_lines.len());
