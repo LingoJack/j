@@ -476,8 +476,12 @@ pub const SQL_KEYWORDS: &[&str] = &[
     "references",
 ];
 
-/// YAML 关键字
-pub const YAML_KEYWORDS: &[&str] = &["true", "false", "null", "yes", "no", "on", "off"];
+/// YAML 关键字（布尔/空值 + 常见配置键名）
+pub const YAML_KEYWORDS: &[&str] = &[
+    // 布尔/空值
+    "true", "false", "null", "yes", "no", "on", "off", "True", "False", "TRUE", "FALSE", "Null",
+    "NULL", "~",
+];
 
 /// TOML 关键字（含 Cargo.toml 常用配置项）
 pub const TOML_KEYWORDS: &[&str] = &[
