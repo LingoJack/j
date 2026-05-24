@@ -10,9 +10,7 @@ use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::infra::skill;
 use crate::command::chat::oneshot::animation::{start_thinking_animation, stop_thinking_animation};
 use crate::command::chat::oneshot::ask_ui::spawn_ask_handler;
-use crate::command::chat::oneshot::display::{
-    redraw_streaming_as_markdown, save_cursor_row, term_width,
-};
+use crate::command::chat::oneshot::display::{redraw_markdown, term_width};
 use crate::command::chat::oneshot::session::{fire_session_end, persist_messages};
 use crate::command::chat::oneshot::tool_exec::handle_tool_call;
 use crate::command::chat::permission::JcliConfig;
@@ -88,11 +86,12 @@ pub(crate) fn run_oneshot_no_tools(
             print!("{}", chunk);
             let _ = io::stdout().flush();
             for ch in chunk.chars() {
+                use unicode_width::UnicodeWidthChar;
                 if ch == '\n' {
                     raw_lines += 1;
                     cur_col = 0;
                 } else {
-                    cur_col += 1;
+                    cur_col += ch.width().unwrap_or(0);
                     if cur_col >= tw {
                         raw_lines += 1;
                         cur_col = 0;
@@ -301,8 +300,12 @@ pub(crate) fn run_oneshot_agent(
     let jcli_config = JcliConfig::load();
     let mut round: usize = 0;
     let mut first_content = true;
-    // 保存流式内容开始前的终端行号，用于 Markdown 重绘时精确定位
-    let mut content_start_row: Option<u16> = None;
+    // 流式文本行数跟踪（用于 Markdown 重绘时基于行数回退，不依赖 DSR）
+    let tw = term_width();
+    let mut raw_lines: usize = 0;
+    let mut cur_col: usize = 0;
+    // 本地保存完整文本（j-agent 的 flush_streaming_as_message 会在 Done 前清空 streaming_content）
+    let mut full_text_for_redraw: String = String::new();
 
     loop {
         // 优先检查中断标志：用户按 Ctrl+C 后立即退出，回到 REPL
@@ -338,8 +341,6 @@ pub(crate) fn run_oneshot_agent(
                                     crate::util::color_adapt::apply_fg("Sprite", theme.label_ai)
                                         .bold()
                                 );
-                                // 保存内容开始前的光标行号
-                                content_start_row = save_cursor_row();
                                 // 首次输出前先打印缩进
                                 print!("  ");
                                 let _ = io::stdout().flush();
@@ -353,16 +354,26 @@ pub(crate) fn run_oneshot_agent(
                             print!("{}", delta);
                         } else {
                             // 缩进输出：每个换行后加 "  " 缩进（仅终端显示）
+                            // 同时跟踪行数用于 markdown 重绘（使用 Unicode 宽度）
+                            use unicode_width::UnicodeWidthChar;
                             for ch in delta.chars() {
                                 if ch == '\n' {
                                     print!("\n  ");
+                                    raw_lines += 1;
+                                    cur_col = 2; // "  " 缩进占 2 列
                                 } else {
                                     print!("{}", ch);
+                                    cur_col += ch.width().unwrap_or(0);
+                                    if cur_col >= tw {
+                                        raw_lines += 1;
+                                        cur_col = 0;
+                                    }
                                 }
                             }
                         }
                         let _ = io::stdout().flush();
-                        last_streaming_len = content.len();
+                        full_text_for_redraw = content.to_string();
+                        last_streaming_len = full_text_for_redraw.len();
                     }
                 }
                 StreamMsg::ToolCallRequest(items) => {
@@ -373,14 +384,16 @@ pub(crate) fn run_oneshot_agent(
                     }
                     // 先重绘已输出的流式文本
                     if last_streaming_len > 0 && !no_render {
-                        if let Some(row) = content_start_row {
-                            redraw_streaming_as_markdown(&streaming_content, row);
-                        }
-                        last_streaming_len = streaming_content.lock().unwrap().len();
+                        redraw_markdown(raw_lines, cur_col, &full_text_for_redraw);
+                        last_streaming_len = 0;
+                        raw_lines = 0;
+                        cur_col = 0;
+                        full_text_for_redraw.clear(); // 清空准备下一轮
                     } else if last_streaming_len > 0 {
                         // no_render 模式下补一个换行
                         println!();
-                        last_streaming_len = streaming_content.lock().unwrap().len();
+                        last_streaming_len = 0;
+                        full_text_for_redraw.clear();
                     }
 
                     round += 1;
@@ -419,9 +432,7 @@ pub(crate) fn run_oneshot_agent(
                         stop_thinking_animation(&anim_stop);
                     }
                     if last_streaming_len > 0 && !no_render {
-                        if let Some(row) = content_start_row {
-                            redraw_streaming_as_markdown(&streaming_content, row);
-                        }
+                        redraw_markdown(raw_lines, cur_col, &full_text_for_redraw);
                     } else if last_streaming_len > 0 {
                         // no_render 模式下补一个换行
                         println!();

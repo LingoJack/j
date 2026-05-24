@@ -5,7 +5,6 @@ use crate::command::chat::render::theme::ToolCategoryColor;
 use crate::command::chat::tools::classification::ToolCategory;
 use crate::theme::Theme;
 use std::io;
-use std::sync::{Arc, Mutex};
 
 /// 工具调用参数最大预览长度（与 TUI TOOL_ARG_PREVIEW_MAX_CHARS 对齐）
 const TOOL_ARG_PREVIEW_MAX_CHARS: usize = 60;
@@ -163,24 +162,7 @@ pub(crate) fn print_tool_result_line(
     );
 }
 
-/// 在流式输出开始前保存光标位置（终端行号），供 `redraw_markdown_from_saved` 回退使用。
-pub(crate) fn save_cursor_row() -> Option<u16> {
-    crossterm::cursor::position().map(|(_, row)| row).ok()
-}
-
-/// 从保存的行号回退，清除旧内容，用 Markdown 重绘。
-pub(crate) fn redraw_markdown_from_saved(saved_row: u16, text: &str) {
-    use crossterm::{cursor, execute, terminal};
-    let mut stdout = io::stdout();
-    let _ = execute!(
-        stdout,
-        cursor::MoveTo(0, saved_row),
-        terminal::Clear(terminal::ClearType::FromCursorDown)
-    );
-    crate::util::md_render::render_md(text);
-}
-
-/// 回退 raw 文本，用 markdown 重绘（基于行数回退，仅用于无工具模式）
+/// 回退 raw 文本，用 markdown 重绘（基于行数回退）
 pub(crate) fn redraw_markdown(raw_lines: usize, cur_col: usize, text: &str) {
     use crossterm::{cursor, execute, terminal};
     let total_raw_lines = if cur_col > 0 {
@@ -197,13 +179,4 @@ pub(crate) fn redraw_markdown(raw_lines: usize, cur_col: usize, text: &str) {
         let _ = execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
     }
     crate::util::md_render::render_md(text);
-}
-
-/// 流式文本回退 + markdown 重绘（基于保存的行号）
-pub(crate) fn redraw_streaming_as_markdown(streaming_content: &Arc<Mutex<String>>, saved_row: u16) {
-    let content = streaming_content.lock().unwrap();
-    if content.is_empty() {
-        return;
-    }
-    redraw_markdown_from_saved(saved_row, &content);
 }
