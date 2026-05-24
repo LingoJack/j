@@ -230,6 +230,12 @@ pub struct UIState {
     pub config_field_lines: Vec<usize>,
     /// 配置面板 Tab 点击区域（每帧更新）
     pub config_tab_hitboxes: Vec<ConfigTabHitBox>,
+    /// 配置面板内容行缓存（用于鼠标选区，每帧更新）
+    pub config_lines_cache: Option<Vec<Line<'static>>>,
+    /// 配置面板内容区域 inner rect（用于鼠标坐标映射，每帧更新）
+    pub config_content_inner: Option<Rect>,
+    /// 配置面板内容行缓存对应的滚动偏移（用于选区坐标映射）
+    pub config_content_scroll: u16,
 }
 
 /// 配置面板 Tab 点击检测区域

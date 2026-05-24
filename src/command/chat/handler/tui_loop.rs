@@ -378,6 +378,15 @@ fn dispatch_event(
                                     help_extract_selection_text(cached, sel.anchor, sel.current)
                                 })
                                 .unwrap_or_default()
+                        } else if matches!(app.ui.mode, ChatMode::Config) {
+                            app.ui
+                                .config_lines_cache
+                                .as_ref()
+                                .zip(app.ui.mouse_selection.as_ref())
+                                .map(|(cached, sel)| {
+                                    help_extract_selection_text(cached, sel.anchor, sel.current)
+                                })
+                                .unwrap_or_default()
                         } else {
                             app.ui
                                 .msg_lines_cache
@@ -527,9 +536,26 @@ fn dispatch_event(
                     return false;
                 }
 
-                // ── Config 模式：Tab 切换 + 列表项选中 ──
+                // ── Config 模式：Tab 切换 + 列表项选中 + 选区 ──
                 if matches!(app.ui.mode, ChatMode::Config) {
-                    if let Some(action) = config_mouse_click(app, mouse.column, mouse.row) {
+                    // 先检查是否在内容区域内（用于选区）
+                    if let Some(inner) = app.ui.config_content_inner
+                        && let Some(ref cached) = app.ui.config_lines_cache
+                        && let Some((gline, coff)) = help_screen_to_text_pos(
+                            mouse.column,
+                            mouse.row,
+                            inner,
+                            app.ui.config_content_scroll as usize,
+                            cached,
+                        )
+                    {
+                        app.ui.mouse_selection = Some(MouseSelection {
+                            anchor: (gline, coff),
+                            current: (gline, coff),
+                        });
+                        *needs_redraw = true;
+                    } else if let Some(action) = config_mouse_click(app, mouse.column, mouse.row) {
+                        // 不在内容区域：走原来的 Tab 切换 / 列表选中逻辑
                         app.update(action);
                         *needs_redraw = true;
                     }
@@ -610,6 +636,24 @@ fn dispatch_event(
                 false
             }
             MouseEventKind::Drag(MouseButton::Left) => {
+                // Config 模式：拖拽更新选区
+                if matches!(app.ui.mode, ChatMode::Config) {
+                    if let Some(inner) = app.ui.config_content_inner
+                        && let Some(ref cached) = app.ui.config_lines_cache
+                        && let Some((gline, coff)) = help_screen_to_text_pos(
+                            mouse.column,
+                            mouse.row,
+                            inner,
+                            app.ui.config_content_scroll as usize,
+                            cached,
+                        )
+                        && let Some(ref mut sel) = app.ui.mouse_selection
+                    {
+                        sel.current = (gline, coff);
+                        *needs_redraw = true;
+                    }
+                    return false;
+                }
                 // Help 模式：拖拽更新选区
                 if matches!(app.ui.mode, ChatMode::Help) {
                     if let Some(inner) = app.ui.help_area_inner

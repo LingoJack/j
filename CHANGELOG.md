@@ -1,3 +1,18 @@
+# v12.10.71
+
+
+### 新功能
+
+- **工具结果分类摘要全覆盖**: 为 Write、Edit、Glob、Grep、WebFetch、WebSearch、Browser、TaskOutput、LoadSkill、LoadTool、PlanMode、Worktree、ComputerUse 等所有工具添加专用的结果摘要函数，TUI 中工具调用结果展示更直观
+- **工具调用描述补全**: 新增 `extract_tool_description_from_args` 对 LoadTool、Session 工具的描述提取，折叠视图下显示更有意义的工具调用标签
+- **TaskOutput 结构化渲染**: 为 TaskOutput 工具结果新增专用渲染器，解析 JSON 输出并以带状态图标、命令高亮、输出折叠的结构化格式展示任务执行结果
+- **配置页鼠标选区复制**: 配置页（Config 模式）支持鼠标拖拽选区和复制文本，新增行缓存、内容区域 inner rect 和滚动偏移记录，与 Help 模式选区体验一致
+- **`j md` 无参数快捷编辑**: 无参数调用 `j md` 时自动创建并编辑临时笔记 `temp_note_{N}.md`（N 自增），与 `j notebook` 无参数进入 TUI 列表的行为区分开
+
+### 改进
+
+- **版本升级至 v12.10.71**: 同步更新 Cargo.toml、install.sh、install.ps1 及 j-agent 版本号
+
 # v12.10.70
 
 
@@ -8,18 +23,33 @@
 ### 改进
 
 - **版本升级至 v12.10.70**: 同步更新 Cargo.toml、install.sh、install.ps1 及 j-agent 版本号
-</result
 
 # v12.10.69
 
 
 ### 新功能
 
-- **YAML 语法高亮增强**: 为 YAML 文件新增完整的语法高亮支持，包括键名（key）、文档分隔符（`---`/`...`）、列表指示符（`-`）、锚点（`&anchor`）、别名（`*alias`）、合并键（`<<`）、块标量指示符（`|`/`>`）及类型标签（`!!str` 等）的独立着色
+- **工具结果结构化渲染**: 为 Glob、Grep、WebSearch、WebFetch、Write、Edit、Task、SendMessage 等工具添加了专用的结果摘要渲染函数，在 TUI 中展示更直观的工具调用结果
+- **工具调用描述补全**: 为所有工具补全了 `get_result_summary` 和 `get_tool_call_description` 提取逻辑，涵盖 Write、Edit、Glob、Grep、WebFetch、WebSearch、Browser、RegisterHook、LoadSkill、SendMessage、PlanMode、Worktree 等工具
+- **配置页 Model Tab 左右分栏布局**: 将 Model 配置页从水平 Provider 标签页改为左侧 Provider 列表 + 右侧配置字段的双栏布局，支持点击选择 Provider，新增 `ModelToggleLevel` 操作在 Provider 列表和字段间切换焦点
+- **折行引擎支持代码块边框适配**: WrapEngine 新增 `rebuild_cache_with_code_blocks` 方法，代码块内容行自动减去边框宽度进行折行，避免溢出
 
 ### 改进
 
+- **Shell 工具统一**: 移除独立的 PowerShell 工具 (`powershell.rs`)，统一使用 `ShellTool`，工具名从 `Bash` 改为 `Shell`，消除 Windows/Unix 双分支维护
+- **配置页逐行渲染**: 将配置页从单个 `Paragraph` 整体渲染改为逐行渲染（`render_block_lines`），解决部分终端软换行导致相邻行被污染的问题
+- **更新机制增强**: 修正更新源仓库名称为 `jcli`，扩展网络错误回退匹配（TLS、证书、连接错误等），Windows 使用 PowerShell 作为备用下载方案
+- **终端状态恢复重构**: 提取 `try_enable_keyboard_enhancement` 和 `restore_terminal_state` 为独立函数，`PopKeyboardEnhancementFlags` 失败不再短路后续终端恢复步骤
+- **代码导入统一**: 统一使用 `use` 导入替代内联完整路径引用，提升可读性
+- **YAML 语法高亮增强**: 为 YAML 文件新增完整的语法高亮支持，包括键名（key）、文档分隔符（`---`/`...`）、列表指示符（`-`）、锚点（`&anchor`）、别名（`*alias`）、合并键（`<<`）、块标量指示符（`|`/`>`）及类型标签（`!!str` 等）的独立着色
 - **YAML 关键字字典扩展**: 补充 `True`/`False`/`TRUE`/`FALSE`/`Null`/`NULL`/`~` 等常见布尔与空值变体，提升关键字识别覆盖率
+
+### Bug 修复
+
+- **Unicode 宽度折行偏移**: 使用 Unicode 宽度计算替代字符计数修复描述文本折行偏移问题，正确处理中文字符等双宽字符
+- **dedent 字节越界**: 修复 `dedent` 函数在处理含非 ASCII 空白字符的文本时，因按字符计数与字节切片不一致导致的越界 panic，改为仅对 ASCII 空白字符计数并安全计算字节偏移
+- **Provider 圆点颜色**: 修复模型提供商圆点（active indicator）颜色受选中状态影响的问题，圆点颜色现在独立显示
+- **倒计时溢出**: 倒计时使用 `checked_add` 防止 `Instant` 溢出导致的 panic
 
 # v12.10.68
 

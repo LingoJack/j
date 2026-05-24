@@ -593,6 +593,9 @@ impl ChatApp {
                 config_tab_bar_y: None,
                 config_field_lines: Vec::new(),
                 config_tab_hitboxes: Vec::new(),
+                config_lines_cache: None,
+                config_content_inner: None,
+                config_content_scroll: 0,
             },
             state: ChatState {
                 agent_config,
