@@ -209,17 +209,30 @@ pub fn get_filtered_all_items(app: &ChatApp) -> Vec<AtPopupItem> {
 }
 
 /// 为 @ 弹窗获取文件列表（使用 FileIndex 缓存）
-fn get_filtered_files_for_at(app: &ChatApp, filter: &str) -> Vec<String> {
+fn get_filtered_files_for_at(app: &ChatApp, raw_filter: &str) -> Vec<String> {
     // 索引未就绪时返回空（后台线程仍在扫描）
     if !app.file_index.is_ready() {
         return Vec::new();
     }
 
-    // 处理 ~ 路径展开
-    if filter == "~" || filter.starts_with("~/") {
-        // ~/ 路径无法从项目索引中匹配，直接返回空
-        return Vec::new();
-    }
+    // 处理 ~ 路径展开：将 ~ 替换为 home 目录后进行目录浏览
+    let is_tilde = raw_filter == "~" || raw_filter.starts_with("~/");
+    let expanded_filter;
+    let filter: &str = if is_tilde {
+        if let Some(home) = dirs::home_dir() {
+            let home_str = home.to_string_lossy().to_string();
+            expanded_filter = if raw_filter == "~" {
+                format!("{}/", home_str)
+            } else {
+                format!("{}{}", home_str, &raw_filter[1..])
+            };
+            &expanded_filter
+        } else {
+            return Vec::new();
+        }
+    } else {
+        raw_filter
+    };
 
     let filter_lower = filter.to_lowercase();
 
@@ -254,6 +267,7 @@ fn get_filtered_files_for_at(app: &ChatApp, filter: &str) -> Vec<String> {
                     }
                 }
             }
+
             entries.sort_by(|a, b| {
                 let a_dir = a.ends_with('/');
                 let b_dir = b.ends_with('/');
@@ -381,13 +395,26 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
         return Vec::new();
     }
 
-    let filter = &app.ui.file_popup_filter;
+    let raw_filter = &app.ui.file_popup_filter;
 
-    // 处理 ~ 路径
-    if filter == "~" || filter.starts_with("~/") {
-        // ~/ 路径无法从项目索引中匹配，直接返回空
-        return Vec::new();
-    }
+    // 处理 ~ 路径展开：将 ~ 替换为 home 目录后进行目录浏览
+    let is_tilde = raw_filter == "~" || raw_filter.starts_with("~/");
+    let expanded_filter;
+    let filter: &str = if is_tilde {
+        if let Some(home) = dirs::home_dir() {
+            let home_str = home.to_string_lossy().to_string();
+            expanded_filter = if raw_filter == "~" {
+                format!("{}/", home_str)
+            } else {
+                format!("{}{}", home_str, &raw_filter[1..])
+            };
+            &expanded_filter
+        } else {
+            return Vec::new();
+        }
+    } else {
+        raw_filter
+    };
 
     // 如果 filter 包含 /，先尝试精确路径补全（逐层浏览模式）
     // 这里仍然用 read_dir 做实时读取（保证目录浏览的准确性）
@@ -420,6 +447,7 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
                     }
                 }
             }
+
             entries.sort_by(|a, b| {
                 let a_dir = a.ends_with('/');
                 let b_dir = b.ends_with('/');
