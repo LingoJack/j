@@ -179,6 +179,19 @@ pub mod config_key {
     pub const CODE_BLOCK_BORDER_STYLE: &str = "code_block_border_style";
 }
 
+/// 已知 config key 对应的合法 value 候选列表（用于自动补全）
+pub fn config_value_candidates(key: &str) -> Option<&'static [&'static str]> {
+    match key {
+        config_key::CODE_BLOCK_BORDER_STYLE => Some(&["rounded", "plain"]),
+        config_key::COLOR_MODE => Some(&["auto", "truecolor", "ansi256", "ansi16", "none"]),
+        _ => None,
+    }
+}
+
+/// setting 段中所有可配置的已知 key（用于自动补全，即使配置文件中尚未出现）
+pub const SETTING_KNOWN_KEYS: &[&str] =
+    &[config_key::CODE_BLOCK_BORDER_STYLE, config_key::COLOR_MODE];
+
 // ========== 搜索引擎 ==========
 
 /// 默认搜索引擎

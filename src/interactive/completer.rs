@@ -77,6 +77,10 @@ pub enum ArgHint {
     DynamicSectionKeys {
         section_arg_index: usize,
     },
+    /// 根据 key 名动态补全 value 的可选值（用于 config 命令第三个参数）
+    DynamicValueForkey {
+        key_arg_index: usize,
+    },
     Placeholder(&'static str),
     FilePath,
     None,
@@ -125,7 +129,7 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
                 ArgHint::DynamicSectionKeys {
                     section_arg_index: 0,
                 },
-                ArgHint::Placeholder("<value>"),
+                ArgHint::DynamicValueForkey { key_arg_index: 1 },
             ],
         ),
         (cmd::REPORT, vec![ArgHint::Placeholder("<content>")]),
@@ -359,14 +363,48 @@ impl Completer for CopilotCompleter {
                             .collect(),
                         ArgHint::DynamicSectionKeys { section_arg_index } => {
                             if let Some(section_name) = positional_values.get(*section_arg_index) {
-                                self.section_keys(section_name)
-                                    .into_iter()
+                                let mut keys = self.section_keys(section_name);
+                                // setting 段额外合并已知可配置 key（即使配置文件中尚未出现）
+                                if *section_name == crate::constants::section::SETTING {
+                                    let existing: std::collections::HashSet<String> =
+                                        keys.iter().cloned().collect();
+                                    let extra: Vec<String> = crate::constants::SETTING_KNOWN_KEYS
+                                        .iter()
+                                        .filter(|k| !existing.contains(**k))
+                                        .map(|k| k.to_string())
+                                        .collect();
+                                    keys.extend(extra);
+                                }
+                                keys.into_iter()
                                     .filter(|k| k.starts_with(current_word))
                                     .map(|k| Pair {
                                         display: k.clone(),
                                         replacement: k,
                                     })
                                     .collect()
+                            } else {
+                                vec![]
+                            }
+                        }
+                        ArgHint::DynamicValueForkey { key_arg_index } => {
+                            if let Some(key_name) = positional_values.get(*key_arg_index) {
+                                if let Some(candidates) =
+                                    crate::constants::config_value_candidates(key_name)
+                                {
+                                    candidates
+                                        .iter()
+                                        .filter(|c| c.starts_with(current_word))
+                                        .map(|c| Pair {
+                                            display: c.to_string(),
+                                            replacement: c.to_string(),
+                                        })
+                                        .collect()
+                                } else {
+                                    vec![Pair {
+                                        display: "<value>".to_string(),
+                                        replacement: current_word.to_string(),
+                                    }]
+                                }
                             } else {
                                 vec![]
                             }
