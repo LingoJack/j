@@ -1,6 +1,6 @@
 [package]
 name = "j-agent"
-version = "12.10.73"
+version = "12.10.74"
 edition = "2024"
 rust-version = "1.93.1"
 description = "Agent engine library for j-cli and j-gui"

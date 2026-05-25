@@ -9,3 +9,5 @@
   file: push.sh
 - name: pull
   file: pull.sh
+- name: fp
+  file: fp.sh
