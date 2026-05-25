@@ -366,9 +366,6 @@ pub const WELCOME_MESSAGE: &str = r###"
 pub const SHELL_PREFIX_EN: char = '!';
 pub const SHELL_PREFIX_CN: char = '！';
 
-/// 交互模式提示符
-pub const INTERACTIVE_PROMPT: &str = "j >";
-
 /// 历史记录文件名
 pub const HISTORY_FILE: &str = "history.txt";
 

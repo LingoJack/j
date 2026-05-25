@@ -4,9 +4,7 @@ use super::shell::{
     enter_interactive_shell, execute_shell_command, expand_env_vars, inject_envs_to_process,
 };
 use crate::config::YamlConfig;
-use crate::constants::{
-    HISTORY_FILE, INTERACTIVE_PROMPT, SHELL_PREFIX_CN, SHELL_PREFIX_EN, WELCOME_MESSAGE, cmd,
-};
+use crate::constants::{HISTORY_FILE, SHELL_PREFIX_CN, SHELL_PREFIX_EN, WELCOME_MESSAGE, cmd};
 use crate::{error, info};
 use colored::Colorize;
 use rustyline::error::ReadlineError;
@@ -47,10 +45,10 @@ pub fn run_interactive(config: &mut YamlConfig) {
 
     inject_envs_to_process(config);
 
-    let prompt = format!("{} ", INTERACTIVE_PROMPT.yellow());
-
     loop {
-        match rl.readline(&prompt) {
+        let cwd = format_cwd();
+        println!("{}", format!("work dir: {}", cwd).dimmed());
+        match rl.readline(&format!("{} ", "j >".yellow())) {
             Ok(line) => {
                 let input = line.trim();
 
@@ -128,6 +126,40 @@ fn history_file_path() -> std::path::PathBuf {
     let data_dir = crate::config::YamlConfig::data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     data_dir.join(HISTORY_FILE)
+}
+
+/// cwd 显示最大字符数（超出时中间省略）
+const CWD_MAX_LEN: usize = 30;
+
+/// 格式化当前工作目录，HOME 缩写为 ~，过长时中间用 ... 省略
+fn format_cwd() -> String {
+    let path = std::env::current_dir()
+        .map(|p| {
+            let home = std::env::var("HOME").unwrap_or_default();
+            if !home.is_empty() && p.starts_with(&home) {
+                let rest = p.strip_prefix(&home).unwrap_or(&p);
+                let rest_str = rest.display().to_string();
+                if rest_str.is_empty() {
+                    "~".to_string()
+                } else {
+                    format!("~/{}", rest_str.trim_start_matches('/'))
+                }
+            } else {
+                format!("{}", p.display())
+            }
+        })
+        .unwrap_or_else(|_| ".".to_string());
+
+    if path.len() <= CWD_MAX_LEN {
+        return path;
+    }
+
+    // 保留首尾，中间用 ... 连接
+    let sep = "...";
+    let keep = (CWD_MAX_LEN - sep.len()) / 2;
+    let prefix: String = path.chars().take(keep).collect();
+    let suffix: String = path.chars().skip(path.chars().count() - keep).collect();
+    format!("{}{}{}", prefix, sep, suffix)
 }
 
 fn parse_input(input: &str) -> Vec<String> {
