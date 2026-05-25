@@ -730,7 +730,18 @@ impl MarkdownEditor {
         // 使用渲染行元数据映射，将屏幕行号转换为渲染行索引
         let rendered_row = content_y + self.render_meta.map_index;
 
-        let vl_meta = self.render_meta.vl_map.get(rendered_row)?;
+        // 如果点击位置超出实际渲染内容（落在空白填充 `~` 行），
+        // 则把光标移动到最后一行的末尾（符合常见编辑器行为）
+        let vl_meta = match self.render_meta.vl_map.get(rendered_row) {
+            Some(meta) => meta,
+            None => {
+                // 没有内容可点击，定位到最后一个有效渲染行
+                let last_meta = self.render_meta.vl_map.last()?;
+                let line_text = self.buffer.line(last_meta.logical_line)?;
+                let max_col = line_text.chars().count();
+                return Some((last_meta.logical_line, max_col));
+            }
+        };
 
         let logical_row = vl_meta.logical_line;
         let vl_start_col = vl_meta.start_col;
@@ -800,16 +811,39 @@ impl MarkdownEditor {
             }
             MouseEventKind::ScrollUp => {
                 let step = 3;
-                self.viewport.scroll_offset = self.viewport.scroll_offset.saturating_sub(step);
-                self.viewport.scroll_locked = true;
+                let old_offset = self.viewport.scroll_offset;
+                let new_offset = old_offset.saturating_sub(step);
+                if new_offset != old_offset {
+                    // 可以滚动：移动视口
+                    self.viewport.scroll_offset = new_offset;
+                    self.viewport.scroll_locked = true;
+                } else {
+                    // 无法滚动（已到顶部或内容不满一屏）：移动光标向上
+                    let (row, col) = self.buffer.cursor();
+                    let new_row = row.saturating_sub(step);
+                    self.buffer.set_cursor(new_row, col);
+                    self.viewport.scroll_locked = false;
+                }
             }
             MouseEventKind::ScrollDown => {
                 let step = 3;
                 let content_height = area.height.saturating_sub(3) as usize;
                 let total_rendered = self.render_meta.rendered_line_count;
                 let max_offset = total_rendered.saturating_sub(content_height);
-                self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
-                self.viewport.scroll_locked = true;
+                let old_offset = self.viewport.scroll_offset;
+                let new_offset = (old_offset + step).min(max_offset);
+                if new_offset != old_offset {
+                    // 可以滚动：移动视口
+                    self.viewport.scroll_offset = new_offset;
+                    self.viewport.scroll_locked = true;
+                } else {
+                    // 无法滚动（已到底部或内容不满一屏）：移动光标向下
+                    let (row, col) = self.buffer.cursor();
+                    let last_row = self.buffer.line_count().saturating_sub(1);
+                    let new_row = (row + step).min(last_row);
+                    self.buffer.set_cursor(new_row, col);
+                    self.viewport.scroll_locked = false;
+                }
             }
             _ => {}
         }

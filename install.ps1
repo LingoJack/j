@@ -21,7 +21,7 @@ $Repo = "LingoJack/jcli"
 $BinaryName = "j"
 $InstallDir = "$env:LOCALAPPDATA\j-cli"
 $DataDir = "$env:USERPROFILE\.jdata"
-$DefaultVersion = "v12.10.75"  # 备用默认版本（publish 时自动更新）
+$DefaultVersion = "v12.10.76"  # 备用默认版本（publish 时自动更新）
 
 
 function Write-Info($msg) {
