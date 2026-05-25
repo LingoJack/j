@@ -19,21 +19,12 @@ use super::{
     search::SearchState,
     text_buffer::TextBuffer,
     theme::{EditorTheme, HighlightFn},
-    vim::{
-        CmdItem, Input, Key, Mode, Transition, Vim, filter_commands, filter_insert_commands,
-        parse_command,
-    },
+    vim::{CmdItem, Input, Key, Mode, Transition, Vim, filter_commands, filter_insert_commands},
     wrap_engine::WrapEngine,
 };
 
-use crate::tui::components::selection::{normalize_selection, rebuild_spans_with_selection};
-use crossterm::event::{self, Event, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::Span,
-};
-use std::io;
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 
 /// 编辑器事件轮询间隔（约 60fps）。
 const EDITOR_POLL_MS: u64 = 16;

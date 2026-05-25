@@ -6,8 +6,7 @@ use super::selection::{
     visual_line_selection_range,
 };
 use crate::tui::components::selection::{normalize_selection, rebuild_spans_with_selection};
-use crate::tui::editor_core::search::SearchState;
-use crate::tui::editor_core::vim::{CmdItem, Key, Mode, filter_commands, filter_insert_commands};
+use crate::tui::editor_core::vim::{Mode, filter_commands, filter_insert_commands};
 use ratatui::{
     Frame,
     layout::Rect,
