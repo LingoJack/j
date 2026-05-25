@@ -1,3 +1,17 @@
+# v12.10.78
+
+
+
+### 新功能
+
+- **代码块边框样式配置**: 新增 `code_block_border_style` 配置项，支持 `rounded`（圆角 ╭╮╰╯，默认）和 `plain`（直角 ┌┐└┘）两种代码块围栏边框风格。可通过 `j config setting code_block_border_style plain` 切换
+- **Config 命令值自动补全**: `/config setting` 命令的第三个参数现在会根据 key 名自动提示合法的 value 候选值（如 `color_mode` 提示 `auto/truecolor/ansi256/ansi16/none`），且 setting 段的 key 补全会包含所有已知可配置项，不再局限于配置文件中已存在的 key
+
+### 改进
+
+- **代码块右侧内边距**: 代码块右侧增加 2 字符内边距，防止竖线紧贴屏幕右边缘
+- **编辑器鼠标交互**: 鼠标点击和拖拽时
+
 # v12.10.77
 
 

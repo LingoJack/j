@@ -464,13 +464,18 @@ fn renders_code_block_with_borders() {
     let theme = Theme::from_name(&ThemeName::default());
     let md = "```rust\nfn main() {}\n```";
     let lines = markdown_to_lines(md, 80, &theme);
-    // 应有顶边框和底边框
+    // 应有顶边框和底边框（默认圆角 ╭ / ╰，或直角 ┌ / └）
     let border_lines: Vec<_> = lines
         .iter()
         .flat_map(|l| l.spans.iter())
-        .filter(|s| s.content.contains('┌') || s.content.contains('└'))
+        .filter(|s| {
+            s.content.contains('╭')
+                || s.content.contains('╰')
+                || s.content.contains('┌')
+                || s.content.contains('└')
+        })
         .collect();
-    assert!(!border_lines.is_empty(), "代码块应有边框字符 ┌ / └");
+    assert!(!border_lines.is_empty(), "代码块应有边框字符（╭/╰ 或 ┌/└）");
     // 应包含代码内容
     let content: String = lines
         .iter()

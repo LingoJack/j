@@ -1,8 +1,12 @@
 use crate::markdown::highlight::highlight_code_line;
 use crate::markdown::theme::MdStyle;
+use crate::theme::current_border_style;
 use crate::util::text::{display_width, wrap_text};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+
+/// 代码块右侧内边距（字符数），防止竖线紧贴屏幕右边缘
+const CODE_BLOCK_RIGHT_PADDING: usize = 2;
 
 /// 渲染围栏代码块（撑满可用宽度 + 自动折行 + 前后空行）
 pub fn render_code_block(
@@ -13,8 +17,12 @@ pub fn render_code_block(
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
-    // 最小宽度保证
-    let total_width = content_width.max(10);
+    let border_style = current_border_style();
+
+    // 最小宽度保证（减去右侧 padding）
+    let total_width = content_width
+        .saturating_sub(CODE_BLOCK_RIGHT_PADDING)
+        .max(10);
 
     // 代码内容可用宽度 = total_width - 4（│ + 空格 + 内容 + 空格 + │）
     let code_inner_w = total_width.saturating_sub(4);
@@ -22,11 +30,11 @@ pub fn render_code_block(
     // 前导空行
     lines.push(Line::from(""));
 
-    // 开始围栏：┌─ lang ──────┐
+    // 开始围栏：╭─ lang ──────╮ 或 ┌─ lang ──────┐
     let (left_part, left_width) = if lang.is_empty() {
-        ("┌─".to_string(), 2)
+        (format!("{}─", border_style.top_left()), 2)
     } else {
-        let s = format!("┌─ {} ─", lang);
+        let s = format!("{}─ {} ─", border_style.top_left(), lang);
         let w = display_width(&s);
         (s, w)
     };
@@ -36,7 +44,12 @@ pub fn render_code_block(
     let top_border_style = Style::default().fg(theme.text_dim()).bg(theme.bg_primary());
 
     lines.push(Line::from(Span::styled(
-        format!("{}{}┐", left_part, "─".repeat(dash_count)),
+        format!(
+            "{}{}{}",
+            left_part,
+            "─".repeat(dash_count),
+            border_style.top_right()
+        ),
         top_border_style,
     )));
 
@@ -88,13 +101,24 @@ pub fn render_code_block(
                 Style::default().fg(theme.text_dim()).bg(theme.bg_primary()),
             ));
 
+            // 右侧 padding 空格
+            spans_vec.push(Span::styled(
+                " ".repeat(CODE_BLOCK_RIGHT_PADDING),
+                Style::default().bg(theme.bg_primary()),
+            ));
+
             lines.push(Line::from(spans_vec));
         }
     }
 
-    // 结束围栏：└─────────────┘
+    // 结束围栏：╰─────────────╯ 或 └─────────────┘
     let bottom_dash_count = total_width.saturating_sub(2).max(1);
-    let bottom_border = format!("└{}┘", "─".repeat(bottom_dash_count));
+    let bottom_border = format!(
+        "{}{}{}",
+        border_style.bottom_left(),
+        "─".repeat(bottom_dash_count),
+        border_style.bottom_right()
+    );
 
     lines.push(Line::from(Span::styled(bottom_border, top_border_style)));
 
