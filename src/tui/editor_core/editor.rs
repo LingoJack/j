@@ -685,18 +685,64 @@ impl MarkdownEditor {
         self.renderer.invalidate_cache();
     }
 
-    /// 更新滚动偏移（基于视觉位置）
-    fn update_scroll_from_visual(&mut self, visual_pos: usize, viewport_height: usize) {
-        // 使用实际渲染行数计算上限，而非 wrap_engine 的视觉行数
-        // 因为表格等元素渲染后会产生更多行，wrap_engine 计数偏小会导致底部无法滚动到
-        let max_offset = self
-            .render_meta
-            .rendered_line_count
-            .saturating_sub(viewport_height);
-        if visual_pos < self.viewport.scroll_offset {
-            self.viewport.scroll_offset = visual_pos.min(max_offset);
-        } else if visual_pos >= self.viewport.scroll_offset + viewport_height {
-            self.viewport.scroll_offset = (visual_pos - viewport_height + 1).min(max_offset);
+    /// 在当前帧渲染的 `all_vl_meta` 中找到光标行对应的渲染行索引。
+    ///
+    /// 返回光标行在 `all_visual_lines` 中的起始索引（第一行匹配 `cursor_row` 的位置）。
+    fn find_cursor_in_rendered_lines(
+        &self,
+        cursor_row: usize,
+        all_vl_meta: &[RenderedVL],
+        _visual_offset: usize,
+        _visual_map: &[usize],
+        _cursor_visual_pos: usize,
+    ) -> Option<usize> {
+        // 找第一个 logical_line == cursor_row 的渲染行
+        all_vl_meta
+            .iter()
+            .position(|m| m.logical_line == cursor_row)
+    }
+
+    /// 基于 `visual_map` 和当前 `scroll_offset` 计算可见行范围。
+    ///
+    /// 返回 `(visible_start, visible_end)` 在 `all_visual_lines` 中的索引范围。
+    fn compute_visible_range(
+        &self,
+        visual_map: &[usize],
+        visual_offset: usize,
+        all_len: usize,
+        content_height: usize,
+    ) -> Option<(usize, usize)> {
+        let scroll_local = self.viewport.scroll_offset.saturating_sub(visual_offset);
+        let visible_start = if scroll_local < visual_map.len() {
+            visual_map[scroll_local]
+        } else {
+            // 超出映射范围（文件末尾滚动），使用 all_visual_lines 的末尾
+            all_len.saturating_sub(content_height)
+        };
+        let visible_start = visible_start.min(all_len.saturating_sub(1));
+        let visible_end = (visible_start + content_height).min(all_len);
+        Some((visible_start, visible_end))
+    }
+
+    /// 将 `scroll_offset` 调整到使 `new_visible_start` 对应屏幕顶部。
+    ///
+    /// 通过反向查找 `visual_map`，找到映射到 `new_visible_start` 的视觉行索引。
+    fn adjust_scroll_to_visible_start(
+        &mut self,
+        new_visible_start: usize,
+        visual_map: &[usize],
+        visual_offset: usize,
+    ) {
+        // 在 visual_map 中找最接近 new_visible_start 的索引
+        let best = visual_map
+            .iter()
+            .enumerate()
+            .filter(|&(_, &idx)| idx <= new_visible_start)
+            .max_by_key(|&(_, &idx)| idx)
+            .map(|(i, _)| i);
+
+        if let Some(local_idx) = best {
+            self.viewport.scroll_offset = visual_offset + local_idx;
         }
     }
 
@@ -711,12 +757,11 @@ impl MarkdownEditor {
 
     /// 向下滚动视口。
     ///
-    /// `content_height` 使用当前可见内容高度，用实际渲染行数计算底部边界。
+    /// 使用 wrap_engine 的视觉行总数计算底部边界，因为 `scroll_offset`
+    /// 是 wrap_engine 坐标系中的偏移量。`render_meta.rendered_line_count`
+    /// 只反映上一帧渲染范围的行数（远小于全文件），用它会导致滚不动。
     fn scroll_viewport_down(&mut self, step: usize, content_height: usize) {
-        let max_offset = self
-            .render_meta
-            .rendered_line_count
-            .saturating_sub(content_height);
+        let max_offset = self.wrap.visual_line_count().saturating_sub(content_height);
         self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
         self.viewport.scroll_locked = true;
     }
@@ -805,18 +850,22 @@ impl MarkdownEditor {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
-                    // 点击有效区域：移动光标
+                    // 点击有效区域：移动光标，解除滚动锁定让视口跟随
+                    self.viewport.scroll_locked = false;
                     self.vim.set_mode(Mode::Normal);
                     self.buffer.set_cursor(row, col);
                     self.mouse_anchor = Some((row, col));
                 } else {
                     // 点击空白区域（边框、状态栏等）：取消选区
+                    self.viewport.scroll_locked = false;
                     self.vim.set_mode(Mode::Normal);
                     self.mouse_anchor = None;
                 }
             }
             MouseEventKind::Drag(MouseButton::Left) => {
                 if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
+                    // 拖拽时也解除滚动锁定，确保视口跟随光标移动
+                    self.viewport.scroll_locked = false;
                     if let Some(anchor) = self.mouse_anchor
                         && *self.vim.mode() != Mode::Visual
                     {
@@ -930,12 +979,13 @@ mod tests {
         );
         let area = Rect::new(0, 0, 80, 10);
         let content_height = area.height.saturating_sub(3) as usize;
-        let max_offset = 18usize.saturating_sub(content_height);
+        // max_offset 基于 wrap_engine 的视觉行总数（每行不折行 = 20 行）
+        let visual_total = editor.wrap.visual_line_count();
+        let max_offset = visual_total.saturating_sub(content_height);
 
         editor.buffer.set_cursor(0, 0);
         editor.viewport.scroll_offset = max_offset;
         editor.viewport.scroll_locked = true;
-        editor.render_meta.rendered_line_count = 18;
 
         editor.handle_mouse(
             MouseEvent {

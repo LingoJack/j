@@ -55,10 +55,10 @@ impl MarkdownEditor {
         // 使用前缀和快速计算光标的视觉位置（O(1) 或 O(log n)）
         let cursor_visual_pos = self.wrap.logical_to_visual(cursor_row, cursor_col);
 
-        // 基于视觉位置更新滚动偏移（滚轮滚动锁定时跳过）
-        if !self.viewport.scroll_locked {
-            self.update_scroll_from_visual(cursor_visual_pos, content_height);
-        }
+        // ---- 阶段 1：基于当前 scroll_offset 计算渲染范围 ----
+        // 注意：不在渲染前调用 update_scroll_from_visual，因为它依赖上一帧的
+        // rendered_line_count（可能因光标行切换源码/渲染模式而不同），导致反馈循环。
+        // 改为渲染完成后，用当前帧的实际渲染行数来调整视口。
 
         // 计算视口范围内需要渲染的逻辑行（O(log n)）
         let first_visible_visual = self.viewport.scroll_offset;
@@ -142,6 +142,51 @@ impl MarkdownEditor {
             content_height,
         );
 
+        // ---- 阶段 2：基于当前帧实际渲染数据调整视口 ----
+        // 注意：不要用 all_visual_lines.len() 来 clamp scroll_offset！
+        // all_visual_lines 只包含 render_start..render_end 范围的渲染输出，
+        // 不是整个文件；用它 clamp 会导致 scroll_offset 被锁死在很小的值。
+
+        // 如果没有滚动锁定，确保光标行在视口内可见。
+        if !self.viewport.scroll_locked {
+            // 找到光标行在 all_visual_lines 中的位置
+            let cursor_in_rendered = self.find_cursor_in_rendered_lines(
+                cursor_row,
+                &all_vl_meta,
+                visual_offset,
+                &visual_map,
+                cursor_visual_pos,
+            );
+
+            // 类似 update_scroll_from_visual，但基于实际渲染行索引
+            let current_start = if let Some((start, _end)) = self.compute_visible_range(
+                &visual_map,
+                visual_offset,
+                all_visual_lines.len(),
+                content_height,
+            ) {
+                start
+            } else {
+                0
+            };
+
+            let visible_end = (current_start + content_height).min(all_visual_lines.len());
+
+            if let Some(cursor_idx) = cursor_in_rendered {
+                if cursor_idx < current_start {
+                    // 光标在视口上方：上移视口
+                    let new_start = cursor_idx;
+                    self.adjust_scroll_to_visible_start(new_start, &visual_map, visual_offset);
+                } else if cursor_idx >= visible_end {
+                    // 光标在视口下方：下移视口
+                    let new_start = cursor_idx
+                        .saturating_sub(content_height - 1)
+                        .min(all_visual_lines.len().saturating_sub(content_height));
+                    self.adjust_scroll_to_visible_start(new_start, &visual_map, visual_offset);
+                }
+            }
+        }
+
         // Visual 模式：对选区范围内的行应用精确字符级高亮
         if *self.vim.mode() == Mode::Visual {
             let (vs_row, vs_col) = self.vim.visual_start();
@@ -180,20 +225,15 @@ impl MarkdownEditor {
             }
         }
 
-        // 提取可见范围
-        // 使用 visual_map 将 wrap_engine 的 scroll_offset 映射到 all_visual_lines。
-        // 对表格这类"源码视觉行数 < 实际渲染行数"的块，上面已经把连续的重复映射
-        // 重新分布到整段渲染输出内，避免只能跳到块首或块尾。
-        let scroll_local = self.viewport.scroll_offset.saturating_sub(visual_offset);
-
-        let visible_start = if scroll_local < visual_map.len() {
-            visual_map[scroll_local]
-        } else {
-            // 超出映射范围（文件末尾滚动），使用 all_visual_lines 的末尾
-            all_visual_lines.len().saturating_sub(content_height)
-        };
-        let visible_start = visible_start.min(all_visual_lines.len().saturating_sub(1));
-        let visible_end = (visible_start + content_height).min(all_visual_lines.len());
+        // ---- 阶段 3：提取可见范围并渲染 ----
+        let (visible_start, visible_end) = self
+            .compute_visible_range(
+                &visual_map,
+                visual_offset,
+                all_visual_lines.len(),
+                content_height,
+            )
+            .unwrap_or((0, content_height.min(all_visual_lines.len())));
 
         // 保存渲染行元数据映射，用于鼠标点击定位
         // rendered_vl_map_index 是当前屏幕顶部对应的渲染行索引
