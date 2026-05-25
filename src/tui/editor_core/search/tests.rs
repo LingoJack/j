@@ -28,6 +28,7 @@ fn test_theme() -> EditorTheme {
         code_border: Color::DarkGray,
         table_header: Color::White,
         table_body: Color::White,
+        code_border_style: BorderStyle::default(),
         code_default: Color::White,
         code_keyword: Color::Magenta,
         code_string: Color::Green,

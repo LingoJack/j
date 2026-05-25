@@ -1,10 +1,79 @@
 use ratatui::style::Color;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 use crate::assets::Assets;
 
 // Re-export ThemeName from j-cli-core
 pub use j_agent::theme_name::ThemeName;
+
+// ========== 全局边框样式配置（类似 color_adapt 模式） ==========
+
+static GLOBAL_BORDER_STYLE: OnceLock<BorderStyle> = OnceLock::new();
+
+/// 由 main.rs 在加载完 YamlConfig 后调用一次。
+/// `style` 为配置项原文（"rounded" / "plain" / 空）。
+pub fn init_border_style(style: &str) {
+    let border_style = BorderStyle::from_config(style);
+    let _ = GLOBAL_BORDER_STYLE.set(border_style);
+}
+
+/// 获取当前生效的边框样式。未初始化时按 Rounded 兜底。
+pub fn current_border_style() -> BorderStyle {
+    GLOBAL_BORDER_STYLE.get().copied().unwrap_or_default()
+}
+
+/// 代码块边框样式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BorderStyle {
+    /// 圆角边框：╭╮╰╯
+    #[default]
+    Rounded,
+    /// 直角边框：┌┐└┘
+    Plain,
+}
+
+impl BorderStyle {
+    /// 从配置字符串解析边框样式
+    pub fn from_config(s: &str) -> Self {
+        match s {
+            "plain" => BorderStyle::Plain,
+            _ => BorderStyle::Rounded,
+        }
+    }
+
+    /// 获取左上角字符
+    pub const fn top_left(&self) -> &'static str {
+        match self {
+            BorderStyle::Rounded => "╭",
+            BorderStyle::Plain => "┌",
+        }
+    }
+
+    /// 获取右上角字符
+    pub const fn top_right(&self) -> &'static str {
+        match self {
+            BorderStyle::Rounded => "╮",
+            BorderStyle::Plain => "┐",
+        }
+    }
+
+    /// 获取左下角字符
+    pub const fn bottom_left(&self) -> &'static str {
+        match self {
+            BorderStyle::Rounded => "╰",
+            BorderStyle::Plain => "└",
+        }
+    }
+
+    /// 获取右下角字符
+    pub const fn bottom_right(&self) -> &'static str {
+        match self {
+            BorderStyle::Rounded => "╯",
+            BorderStyle::Plain => "┘",
+        }
+    }
+}
 
 /// 主题配色方案
 /// 将所有 UI 颜色归类为语义化字段，方便统一管理
@@ -220,6 +289,8 @@ pub struct Theme {
     // ===== 代码块 =====
     /// 代码块边框颜色
     pub code_border: Color,
+    /// 代码块边框样式：圆角或直角
+    pub code_border_style: BorderStyle,
     /// 代码块背景
     pub code_bg: Color,
     /// 代码默认文字颜色
@@ -487,6 +558,7 @@ impl From<ThemeJson> for Theme {
             md_rule: j.md_rule.0,
             md_link: j.md_link.0,
             code_border: j.code_border.0,
+            code_border_style: BorderStyle::default(), // 从全局配置注入，JSON 主题文件不包含此字段
             code_bg: j.code_bg.0,
             code_default: j.code_default.0,
             code_keyword: j.code_keyword.0,
@@ -652,7 +724,7 @@ impl Theme {
     /// 根据主题名称从嵌入资源加载主题
     pub fn from_name(name: &ThemeName) -> Self {
         let filename = format!("themes/{}.json", name.to_str());
-        match Self::load_from_assets(&filename) {
+        let theme = match Self::load_from_assets(&filename) {
             Ok(theme) => theme,
             Err(_) => {
                 // 主题加载失败时静默回退，不输出日志（无 config 上下文）
@@ -666,7 +738,15 @@ impl Theme {
                     Self::terminal_fallback()
                 }
             }
-        }
+        };
+        // 注入全局边框样式配置
+        theme.with_border_style(current_border_style())
+    }
+
+    /// 设置边框样式（从全局配置注入）
+    fn with_border_style(mut self, style: BorderStyle) -> Self {
+        self.code_border_style = style;
+        self
     }
 
     /// 从 Assets 加载并解析主题 JSON
@@ -777,6 +857,7 @@ impl Theme {
             md_rule: Color::DarkGray,
             md_link: Color::LightBlue,
             code_border: Color::DarkGray,
+            code_border_style: BorderStyle::default(),
             code_bg: Color::Reset,
             code_default: Color::Reset,
             code_keyword: Color::LightMagenta,

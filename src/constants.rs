@@ -175,6 +175,8 @@ pub mod config_key {
     pub const NOTEBOOK_EXPANDED_DIRS: &str = "notebook_expanded_dirs";
     /// 颜色色阶模式：auto / truecolor / ansi256 / ansi16 / none
     pub const COLOR_MODE: &str = "color_mode";
+    /// 代码块边框样式：rounded（圆角） / plain（直角）
+    pub const CODE_BLOCK_BORDER_STYLE: &str = "code_block_border_style";
 }
 
 // ========== 搜索引擎 ==========

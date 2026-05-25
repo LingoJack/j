@@ -5,6 +5,8 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
 
+#[cfg(test)]
+use super::theme::BorderStyle;
 use super::theme::EditorTheme;
 
 /// 搜索匹配

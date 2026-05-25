@@ -111,6 +111,9 @@ impl CodeBlockCache {
 impl MarkdownRenderer {
     // ========== 代码块处理 ==========
 
+    /// 代码块右侧内边距（字符数），防止竖线紧贴屏幕右边缘
+    const CODE_BLOCK_RIGHT_PADDING: usize = 2;
+
     /// 判断某行是否是代码块围栏 (```)
     pub fn is_code_fence_line(line: &str) -> bool {
         line.trim_start().starts_with("```")
@@ -162,17 +165,20 @@ impl MarkdownRenderer {
             .get_block_range(line_idx)
             .is_some_and(|(start, _)| start == line_idx);
 
-        // wrap_width 传入时已减去行号宽度，total_width = wrap_width
-        let total_width = wrap_width.max(10);
+        // wrap_width 传入时已减去行号宽度，total_width = wrap_width - padding
+        let total_width = wrap_width
+            .saturating_sub(Self::CODE_BLOCK_RIGHT_PADDING)
+            .max(10);
 
         if is_start {
-            // 开始围栏：┌─ lang ──────┐
+            // 开始围栏：╭─ lang ──────╮ 或 ┌─ lang ──────┐
             let lang = trimmed[3..].trim();
+            let border_style = self.theme.code_border_style;
 
             let (left_part, left_width) = if lang.is_empty() {
-                ("┌─".to_string(), 2)
+                (format!("{}─", border_style.top_left()), 2)
             } else {
-                let s = format!("┌─ {} ─", lang);
+                let s = format!("{}─ {} ─", border_style.top_left(), lang);
                 let w = display_width(&s);
                 (s, w)
             };
@@ -188,10 +194,18 @@ impl MarkdownRenderer {
                 ),
                 Span::styled(left_part, self.style_code(self.theme.text_dim)),
                 Span::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)),
-                Span::styled("┐", self.style_code(self.theme.text_dim)),
+                Span::styled(
+                    border_style.top_right(),
+                    self.style_code(self.theme.text_dim),
+                ),
+                Span::styled(
+                    " ".repeat(Self::CODE_BLOCK_RIGHT_PADDING),
+                    Style::default().bg(self.theme.bg_primary),
+                ),
             ])
         } else {
-            // 结束围栏：└─────────────┘
+            // 结束围栏：╰─────────────╯ 或 └─────────────┘
+            let border_style = self.theme.code_border_style;
             let dash_count = total_width.saturating_sub(2).max(1);
 
             Line::from(vec![
@@ -201,9 +215,19 @@ impl MarkdownRenderer {
                         .fg(Color::DarkGray)
                         .bg(self.theme.bg_primary),
                 ),
-                Span::styled("└", self.style_code(self.theme.text_dim)),
+                Span::styled(
+                    border_style.bottom_left(),
+                    self.style_code(self.theme.text_dim),
+                ),
                 Span::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)),
-                Span::styled("┘", self.style_code(self.theme.text_dim)),
+                Span::styled(
+                    border_style.bottom_right(),
+                    self.style_code(self.theme.text_dim),
+                ),
+                Span::styled(
+                    " ".repeat(Self::CODE_BLOCK_RIGHT_PADDING),
+                    Style::default().bg(self.theme.bg_primary),
+                ),
             ])
         }
     }
@@ -232,9 +256,11 @@ impl MarkdownRenderer {
             .unwrap_or_default();
         let highlighted_spans = (self.highlight_fn)(text, &lang, &self.theme);
 
-        // wrap_width 传入时已减去行号宽度，total_width = wrap_width
+        // wrap_width 传入时已减去行号宽度，total_width = wrap_width - padding
         // 内部可用 = total_width - 4（│+sp+内容+sp+│）
-        let total_width = wrap_width.max(10);
+        let total_width = wrap_width
+            .saturating_sub(Self::CODE_BLOCK_RIGHT_PADDING)
+            .max(10);
         let inner_width = total_width.saturating_sub(4);
         let content_width = display_width(text);
         let fill_width = inner_width.saturating_sub(content_width);
@@ -266,6 +292,10 @@ impl MarkdownRenderer {
             Style::default().bg(self.theme.bg_primary),
         ));
         spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
+        spans.push(Span::styled(
+            " ".repeat(Self::CODE_BLOCK_RIGHT_PADDING),
+            Style::default().bg(self.theme.bg_primary),
+        ));
 
         Line::from(spans)
     }

@@ -49,6 +49,7 @@ impl From<&Theme> for EditorTheme {
             md_inline_code_bg: t.md_inline_code_bg,
             md_rule: t.md_rule,
             code_border: t.code_border,
+            code_border_style: t.code_border_style,
             table_header: t.table_header,
             table_body: t.table_body,
             code_default: t.code_default,

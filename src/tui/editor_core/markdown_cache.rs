@@ -261,7 +261,7 @@ fn build_rendered_line_source_mapping(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tui::editor_core::theme::EditorTheme;
+    use crate::tui::editor_core::theme::{BorderStyle, EditorTheme};
 
     fn test_theme() -> EditorTheme {
         // 使用 search/tests.rs 中的 test_theme 定义
@@ -288,6 +288,7 @@ mod tests {
             md_inline_code_bg: ratatui::style::Color::DarkGray,
             md_rule: ratatui::style::Color::DarkGray,
             code_border: ratatui::style::Color::DarkGray,
+            code_border_style: BorderStyle::default(),
             table_header: ratatui::style::Color::White,
             table_body: ratatui::style::Color::White,
             code_default: ratatui::style::Color::White,

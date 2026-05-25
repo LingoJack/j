@@ -5,6 +5,9 @@
 
 use ratatui::style::Color;
 
+// 从主 theme 模块导入 BorderStyle
+pub use crate::theme::BorderStyle;
+
 /// 编辑器主题
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditorTheme {
@@ -39,6 +42,8 @@ pub struct EditorTheme {
 
     // ===== 代码块 =====
     pub code_border: Color,
+    /// 代码块边框样式：圆角或直角
+    pub code_border_style: BorderStyle,
 
     // ===== 表格 =====
     pub table_header: Color,

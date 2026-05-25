@@ -23,6 +23,9 @@ use super::{
     wrap_engine::WrapEngine,
 };
 
+#[cfg(test)]
+use super::theme::BorderStyle;
+
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
@@ -942,6 +945,7 @@ mod tests {
             md_inline_code_bg: Color::DarkGray,
             md_rule: Color::DarkGray,
             code_border: Color::DarkGray,
+            code_border_style: BorderStyle::default(),
             table_header: Color::White,
             table_body: Color::White,
             code_default: Color::White,
