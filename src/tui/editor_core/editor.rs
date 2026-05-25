@@ -687,10 +687,16 @@ impl MarkdownEditor {
 
     /// 更新滚动偏移（基于视觉位置）
     fn update_scroll_from_visual(&mut self, visual_pos: usize, viewport_height: usize) {
+        // 使用实际渲染行数计算上限，而非 wrap_engine 的视觉行数
+        // 因为表格等元素渲染后会产生更多行，wrap_engine 计数偏小会导致底部无法滚动到
+        let max_offset = self
+            .render_meta
+            .rendered_line_count
+            .saturating_sub(viewport_height);
         if visual_pos < self.viewport.scroll_offset {
-            self.viewport.scroll_offset = visual_pos;
+            self.viewport.scroll_offset = visual_pos.min(max_offset);
         } else if visual_pos >= self.viewport.scroll_offset + viewport_height {
-            self.viewport.scroll_offset = visual_pos - viewport_height + 1;
+            self.viewport.scroll_offset = (visual_pos - viewport_height + 1).min(max_offset);
         }
     }
 
@@ -800,8 +806,8 @@ impl MarkdownEditor {
             MouseEventKind::ScrollDown => {
                 let step = 3;
                 let content_height = area.height.saturating_sub(3) as usize;
-                let total_visual = self.wrap.visual_line_count();
-                let max_offset = total_visual.saturating_sub(content_height);
+                let total_rendered = self.render_meta.rendered_line_count;
+                let max_offset = total_rendered.saturating_sub(content_height);
                 self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
                 self.viewport.scroll_locked = true;
             }
