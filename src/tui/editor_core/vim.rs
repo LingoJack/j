@@ -73,6 +73,21 @@ pub const COMMANDS: &[CmdItem] = &[
     },
 ];
 
+/// Insert 模式下输入 `/` 触发的命令面板项
+///
+/// 与 Normal 模式 COMMANDS 不同，这些命令的语义是「向文档插入内容」，
+/// 而不是「执行编辑器动作」。
+pub const INSERT_COMMANDS: &[CmdItem] = &[
+    CmdItem {
+        name: "image",
+        desc: "插入图片 ![]()",
+    },
+    CmdItem {
+        name: "/",
+        desc: "输入 / 字符",
+    },
+];
+
 /// Vim 模式
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -83,6 +98,10 @@ pub enum Mode {
     Command(String),
     Search(String),
     CommandPanel(String),
+    /// Insert 模式下的命令面板（输入 `/` 触发）
+    ///
+    /// 内容为已经从触发的 `/` 之后输入的过滤文本（这些字符同时已经写入 buffer）。
+    InsertCommandPanel(String),
     /// 主题选择弹窗
     ThemeSelect,
     /// 帮助弹窗
@@ -99,6 +118,7 @@ impl fmt::Display for Mode {
             Self::Command(_) => write!(f, "COMMAND"),
             Self::Search(_) => write!(f, "SEARCH"),
             Self::CommandPanel(_) => write!(f, "CMD"),
+            Self::InsertCommandPanel(_) => write!(f, "INSERT"),
             Self::ThemeSelect => write!(f, "THEME"),
             Self::HelpPopup => write!(f, "HELP"),
         }
@@ -117,6 +137,7 @@ impl Mode {
             Self::Command(_) => Color::DarkGray,
             Self::Search(_) => Color::Magenta,
             Self::CommandPanel(_) => Color::Magenta,
+            Self::InsertCommandPanel(_) => Color::Cyan,
             Self::ThemeSelect => Color::Magenta,
             Self::HelpPopup => Color::Cyan,
         }
@@ -307,6 +328,7 @@ impl Vim {
             Mode::Command(cmd) => self.handle_command_mode(input, cmd.clone()),
             Mode::Search(pattern) => self.handle_search_mode(input, pattern.clone()),
             Mode::CommandPanel(filter) => self.handle_command_panel_mode(input, filter.clone()),
+            Mode::InsertCommandPanel(_) => Transition::Nop, // handled by MarkdownEditor
             Mode::Visual => self.handle_visual_mode(input, buffer),
             Mode::Operator(c) => self.handle_operator_mode(input, *c, buffer),
             Mode::ThemeSelect => Transition::Nop, // handled by MarkdownEditor
@@ -347,7 +369,13 @@ impl Vim {
             }
             Key::Char(c) => {
                 buffer.insert_char(c);
-                Transition::NeedRebuild
+                // 输入 `/` 时弹出 Insert 命令面板（image / 等）。
+                // `/` 字符已经被正常插入到 buffer——面板只是叠加层，由 editor.rs 处理后续输入。
+                if c == '/' {
+                    Transition::Mode(Mode::InsertCommandPanel(String::new()))
+                } else {
+                    Transition::NeedRebuild
+                }
             }
             Key::Tab => {
                 buffer.insert_str("    ");
@@ -641,6 +669,22 @@ pub fn filter_commands(filter: &str) -> Vec<&'static CmdItem> {
             })
             .collect()
     }
+}
+
+/// 根据筛选文本过滤 Insert 模式命令列表
+///
+/// 与 `filter_commands` 不同：仅按 `name` 前缀匹配。这样输入 `https` 这类
+/// 真实文本时面板会立即变空（editor 据此自动关闭面板），不会因为 desc 里
+/// 含某个字而误留弹窗。
+pub fn filter_insert_commands(filter: &str) -> Vec<&'static CmdItem> {
+    if filter.is_empty() {
+        return INSERT_COMMANDS.iter().collect();
+    }
+    let filter_lower = filter.to_lowercase();
+    INSERT_COMMANDS
+        .iter()
+        .filter(|cmd| cmd.name.to_lowercase().starts_with(&filter_lower))
+        .collect()
 }
 
 /// 解析命令面板输入，提取命令名和参数

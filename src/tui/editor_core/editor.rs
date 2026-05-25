@@ -8,7 +8,10 @@ use super::{
     search::SearchState,
     text_buffer::TextBuffer,
     theme::{EditorTheme, HighlightFn},
-    vim::{Input, Key, Mode, Transition, Vim, filter_commands, parse_command},
+    vim::{
+        CmdItem, Input, Key, Mode, Transition, Vim, filter_commands, filter_insert_commands,
+        parse_command,
+    },
     wrap_engine::WrapEngine,
 };
 
@@ -126,6 +129,9 @@ pub struct MarkdownEditor {
     status_message: Option<String>,
     /// 进入搜索前的光标位置，用于 Esc 恢复
     cursor_before_search: Option<(usize, usize)>,
+    /// Insert 模式命令面板的锚点（触发的 `/` 字符在 buffer 中的逻辑位置）
+    /// 用于把 popup 渲染到 `/` 下方，而不是固定在编辑区底部
+    insert_panel_anchor: Option<(usize, usize)>,
     /// 鼠标拖拽锚点（左键按下时的逻辑位置）
     mouse_anchor: Option<(usize, usize)>,
 }
@@ -188,6 +194,7 @@ impl MarkdownEditor {
             cmd_popup_selected: 0,
             status_message: None,
             cursor_before_search: None,
+            insert_panel_anchor: None,
             mouse_anchor: None,
         }
     }
@@ -363,13 +370,26 @@ impl MarkdownEditor {
 
         // 命令面板模式：拦截上下键和回车键
         // 先克隆 filter 以释放 self.vim 的借用，避免后续调用 execute_command 时的借用冲突
+        //
+        // 同时处理两种面板：
+        //  - CommandPanel：Normal 模式触发，命令列表 = COMMANDS
+        //  - InsertCommandPanel：Insert 模式触发，命令列表 = INSERT_COMMANDS
         {
-            let filter_clone = match self.vim.mode() {
-                Mode::CommandPanel(f) => Some(f.clone()),
+            #[derive(Clone, Copy)]
+            enum PanelKind {
+                Normal,
+                Insert,
+            }
+            let panel_state: Option<(PanelKind, String)> = match self.vim.mode() {
+                Mode::CommandPanel(f) => Some((PanelKind::Normal, f.clone())),
+                Mode::InsertCommandPanel(f) => Some((PanelKind::Insert, f.clone())),
                 _ => None,
             };
-            if let Some(filter) = filter_clone {
-                let filtered = filter_commands(&filter);
+            if let Some((kind, filter)) = panel_state {
+                let filtered: Vec<&'static CmdItem> = match kind {
+                    PanelKind::Normal => filter_commands(&filter),
+                    PanelKind::Insert => filter_insert_commands(&filter),
+                };
                 match input.key {
                     Key::Up => {
                         if !filtered.is_empty() {
@@ -396,17 +416,40 @@ impl MarkdownEditor {
                             .cmd_popup_selected
                             .min(filtered.len().saturating_sub(1));
                         if let Some(cmd) = filtered.get(selected) {
-                            let full_cmd = if cmd.name == "jump" {
-                                filter
-                            } else {
-                                cmd.name.to_string()
-                            };
-                            return self.execute_command(&full_cmd);
+                            match kind {
+                                PanelKind::Normal => {
+                                    let full_cmd = if cmd.name == "jump" {
+                                        filter
+                                    } else {
+                                        cmd.name.to_string()
+                                    };
+                                    return self.execute_command(&full_cmd);
+                                }
+                                PanelKind::Insert => {
+                                    return self.execute_insert_command(cmd.name, &filter);
+                                }
+                            }
                         }
-                        self.vim.set_mode(Mode::Normal);
+                        // 没有匹配项：恢复到对应的来源模式
+                        match kind {
+                            PanelKind::Normal => self.vim.set_mode(Mode::Normal),
+                            PanelKind::Insert => {
+                                self.vim.set_mode(Mode::Insert);
+                                self.insert_panel_anchor = None;
+                            }
+                        }
                         return EditorAction::Continue;
                     }
-                    _ => {} // 忽略其他按键（如功能键、组合键等）
+                    Key::Esc => {
+                        // Insert 面板：保留已插入的 / 与 filter 文本，回到 Insert
+                        // Normal 面板：保持原有行为，由 vim 状态机处理（fallthrough）
+                        if matches!(kind, PanelKind::Insert) {
+                            self.vim.set_mode(Mode::Insert);
+                            self.insert_panel_anchor = None;
+                            return EditorAction::Continue;
+                        }
+                    }
+                    _ => {} // 其他按键交由后续 handle_mode_input 处理
                 }
             }
         }
@@ -450,6 +493,11 @@ impl MarkdownEditor {
                 }
                 if matches!(old_mode, Mode::Search(_)) {
                     self.cursor_before_search = None;
+                }
+                // 进入 Insert 命令面板时记录触发的 `/` 字符位置（光标已前进 1 位）
+                if old_mode == Mode::Insert && matches!(new_mode, Mode::InsertCommandPanel(_)) {
+                    let (row, col) = self.buffer.cursor();
+                    self.insert_panel_anchor = Some((row, col.saturating_sub(1)));
                 }
                 self.vim.set_mode(new_mode);
                 self.rebuild_wrap_cache();
@@ -550,6 +598,48 @@ impl MarkdownEditor {
                     _ => {} // 忽略其他按键（如功能键、组合键等）
                 }
                 self.vim.set_mode(Mode::CommandPanel(filter));
+            }
+            Mode::InsertCommandPanel(filter) => {
+                // Insert 模式专用面板：触发 `/` 已经写入 buffer。
+                // 这里继续把字符同步插入 buffer + filter，让用户的真实输入和面板状态一致。
+                let mut filter = filter.clone();
+                match &input.key {
+                    Key::Char(c) => {
+                        // `/` 字符已经走 vim::handle_insert_mode 的分支被插入；
+                        // 这里只处理后续字符。
+                        self.buffer.insert_char(*c);
+                        filter.push(*c);
+                        self.cmd_popup_selected = 0;
+
+                        // 如果新输入后没有任何匹配项，自动关闭面板回到 Insert
+                        // （让用户能够正常打 `https://` 之类的真实文本）
+                        if filter_insert_commands(&filter).is_empty() {
+                            self.vim.set_mode(Mode::Insert);
+                            self.insert_panel_anchor = None;
+                            self.rebuild_wrap_cache();
+                            return;
+                        }
+                        self.rebuild_wrap_cache();
+                    }
+                    Key::Backspace => {
+                        if !filter.is_empty() {
+                            // 同步从 buffer 删除最后一个 filter 字符
+                            self.buffer.backspace();
+                            filter.pop();
+                            self.cmd_popup_selected = 0;
+                            self.rebuild_wrap_cache();
+                        } else {
+                            // filter 为空 → 删除触发的 `/`，回到 Insert
+                            self.buffer.backspace();
+                            self.vim.set_mode(Mode::Insert);
+                            self.insert_panel_anchor = None;
+                            self.rebuild_wrap_cache();
+                            return;
+                        }
+                    }
+                    _ => {}
+                }
+                self.vim.set_mode(Mode::InsertCommandPanel(filter));
             }
             _ => {}
         }
@@ -668,6 +758,35 @@ impl MarkdownEditor {
                 EditorAction::Continue
             }
         }
+    }
+
+    /// 执行 Insert 模式命令面板里的命令
+    ///
+    /// 命令面板从输入 `/` 触发时，`/` 字符与后续 filter 文本已经被写入 buffer。
+    /// 这里需要先把这部分回退掉（共 `1 + filter` 个字符），再插入命令对应的内容。
+    fn execute_insert_command(&mut self, name: &str, filter: &str) -> EditorAction {
+        // 删除已写入的 `/` + filter（共 1 + filter.chars().count() 个字符）
+        let to_delete = 1 + filter.chars().count();
+        for _ in 0..to_delete {
+            self.buffer.backspace();
+        }
+
+        self.vim.set_mode(Mode::Insert);
+        self.insert_panel_anchor = None;
+        match name {
+            "image" => {
+                self.buffer.insert_str("![]()");
+                // 光标移动到 () 之间
+                let (row, col) = self.buffer.cursor();
+                self.buffer.set_cursor(row, col.saturating_sub(1));
+            }
+            "/" => {
+                self.buffer.insert_char('/');
+            }
+            _ => {}
+        }
+        self.rebuild_wrap_cache();
+        EditorAction::Continue
     }
 
     /// 处理帮助弹窗模式按键（任意键关闭）
@@ -1091,9 +1210,16 @@ impl MarkdownEditor {
         }
 
         // 渲染命令面板弹窗
-        if let Mode::CommandPanel(filter) = self.vim.mode() {
-            let filter = filter.clone();
-            self.render_command_popup(f, &filter, area);
+        match self.vim.mode() {
+            Mode::CommandPanel(filter) => {
+                let filter = filter.clone();
+                self.render_command_popup(f, &filter, area, false);
+            }
+            Mode::InsertCommandPanel(filter) => {
+                let filter = filter.clone();
+                self.render_command_popup(f, &filter, area, true);
+            }
+            _ => {}
         }
 
         // 渲染主题选择弹窗
@@ -1188,9 +1314,118 @@ impl MarkdownEditor {
         }
     }
 
+    /// 计算 Insert 命令面板的屏幕坐标（位于触发的 `/` 字符下方一行）
+    ///
+    /// 逻辑：
+    ///  1. 在上一帧的 `render_meta.vl_map` 中，找到包含 `insert_panel_anchor`
+    ///     `(row, col)` 的视觉行索引（相对屏幕顶部）。
+    ///  2. Y = area.y + 1 (上边框) + 视觉行索引 + 1 (锚点下方一行)
+    ///  3. X = area.x + 1 (左边框) + line_num_width + 锚点列在视觉行内的显示宽度
+    ///
+    /// 若信息不足以定位（首次渲染、anchor 不在视口等），fall back 到默认底部位置。
+    fn compute_insert_popup_position(
+        &self,
+        area: Rect,
+        popup_width: u16,
+        popup_height: u16,
+    ) -> (u16, u16) {
+        let fallback = || -> (u16, u16) {
+            let x = area.x + 2;
+            let y = area
+                .bottom()
+                .saturating_sub(popup_height + 2)
+                .max(area.y + 2);
+            (x, y)
+        };
+
+        let Some((anchor_row, anchor_col)) = self.insert_panel_anchor else {
+            return fallback();
+        };
+
+        // 在 vl_map 中找到包含 anchor 的视觉行
+        let line_num_width: u16 = if self.renderer.is_show_line_numbers() {
+            6
+        } else {
+            0
+        };
+        let map_index = self.render_meta.map_index;
+        let vl_map = &self.render_meta.vl_map;
+        let content_height = area.height.saturating_sub(2) as usize; // 上下边框
+
+        let mut found_screen_y: Option<u16> = None;
+        let mut found_start_col: usize = 0;
+        for screen_y in 0..content_height {
+            let idx = map_index + screen_y;
+            if let Some(meta) = vl_map.get(idx)
+                && meta.logical_line == anchor_row
+                && anchor_col >= meta.start_col
+                && anchor_col < meta.end_col.max(meta.start_col + 1)
+            {
+                found_screen_y = Some(screen_y as u16);
+                found_start_col = meta.start_col;
+                break;
+            }
+        }
+
+        let Some(screen_y) = found_screen_y else {
+            return fallback();
+        };
+
+        // 计算锚点在视觉行内的显示宽度
+        let line_text = match self.buffer.line(anchor_row) {
+            Some(s) => s,
+            None => return fallback(),
+        };
+        let prefix_text: String = line_text
+            .chars()
+            .skip(found_start_col)
+            .take(anchor_col.saturating_sub(found_start_col))
+            .collect();
+        let display_x = unicode_width::UnicodeWidthStr::width(prefix_text.as_str()) as u16;
+
+        // 屏幕坐标：area 内左上角是 area.x/area.y，加 1 给上/左边框
+        let mut x = area.x + 1 + line_num_width + display_x;
+        let mut y = area.y + 1 + screen_y + 1; // 锚点下方一行
+
+        // 边界处理：popup 不能溢出 area
+        let max_x = area.x + area.width.saturating_sub(popup_width + 1);
+        if x > max_x {
+            x = max_x;
+        }
+        if x < area.x + 1 {
+            x = area.x + 1;
+        }
+        // 如果下方装不下 popup_height，就放到锚点上方
+        if y + popup_height > area.y + area.height.saturating_sub(1) {
+            let above_y = area.y + 1 + screen_y;
+            if above_y >= popup_height {
+                y = above_y.saturating_sub(popup_height);
+            } else {
+                // 上下都不够，截断到顶部
+                y = area.y + 1;
+            }
+        }
+
+        (x, y)
+    }
+
     /// 渲染命令面板弹窗
-    fn render_command_popup(&mut self, f: &mut Frame<'_>, filter: &str, area: Rect) {
-        let items = filter_commands(filter);
+    ///
+    /// `is_insert`:
+    ///  - false: Normal 模式触发的命令面板（COMMANDS）
+    ///  - true:  Insert 模式触发（INSERT_COMMANDS），仅 image / `/`
+    fn render_command_popup(
+        &mut self,
+        f: &mut Frame<'_>,
+        filter: &str,
+        area: Rect,
+        is_insert: bool,
+    ) {
+        let items = if is_insert {
+            filter_insert_commands(filter)
+        } else {
+            filter_commands(filter)
+        };
         if items.is_empty() {
             return;
         }
@@ -1221,19 +1456,31 @@ impl MarkdownEditor {
             .max(16)
             .min(area.width.saturating_sub(4));
 
-        // 位置：编辑区底部偏左
-        let x = area.x + 2;
-        let y = area
-            .bottom()
-            .saturating_sub(popup_height + 2) // 留出状态栏和命令栏
-            .max(area.y + 2);
+        // 位置：
+        //  - Normal 命令面板：编辑区底部偏左（保持原行为）
+        //  - Insert 命令面板：锚定在触发的 `/` 字符下方一行
+        let (x, y) = if is_insert {
+            self.compute_insert_popup_position(area, popup_width, popup_height)
+        } else {
+            let x = area.x + 2;
+            let y = area
+                .bottom()
+                .saturating_sub(popup_height + 2) // 留出状态栏和命令栏
+                .max(area.y + 2);
+            (x, y)
+        };
         let popup_area = Rect::new(x, y, popup_width, popup_height);
 
         // 标题
-        let title = if filter.is_empty() {
-            " 命令面板 ".to_string()
+        let title_prefix = if is_insert {
+            " 插入 "
         } else {
-            format!(" 命令面板 [{}] ", filter)
+            " 命令面板 "
+        };
+        let title = if filter.is_empty() {
+            title_prefix.to_string()
+        } else {
+            format!("{}[{}] ", title_prefix, filter)
         };
 
         // 确保选中项在范围内
