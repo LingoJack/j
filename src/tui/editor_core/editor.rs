@@ -700,6 +700,27 @@ impl MarkdownEditor {
         }
     }
 
+    /// 向上滚动视口。
+    ///
+    /// 鼠标滚轮只控制视口，不应在边界处回退到移动 buffer 光标；
+    /// 否则会和 render() 中的自动追光标逻辑互相抢状态，导致底部抖动。
+    fn scroll_viewport_up(&mut self, step: usize) {
+        self.viewport.scroll_offset = self.viewport.scroll_offset.saturating_sub(step);
+        self.viewport.scroll_locked = true;
+    }
+
+    /// 向下滚动视口。
+    ///
+    /// `content_height` 使用当前可见内容高度，用实际渲染行数计算底部边界。
+    fn scroll_viewport_down(&mut self, step: usize, content_height: usize) {
+        let max_offset = self
+            .render_meta
+            .rendered_line_count
+            .saturating_sub(content_height);
+        self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
+        self.viewport.scroll_locked = true;
+    }
+
     // ========== 鼠标操作 ==========
 
     /// 将屏幕坐标转换为逻辑位置 (logical_row, logical_col)。
@@ -810,40 +831,11 @@ impl MarkdownEditor {
                 self.mouse_anchor = None;
             }
             MouseEventKind::ScrollUp => {
-                let step = 3;
-                let old_offset = self.viewport.scroll_offset;
-                let new_offset = old_offset.saturating_sub(step);
-                if new_offset != old_offset {
-                    // 可以滚动：移动视口
-                    self.viewport.scroll_offset = new_offset;
-                    self.viewport.scroll_locked = true;
-                } else {
-                    // 无法滚动（已到顶部或内容不满一屏）：移动光标向上
-                    let (row, col) = self.buffer.cursor();
-                    let new_row = row.saturating_sub(step);
-                    self.buffer.set_cursor(new_row, col);
-                    self.viewport.scroll_locked = false;
-                }
+                self.scroll_viewport_up(3);
             }
             MouseEventKind::ScrollDown => {
-                let step = 3;
                 let content_height = area.height.saturating_sub(3) as usize;
-                let total_rendered = self.render_meta.rendered_line_count;
-                let max_offset = total_rendered.saturating_sub(content_height);
-                let old_offset = self.viewport.scroll_offset;
-                let new_offset = (old_offset + step).min(max_offset);
-                if new_offset != old_offset {
-                    // 可以滚动：移动视口
-                    self.viewport.scroll_offset = new_offset;
-                    self.viewport.scroll_locked = true;
-                } else {
-                    // 无法滚动（已到底部或内容不满一屏）：移动光标向下
-                    let (row, col) = self.buffer.cursor();
-                    let last_row = self.buffer.line_count().saturating_sub(1);
-                    let new_row = (row + step).min(last_row);
-                    self.buffer.set_cursor(new_row, col);
-                    self.viewport.scroll_locked = false;
-                }
+                self.scroll_viewport_down(3, content_height);
             }
             _ => {}
         }
@@ -869,4 +861,94 @@ pub enum EditorAction {
     Submit(String),
     /// 取消编辑
     Cancel,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Color;
+    use ratatui::text::Span;
+
+    fn test_theme() -> EditorTheme {
+        EditorTheme {
+            bg_primary: Color::Reset,
+            bg_input: Color::Reset,
+            code_bg: Color::DarkGray,
+            cursor_fg: Color::Black,
+            cursor_bg: Color::Cyan,
+            text_normal: Color::White,
+            text_dim: Color::DarkGray,
+            text_bold: Color::White,
+            md_h1: Color::Cyan,
+            md_h2: Color::Green,
+            md_h3: Color::Yellow,
+            md_h4: Color::Magenta,
+            md_heading_sep: Color::DarkGray,
+            md_link: Color::Blue,
+            md_list_bullet: Color::Yellow,
+            md_blockquote_bar: Color::Cyan,
+            md_blockquote_bg: Color::DarkGray,
+            md_blockquote_text: Color::Gray,
+            md_inline_code_fg: Color::Magenta,
+            md_inline_code_bg: Color::DarkGray,
+            md_rule: Color::DarkGray,
+            code_border: Color::DarkGray,
+            table_header: Color::White,
+            table_body: Color::White,
+            code_default: Color::White,
+            code_keyword: Color::Magenta,
+            code_string: Color::Green,
+            code_comment: Color::DarkGray,
+            code_number: Color::Yellow,
+            code_type: Color::Yellow,
+            code_primitive: Color::Cyan,
+            code_macro: Color::LightCyan,
+            code_lifetime: Color::LightMagenta,
+            code_attribute: Color::LightBlue,
+            code_shell_var: Color::LightCyan,
+            label_ai: Color::Green,
+        }
+    }
+
+    fn noop_highlight(_: &str, _: &str, _: &EditorTheme) -> Vec<Span<'static>> {
+        Vec::new()
+    }
+
+    #[test]
+    fn scroll_down_at_bottom_keeps_cursor_and_offset_stable() {
+        let content = (0..20)
+            .map(|idx| format!("line {idx}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut editor = MarkdownEditor::new(
+            "test",
+            &content,
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+        let area = Rect::new(0, 0, 80, 10);
+        let content_height = area.height.saturating_sub(3) as usize;
+        let max_offset = 18usize.saturating_sub(content_height);
+
+        editor.buffer.set_cursor(0, 0);
+        editor.viewport.scroll_offset = max_offset;
+        editor.viewport.scroll_locked = true;
+        editor.render_meta.rendered_line_count = 18;
+
+        editor.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                column: 0,
+                row: 0,
+                modifiers: crossterm::event::KeyModifiers::empty(),
+            },
+            area,
+        );
+
+        assert_eq!(editor.buffer.cursor(), (0, 0));
+        assert_eq!(editor.viewport.scroll_offset, max_offset);
+        assert!(editor.viewport.scroll_locked);
+    }
 }

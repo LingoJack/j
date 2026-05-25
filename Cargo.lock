@@ -2481,7 +2481,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "j-agent"
-version = "12.10.76"
+version = "12.10.77"
 dependencies = [
  "aes-gcm",
  "arboard",
@@ -2520,7 +2520,7 @@ dependencies = [
 
 [[package]]
 name = "j-cli"
-version = "12.10.76"
+version = "12.10.77"
 dependencies = [
  "aes-gcm",
  "ansi_colours",
