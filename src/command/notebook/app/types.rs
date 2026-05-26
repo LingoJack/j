@@ -91,6 +91,17 @@ pub enum FlatEntryKind {
     },
 }
 
+// ========== 焦点状态 ==========
+
+/// 面板焦点枚举
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+    /// 焦点在目录树
+    Tree,
+    /// 焦点在编辑器
+    Editor,
+}
+
 // ========== 应用模式 ==========
 
 /// Notebook 应用模式枚举
@@ -116,20 +127,9 @@ pub enum AppMode {
     Mv,
 }
 
-/// 焦点位置
-#[derive(PartialEq, Clone, Copy, Default)]
-pub enum Focus {
-    /// 焦点在左侧列表
-    #[default]
-    List,
-    /// 焦点在右侧编辑器
-    Editor,
-}
-
-// ========== 命令面板选项 ==========
-
-/// 命令面板选项列表 (key, 中文标签)
+/// 目录树命令面板选项列表 (key, 中文标签)
 pub const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
+    ("new", "新建笔记"),
     ("search", "搜索"),
     ("rename", "重命名"),
     ("delete", "删除"),
@@ -150,8 +150,6 @@ pub struct NotebookApp {
     pub state: ListState,
     /// 当前模式
     pub mode: AppMode,
-    /// 焦点位置
-    pub focus: Focus,
     /// 输入缓冲区（新建/重命名/搜索/比例）
     pub input: String,
     /// 光标位置（字符索引）
@@ -162,8 +160,6 @@ pub struct NotebookApp {
     pub search_filter: Option<String>,
     /// 重命名目标索引
     pub rename_index: Option<usize>,
-    /// 强制退出输入缓冲
-    pub quit_input: String,
     /// 新建笔记确认后，待打开编辑器的标题（TUI loop 消费）
     pub pending_edit_title: Option<String>,
     /// 左侧面板比例 (15-60, 默认 30)
@@ -192,6 +188,10 @@ pub struct NotebookApp {
     pub last_click_index: Option<usize>,
     /// 是否正在拖拽分割线调整面板比例
     pub is_dragging_panel: bool,
+    /// 当前焦点面板
+    pub focus: Focus,
+    /// 标记是否需要退出 TUI
+    pub should_exit: bool,
 }
 
 impl Default for NotebookApp {
@@ -211,13 +211,11 @@ impl NotebookApp {
             notes,
             state: ListState::default(),
             mode: AppMode::Normal,
-            focus: Focus::default(),
             input: String::new(),
             cursor_pos: 0,
             message: None,
             search_filter: None,
             rename_index: None,
-            quit_input: String::new(),
             pending_edit_title: None,
             panel_ratio: super::io::load_panel_ratio().unwrap_or(30),
             cmd_popup_selected: 0,
@@ -232,6 +230,8 @@ impl NotebookApp {
             last_click_pos: None,
             last_click_index: None,
             is_dragging_panel: false,
+            focus: Focus::Tree,
+            should_exit: false,
         };
         app.build_flat_entries();
         if !app.flat_entries.is_empty() {

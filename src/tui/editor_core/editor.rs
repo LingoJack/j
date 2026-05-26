@@ -204,6 +204,14 @@ impl MarkdownEditor {
         self.buffer.lines().join("\n")
     }
 
+    /// 判断编辑器是否处于"空闲 Normal 模式"（可安全拦截 Esc）
+    ///
+    /// 当 vim 处于 Normal 模式且无活跃搜索时返回 true。
+    /// 此状态下 Esc 对编辑器无实际作用，外部可安全拦截用于焦点切换。
+    pub fn is_idle_normal_mode(&self) -> bool {
+        self.vim.mode() == &Mode::Normal && !self.search.is_searching()
+    }
+
     /// 获取光标所在的视觉行
     pub fn cursor_visual_line(&self) -> usize {
         let (row, col) = self.buffer.cursor();
@@ -319,14 +327,6 @@ impl MarkdownEditor {
         // 主题选择模式：拦截所有按键
         if self.vim.mode() == &Mode::ThemeSelect {
             return self.handle_theme_select(input);
-        }
-
-        // 全局快捷键
-        if input.ctrl && input.key == Key::Char('s') {
-            return EditorAction::Submit(self.buffer.to_string());
-        }
-        if input.ctrl && input.key == Key::Char('q') {
-            return EditorAction::Cancel;
         }
 
         // 处理撤销
@@ -499,6 +499,9 @@ impl MarkdownEditor {
             }
             Transition::Submit => {
                 return EditorAction::Submit(self.buffer.to_string());
+            }
+            Transition::Save => {
+                return EditorAction::Save(self.buffer.to_string());
             }
             Transition::Cancel => {
                 return EditorAction::Cancel;
@@ -766,6 +769,32 @@ impl MarkdownEditor {
         self.viewport.scroll_locked = true;
     }
 
+    /// 滚轮滚动后将光标移动到视口内的对应位置。
+    ///
+    /// 计算光标当前视觉行，若不在可视区域内则将其移动到视口中央。
+    fn cursor_follow_scroll(&mut self, area: Rect) {
+        let content_height = area.height.saturating_sub(3) as usize;
+        if content_height == 0 {
+            return;
+        }
+
+        let (cursor_row, cursor_col) = self.buffer.cursor();
+        let cursor_visual = self.wrap.logical_to_visual(cursor_row, cursor_col);
+        let offset = self.viewport.scroll_offset;
+        let visible_end = offset + content_height;
+
+        // 光标仍在可视区域内，无需移动
+        if cursor_visual >= offset && cursor_visual < visible_end {
+            return;
+        }
+
+        // 将光标移到视口中央行
+        let target_visual = offset + content_height / 2;
+        let (logical_row, logical_col) = self.wrap.visual_to_logical(target_visual);
+        self.buffer.set_cursor(logical_row, logical_col);
+        self.viewport.scroll_locked = false;
+    }
+
     // ========== 鼠标操作 ==========
 
     /// 将屏幕坐标转换为逻辑位置 (logical_row, logical_col)。
@@ -881,10 +910,12 @@ impl MarkdownEditor {
             }
             MouseEventKind::ScrollUp => {
                 self.scroll_viewport_up(3);
+                self.cursor_follow_scroll(area);
             }
             MouseEventKind::ScrollDown => {
                 let content_height = area.height.saturating_sub(3) as usize;
                 self.scroll_viewport_down(3, content_height);
+                self.cursor_follow_scroll(area);
             }
             _ => {}
         }
@@ -906,8 +937,10 @@ impl MarkdownEditor {
 pub enum EditorAction {
     /// 继续编辑
     Continue,
-    /// 提交内容
+    /// 提交内容（保存并退出）
     Submit(String),
+    /// 保存内容但不退出
+    Save(String),
     /// 取消编辑
     Cancel,
 }

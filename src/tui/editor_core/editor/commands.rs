@@ -8,7 +8,8 @@ impl MarkdownEditor {
     pub(super) fn execute_command(&mut self, cmd: &str) -> EditorAction {
         let (name, arg) = parse_command(cmd);
         match name {
-            "save" | "w" | "wq" | "x" => EditorAction::Submit(self.buffer.to_string()),
+            "save" | "w" => EditorAction::Save(self.buffer.to_string()),
+            "wq" | "x" => EditorAction::Submit(self.buffer.to_string()),
             "quit" | "q" => EditorAction::Cancel,
             "search" => {
                 self.cursor_before_search = Some(self.buffer.cursor());

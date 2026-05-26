@@ -1,106 +1,13 @@
 //! 按键处理逻辑。
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use std::fs;
 
 use super::io::{
-    cleanup_empty_dirs, copy_to_clipboard, note_file_path, notebook_dir, open_in_finder,
-    parse_ratio, save_expanded_dirs, save_panel_ratio,
+    cleanup_empty_dirs, note_file_path, notebook_dir, open_in_finder, parse_ratio,
+    save_expanded_dirs, save_panel_ratio,
 };
-use super::types::{AppMode, Focus, NotebookApp};
-
-/// 正常模式按键处理（焦点在列表区），返回 true 表示退出
-pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-        return true;
-    }
-
-    match key.code {
-        KeyCode::Char('q') => {
-            app.quit_input = "q".to_string();
-            return true;
-        }
-        KeyCode::Esc => {
-            if app.search_filter.is_some() {
-                app.clear_search();
-            } else {
-                return true;
-            }
-        }
-        KeyCode::Char('n') | KeyCode::Down | KeyCode::Char('j') => app.move_down(),
-        KeyCode::Char('N') | KeyCode::Up | KeyCode::Char('k') => app.move_up(),
-        KeyCode::Tab | KeyCode::Right if app.editor.is_some() => {
-            app.focus = Focus::Editor;
-        }
-        KeyCode::Enter if app.selected_name().is_some() && app.editor.is_some() => {
-            app.focus = Focus::Editor;
-        }
-        KeyCode::Char('a') => {
-            app.mode = AppMode::Adding;
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.message = None;
-        }
-        KeyCode::Char('d') if app.selected_real_index().is_some() => {
-            app.mode = AppMode::ConfirmDelete;
-        }
-        KeyCode::Char('r') => {
-            if let Some(idx) = app.selected_real_index() {
-                app.input = app.notes[idx].path.clone();
-                app.cursor_pos = app.input.chars().count();
-                app.rename_index = Some(idx);
-                app.mode = AppMode::Renaming;
-                app.message = None;
-            }
-        }
-        KeyCode::Char('/') => {
-            app.mode = AppMode::CommandPopup;
-            app.cmd_popup_filter.clear();
-            app.cmd_popup_selected = 0;
-            app.message = None;
-        }
-        KeyCode::Char('[') => {
-            app.panel_ratio = app.panel_ratio.saturating_sub(5).max(15);
-            app.message = Some(format!(
-                "面板比例: {}:{}",
-                app.panel_ratio,
-                100 - app.panel_ratio
-            ));
-            save_panel_ratio(app.panel_ratio);
-        }
-        KeyCode::Char(']') => {
-            app.panel_ratio = app.panel_ratio.saturating_add(5).min(60);
-            app.message = Some(format!(
-                "面板比例: {}:{}",
-                app.panel_ratio,
-                100 - app.panel_ratio
-            ));
-            save_panel_ratio(app.panel_ratio);
-        }
-        KeyCode::Char('y') => {
-            if let Some(name) = app.selected_name() {
-                if copy_to_clipboard(&name) {
-                    app.message = Some(format!("已复制笔记名: {}", name));
-                } else {
-                    app.message = Some("复制到剪切板失败".to_string());
-                }
-            }
-        }
-        KeyCode::Char('o') => {
-            open_in_finder();
-        }
-        KeyCode::Char('s') => {
-            app.reload();
-        }
-        _ => {}
-    }
-
-    if key.code != KeyCode::Char('q') {
-        app.quit_input.clear();
-    }
-
-    false
-}
+use super::types::{AppMode, NotebookApp};
 
 /// 输入模式按键处理（添加/重命名/搜索/目录/移动通用）
 pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
@@ -197,7 +104,6 @@ pub fn handle_command_popup_mode(app: &mut NotebookApp, key: KeyEvent) {
         KeyCode::Enter => {
             execute_cmd_popup_action(app);
             app.cmd_popup_filter.clear();
-            // 不重置 cmd_popup_selected，保留选项位置
         }
         KeyCode::Backspace => {
             if app.cmd_popup_filter.is_empty() {
@@ -290,7 +196,6 @@ fn enter_adding(app: &mut NotebookApp) {
         app.input.clear();
         return;
     }
-    // 设置待编辑标题，由 TUI loop 负责暂停终端并打开编辑器
     app.pending_edit_title = Some(title);
     app.input.clear();
     app.mode = AppMode::Normal;
@@ -323,7 +228,6 @@ fn enter_renaming(app: &mut NotebookApp) {
             app.message = Some(format!("目标笔记已存在: {}", new_name));
             return;
         }
-        // 确保目标目录存在
         if let Some(parent) = new_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
@@ -404,7 +308,6 @@ fn enter_mv(app: &mut NotebookApp) {
         app.input.clear();
         return;
     }
-    // 确保目标目录存在
     if let Some(parent) = new_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -457,6 +360,12 @@ fn execute_cmd_popup_action(app: &mut NotebookApp) {
     };
 
     match cmd_key {
+        "new" => {
+            app.mode = AppMode::Adding;
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.message = None;
+        }
         "search" => {
             app.mode = AppMode::Search;
             app.input.clear();
@@ -512,7 +421,7 @@ fn execute_cmd_popup_action(app: &mut NotebookApp) {
             app.message = None;
         }
         "help" => {
-            app.message = Some("使用 Tab 切换到编辑器 | j/k 选择笔记".to_string());
+            app.message = Some("/ 命令面板 | 鼠标切换笔记 | Enter 编辑".to_string());
         }
         _ => {}
     }

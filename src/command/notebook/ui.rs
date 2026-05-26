@@ -81,10 +81,8 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => match app.focus {
-            Focus::List => {
-                " n/↓ 下移 | N/↑ 上移 | Tab/Enter 编辑 | a 新建 | d 删除 | r 重命名 | / 命令面板 | [ ] 调整比例 | y 复制 | o 打开目录 | s 刷新 | q 退出"
-            }
-            Focus::Editor => " Vim 模式编辑 | Esc 返回列表 | :w 保存 | :q 退出编辑器",
+            Focus::Tree => " / 命令面板 | ↑↓/jk 切换笔记 | Enter 编辑 | Esc 退出",
+            Focus::Editor => " :w 保存 | :wq 保存退出 | :q 退出编辑 | Esc(Normal) 回目录树",
         },
         AppMode::Adding => " Enter 确认新建 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
         AppMode::Renaming => " Enter 确认重命名 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
@@ -187,7 +185,11 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
     let list_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
+        .border_style(Style::default().fg(if app.focus == Focus::Tree {
+            Color::Cyan
+        } else {
+            Color::DarkGray
+        }))
         .title(" 笔记列表 ");
 
     if items.is_empty() {

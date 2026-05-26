@@ -213,8 +213,10 @@ pub enum Transition {
     Nop,
     /// 切换模式
     Mode(Mode),
-    /// 提交
+    /// 提交（保存并退出）
     Submit,
+    /// 保存但不退出
+    Save,
     /// 取消
     Cancel,
     /// 需要重建折行缓存
@@ -500,7 +502,8 @@ impl Vim {
             Key::Enter => {
                 let trimmed = cmd.trim();
                 match trimmed {
-                    "w" | "wq" | "x" => Transition::Submit,
+                    "w" => Transition::Save,
+                    "wq" | "x" => Transition::Submit,
                     "q" | "q!" => Transition::Cancel,
                     "set wrap" => Transition::ToggleWrap(true),
                     "set nowrap" => Transition::ToggleWrap(false),

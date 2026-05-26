@@ -276,6 +276,7 @@ fn save_if_changed(
 // ========== 剪切板 ==========
 
 /// 复制内容到系统剪切板
+#[allow(dead_code)]
 pub fn copy_to_clipboard(content: &str) -> bool {
     use std::io::Write;
     use std::process::{Command, Stdio};
