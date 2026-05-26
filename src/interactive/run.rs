@@ -48,6 +48,9 @@ pub fn run_interactive(config: &mut YamlConfig) {
     loop {
         let cwd = format_cwd();
         println!("{}", format!("work dir: {}", cwd).dimmed());
+        if let Some(helper) = rl.helper_mut() {
+            helper.rotate_tip();
+        }
         match rl.readline(&format!("{} ", "j >".yellow())) {
             Ok(line) => {
                 let input = line.trim();

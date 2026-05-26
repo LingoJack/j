@@ -1,0 +1,21 @@
+! 或 ！执行 shell 命令，例如：! ls
+单独输入 ! 或 ！进入交互式 shell 模式（exit 或 Ctrl+D 返回）
+$VAR 或 ${VAR} 展开环境变量，例如：! echo $HOME
+Tab 键自动补全命令、别名和文件路径
+help 查看所有可用命令与用法
+chat 进入 AI 对话模式（TUI）
+chat -c 继续上一次对话
+chat --session <名称> 指定会话名
+report 写当日日报，reportctl sync 同步到远端
+todo 进入 TUI 待办管理
+set <别名> <路径> 设置别名（路径/URL/脚本均可）
+rm <别名> 删除别名；rename <别名> <新名> 重命名
+list 查看所有别名，list <分区> 查看指定分区
+search <行数|all> <关键词> [-f] 搜索日报，-f 模糊匹配
+config <分区> <字段> <值> 修改配置
+log mode verbose 开启详细日志，concise 恢复简洁
+time countdown <时长> 倒计时，例如 time countdown 25m
+script <名字> <内容> 保存可执行脚本
+md <文件> 渲染 markdown
+update --check 检查新版本
+Ctrl+Q 中断当前输入，Ctrl+D 退出 j

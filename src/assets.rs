@@ -35,6 +35,6 @@ pub struct Assets;
 pub use help::{HelpEntry, HelpEntryKind, HelpExpandedDirs, help_file_count, load_help_entries};
 pub use install::{install_default_commands, install_default_scripts, install_default_skills};
 pub use template::{
-    default_agent_md, default_memory, default_soul, default_system_prompt, quotes_text,
+    default_agent_md, default_memory, default_soul, default_system_prompt, quotes_text, tips_text,
     version_template,
 };

@@ -431,8 +431,10 @@ impl Completer for CopilotCompleter {
 // ========== Hinter ==========
 
 /// 基于 rustyline HistoryHinter 的命令历史提示器
+/// 空行时展示随机使用技巧，有输入时回退到历史提示
 pub struct CopilotHinter {
     history_hinter: HistoryHinter,
+    current_tip: String,
 }
 
 impl Default for CopilotHinter {
@@ -446,7 +448,13 @@ impl CopilotHinter {
     pub fn new() -> Self {
         Self {
             history_hinter: HistoryHinter::new(),
+            current_tip: pick_random_tip(),
         }
+    }
+
+    /// 轮转到下一条随机技巧（每次 prompt 前调用）
+    pub fn rotate_tip(&mut self) {
+        self.current_tip = pick_random_tip();
     }
 }
 
@@ -454,6 +462,9 @@ impl Hinter for CopilotHinter {
     type Hint = String;
 
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+        if line.is_empty() {
+            return Some(self.current_tip.clone());
+        }
         self.history_hinter.hint(line, pos, ctx)
     }
 }
@@ -495,6 +506,11 @@ impl CopilotHelper {
     /// 刷新补全器的配置快照（配置变更后调用）
     pub fn refresh(&mut self, config: &YamlConfig) {
         self.completer.refresh(config);
+    }
+
+    /// 轮转使用技巧（每次 prompt 前调用）
+    pub fn rotate_tip(&mut self) {
+        self.hinter.rotate_tip();
     }
 }
 
@@ -604,4 +620,23 @@ pub fn complete_file_path(partial: &str) -> Vec<Pair> {
 
     candidates.sort_by(|a, b| a.display.cmp(&b.display));
     candidates
+}
+
+// ========== 使用技巧 ==========
+
+/// 从 tips.txt 中随机选取一条使用技巧
+fn pick_random_tip() -> String {
+    let tips: Vec<&str> = crate::assets::tips_text()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    if tips.is_empty() {
+        return String::new();
+    }
+    let index = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        % tips.len() as u128) as usize;
+    format!("({})", tips[index])
 }
