@@ -1,7 +1,7 @@
 use super::app::{
     AppMode, FlatEntryKind, Focus, NotebookApp, edit_note_with_editor, handle_command_popup_mode,
-    handle_confirm_delete, handle_input_mode, handle_normal_mode, handle_ratio_input_mode,
-    load_notes, note_file_path, notebook_dir,
+    handle_confirm_delete, handle_input_mode, handle_ratio_input_mode, load_notes, note_file_path,
+    notebook_dir,
 };
 use super::ui::draw_ui;
 use crate::command::chat::storage::load_agent_config;
@@ -402,6 +402,87 @@ fn run_notebook_tui() {
     }
 }
 
+/// 切换笔记时自动保存（如果内容有修改）
+fn auto_save_if_dirty(app: &mut NotebookApp) {
+    if app.editor_dirty {
+        app.save_editor_content();
+    }
+}
+
+/// 目录树焦点下的按键处理
+fn handle_tree_focus_key(app: &mut NotebookApp, key: crossterm::event::KeyEvent) {
+    match key.code {
+        // / 打开目录树命令面板
+        KeyCode::Char('/') => {
+            app.mode = AppMode::CommandPopup;
+            app.cmd_popup_filter.clear();
+            app.cmd_popup_selected = 0;
+            app.message = None;
+        }
+        // Esc 退出 notebook
+        KeyCode::Esc => {
+            auto_save_if_dirty(app);
+            app.should_exit = true;
+        }
+        // 上移
+        KeyCode::Up | KeyCode::Char('k') => {
+            auto_save_if_dirty(app);
+            app.move_up();
+        }
+        // 下移
+        KeyCode::Down | KeyCode::Char('j') => {
+            auto_save_if_dirty(app);
+            app.move_down();
+        }
+        // Enter: 目录→展开/折叠, 文件→焦点到编辑器
+        KeyCode::Enter => {
+            if let Some(entry) = app.selected_entry().cloned() {
+                match &entry.kind {
+                    FlatEntryKind::Dir { dir_path, .. } => {
+                        app.expanded_dirs.toggle(dir_path);
+                        super::app::io::save_expanded_dirs(&app.expanded_dirs);
+                        app.build_flat_entries();
+                    }
+                    FlatEntryKind::File { .. } => {
+                        app.focus = Focus::Editor;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 编辑器焦点下的按键处理（完整 vim 编辑器，和独立编辑器一致）
+fn handle_editor_focus_key(app: &mut NotebookApp, key: crossterm::event::KeyEvent) {
+    if let Some(ref mut editor) = app.editor {
+        // Esc 在编辑器空闲 Normal 模式时：焦点回目录树
+        if key.code == KeyCode::Esc && editor.is_idle_normal_mode() {
+            app.focus = Focus::Tree;
+            return;
+        }
+
+        // 其他按键正常传递给编辑器
+        let input = crate::tui::editor_core::vim::Input::from_keycode(key.code, key.modifiers);
+        let action = editor.handle_input(&input);
+        match action {
+            crate::tui::editor_core::EditorAction::Save(_) => {
+                app.save_editor_content();
+            }
+            crate::tui::editor_core::EditorAction::Submit(_) => {
+                app.save_editor_content();
+                app.focus = Focus::Tree;
+            }
+            crate::tui::editor_core::EditorAction::Cancel => {
+                app.focus = Focus::Tree;
+            }
+            crate::tui::editor_core::EditorAction::Continue => {
+                app.editor_dirty = true;
+            }
+        }
+    }
+}
+
 fn run_notebook_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -418,97 +499,42 @@ fn run_notebook_tui_internal() -> io::Result<()> {
 
         if event::poll(std::time::Duration::from_millis(NOTEBOOK_POLL_MS))? {
             match event::read()? {
-                Event::Key(key) => {
-                    match app.mode {
-                        AppMode::Normal => {
-                            match app.focus {
-                                Focus::List => {
-                                    if handle_normal_mode(&mut app, key) {
-                                        break;
-                                    }
-                                }
-                                Focus::Editor => {
-                                    if let Some(ref mut editor) = app.editor {
-                                        // Esc 在 Normal 模式下直接切回列表
-                                        if key.code == KeyCode::Esc {
-                                            // 检查编辑器是否在 Normal 模式（通过先处理 Esc，
-                                            // 如果返回 Continue 说明已经在 Normal 模式）
-                                            let input =
-                                                crate::tui::editor_core::vim::Input::from_keycode(
-                                                    key.code,
-                                                    key.modifiers,
-                                                );
-                                            let action = editor.handle_input(&input);
-                                            match action {
-                                                crate::tui::editor_core::EditorAction::Continue => {
-                                                    // Esc 在 Normal 模式无效果 → 切回列表
-                                                    if app.editor_dirty {
-                                                        app.save_editor_content();
-                                                    }
-                                                    app.focus = Focus::List;
-                                                }
-                                                crate::tui::editor_core::EditorAction::Submit(
-                                                    _,
-                                                ) => {
-                                                    app.save_editor_content();
-                                                    app.focus = Focus::List;
-                                                }
-                                                crate::tui::editor_core::EditorAction::Cancel => {
-                                                    app.focus = Focus::List;
-                                                }
-                                            }
-                                        } else {
-                                            let input =
-                                                crate::tui::editor_core::vim::Input::from_keycode(
-                                                    key.code,
-                                                    key.modifiers,
-                                                );
-                                            let action = editor.handle_input(&input);
-                                            match action {
-                                                crate::tui::editor_core::EditorAction::Submit(
-                                                    _,
-                                                ) => {
-                                                    app.save_editor_content();
-                                                    app.focus = Focus::List;
-                                                }
-                                                crate::tui::editor_core::EditorAction::Cancel => {
-                                                    app.focus = Focus::List;
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                }
+                Event::Key(key) => match app.mode {
+                    AppMode::Normal => match app.focus {
+                        Focus::Tree => {
+                            handle_tree_focus_key(&mut app, key);
+                            if app.should_exit {
+                                break;
                             }
                         }
-                        AppMode::Adding => {
-                            handle_input_mode(&mut app, key);
-                            if let Some(title) = app.pending_edit_title.take() {
-                                // 新建笔记：创建文件并加载到编辑器
-                                let file_path = super::app::io::note_file_path(&title);
-                                if let Some(parent) = file_path.parent() {
-                                    let _ = std::fs::create_dir_all(parent);
-                                }
-                                let _ = std::fs::write(&file_path, "");
-                                app.reload();
-                                // 选中新建的笔记
-                                if let Some(pos) = app.flat_entries.iter().position(|e| {
+                        Focus::Editor => {
+                            handle_editor_focus_key(&mut app, key);
+                        }
+                    },
+                    AppMode::Adding => {
+                        handle_input_mode(&mut app, key);
+                        if let Some(title) = app.pending_edit_title.take() {
+                            let file_path = super::app::io::note_file_path(&title);
+                            if let Some(parent) = file_path.parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+                            let _ = std::fs::write(&file_path, "");
+                            app.reload();
+                            if let Some(pos) = app.flat_entries.iter().position(|e| {
                                     matches!(&e.kind, FlatEntryKind::File { note_index } if app.notes[*note_index].path == title)
                                 }) {
                                     app.state.select(Some(pos));
                                     app.load_editor_for_selected();
                                 }
-                                app.focus = Focus::Editor;
-                            }
                         }
-                        AppMode::Renaming | AppMode::Search | AppMode::Mkdir | AppMode::Mv => {
-                            handle_input_mode(&mut app, key);
-                        }
-                        AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
-                        AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),
-                        AppMode::RatioInput => handle_ratio_input_mode(&mut app, key),
                     }
-                }
+                    AppMode::Renaming | AppMode::Search | AppMode::Mkdir | AppMode::Mv => {
+                        handle_input_mode(&mut app, key);
+                    }
+                    AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
+                    AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),
+                    AppMode::RatioInput => handle_ratio_input_mode(&mut app, key),
+                },
                 Event::Mouse(mouse) => {
                     let frame_area = terminal.get_frame().area();
                     let layout = compute_mouse_layout(frame_area, &app);
@@ -545,7 +571,7 @@ struct MouseLayoutInfo {
     main_area: Rect,
     /// 笔记列表区域（仅在 Normal 模式有效）
     list_area: Option<Rect>,
-    /// 预览区域（仅在 Normal 模式有效）
+    /// 预览/编辑区域（仅在 Normal 模式有效）
     preview_area: Option<Rect>,
     /// 分割线 x 坐标（列表区和预览区的交界列）
     divider_x: Option<u16>,
@@ -606,7 +632,7 @@ fn handle_left_click(
         return;
     }
 
-    // 点击编辑区：切换焦点到编辑器，并传递点击事件
+    // 点击编辑区：传递点击事件给编辑器，并设置焦点
     if rect_contains(editor_area, col, row) {
         app.focus = Focus::Editor;
         if let Some(ref mut editor) = app.editor {
@@ -621,12 +647,11 @@ fn handle_left_click(
         return;
     }
 
-    // 点击列表区：选择笔记并切换焦点到列表
+    // 点击列表区：选择笔记，并设置焦点
     if let Some(list_area) = layout.list_area
         && rect_contains(list_area, col, row)
     {
-        app.focus = Focus::List;
-
+        app.focus = Focus::Tree;
         let inner_y = row.saturating_sub(list_area.y).saturating_sub(1);
         let max_visible = list_area.height.saturating_sub(2) as usize;
 
@@ -641,25 +666,23 @@ fn handle_left_click(
                     .unwrap_or(false)
                     && app.last_click_index == Some(index);
 
+                if is_double_click {
+                    let entry = &app.flat_entries[index];
+                    if let FlatEntryKind::Dir { dir_path, .. } = &entry.kind {
+                        app.expanded_dirs.toggle(dir_path);
+                        super::app::io::save_expanded_dirs(&app.expanded_dirs);
+                        app.build_flat_entries();
+                    }
+                }
+
+                // 切换笔记时自动保存
+                auto_save_if_dirty(app);
                 app.state.select(Some(index));
                 app.load_editor_for_selected();
 
                 app.last_click_time = Some(now);
                 app.last_click_pos = Some((col, row));
                 app.last_click_index = Some(index);
-
-                // 双击文件：切换焦点到编辑器
-                if is_double_click {
-                    let entry = &app.flat_entries[index];
-                    if matches!(&entry.kind, FlatEntryKind::File { .. }) {
-                        app.focus = Focus::Editor;
-                    } else if let FlatEntryKind::Dir { dir_path, .. } = &entry.kind {
-                        app.expanded_dirs.toggle(dir_path);
-                        super::app::io::save_expanded_dirs(&app.expanded_dirs);
-                        app.build_flat_entries();
-                        app.load_editor_for_selected();
-                    }
-                }
             }
         }
     }
@@ -689,27 +712,34 @@ fn handle_mouse_up(app: &mut NotebookApp) {
     }
 }
 
-/// 处理滚轮滚动
+/// 处理滚轮滚动（根据鼠标位置决定滚动列表还是编辑器）
 fn handle_scroll(
     app: &mut NotebookApp,
     col: u16,
     row: u16,
     layout: &MouseLayoutInfo,
     kind: MouseEventKind,
-    editor_area: Rect,
+    _editor_area: Rect,
 ) {
-    // 编辑区滚轮：传递给编辑器
-    if rect_contains(editor_area, col, row)
-        && app.focus == Focus::Editor
+    // 编辑区滚轮：移动光标
+    if let Some(preview_area) = layout.preview_area
+        && rect_contains(preview_area, col, row)
         && let Some(ref mut editor) = app.editor
     {
-        let mouse_event = MouseEvent {
-            column: col,
-            row,
-            kind,
-            modifiers: crossterm::event::KeyModifiers::empty(),
-        };
-        editor.handle_mouse(mouse_event, editor_area);
+        let scroll_lines = 3;
+        match kind {
+            MouseEventKind::ScrollUp => {
+                for _ in 0..scroll_lines {
+                    editor.move_cursor_visual_up();
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                for _ in 0..scroll_lines {
+                    editor.move_cursor_visual_down();
+                }
+            }
+            _ => {}
+        }
         return;
     }
 
@@ -717,6 +747,7 @@ fn handle_scroll(
     if let Some(list_area) = layout.list_area
         && rect_contains(list_area, col, row)
     {
+        auto_save_if_dirty(app);
         match kind {
             MouseEventKind::ScrollUp => app.move_up(),
             MouseEventKind::ScrollDown => app.move_down(),

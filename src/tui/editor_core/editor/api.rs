@@ -52,7 +52,7 @@ pub fn open_markdown_editor_on_terminal(
                 let input = Input::from_keycode(key.code, key.modifiers);
 
                 match editor.handle_input(&input) {
-                    EditorAction::Submit(content) => {
+                    EditorAction::Submit(content) | EditorAction::Save(content) => {
                         return Ok((Some(content), editor.selected_theme_id()));
                     }
                     EditorAction::Cancel => return Ok((None, editor.selected_theme_id())),

@@ -22,6 +22,5 @@ pub use io::{
 
 // Re-export input 处理函数供 handler.rs 使用
 pub use input::{
-    handle_command_popup_mode, handle_confirm_delete, handle_input_mode, handle_normal_mode,
-    handle_ratio_input_mode,
+    handle_command_popup_mode, handle_confirm_delete, handle_input_mode, handle_ratio_input_mode,
 };
