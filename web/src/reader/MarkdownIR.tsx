@@ -69,7 +69,7 @@ function renderInline(inline: Inline, key: string): React.ReactNode {
         </a>
       )
     case 'soft_break':
-      return <span key={key}> </span>
+      return <br key={key} />
     case 'hard_break':
       return <br key={key} />
   }
