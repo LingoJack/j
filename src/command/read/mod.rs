@@ -28,7 +28,8 @@ pub fn handle_read(file_path: &str, port: Option<u16>, no_open: bool, _config: &
 }
 
 fn run(file_path: &str, port: Option<u16>, no_open: bool) -> Result<(), String> {
-    let path = Path::new(file_path);
+    let expanded = expand_tilde(file_path);
+    let path = Path::new(&expanded);
 
     // 1. 检查文件存在 & 大小
     let metadata =
@@ -106,4 +107,19 @@ fn open_in_browser(url: &str) -> Result<(), String> {
         return Err(format!("浏览器进程返回非零状态：{status}"));
     }
     Ok(())
+}
+
+/// 展开 `~` 为用户 home 目录。
+fn expand_tilde(path: &str) -> String {
+    if (path == "~" || path.starts_with("~/"))
+        && let Some(home) = dirs::home_dir()
+    {
+        if path == "~" {
+            home.display().to_string()
+        } else {
+            format!("{}{}", home.display(), &path[1..])
+        }
+    } else {
+        path.to_string()
+    }
 }
