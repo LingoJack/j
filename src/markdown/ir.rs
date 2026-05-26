@@ -2,9 +2,14 @@
 //!
 //! Parser 输出 `ParsedDocument`，Render 基于 IR 生成 `Vec<Line>`。
 //! IR 与终端宽度、主题无关，可被多次渲染（不同宽度/主题）。
+//!
+//! 所有公开类型都实现了 `Serialize`，可以序列化为 JSON 传给 Web 前端
+//! （用于 `j read` 命令的浏览器预览）。
+
+use serde::{Serialize, Serializer};
 
 /// 源码位置范围
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize)]
 pub struct SourceRange {
     /// 源码起始行号（0-based）
     pub start_line: usize,
@@ -13,17 +18,18 @@ pub struct SourceRange {
 }
 
 /// 解析后的文档
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct ParsedDocument {
     /// 文档中的 block 级元素
     pub blocks: Vec<Block>,
     /// 源码行号 -> block 索引的映射（用于 editor 侧快速定位）
     #[allow(dead_code)]
+    #[serde(skip)]
     pub line_to_block: Vec<Option<usize>>,
 }
 
 /// Block 级元素
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Block {
     /// 源码位置（后续 Step 实现精确映射）
     #[allow(dead_code)]
@@ -33,7 +39,12 @@ pub struct Block {
 }
 
 /// Block 类型枚举
-#[derive(Debug, Clone)]
+///
+/// 序列化策略：`{ "type": "...", "value": ... }` （adjacently-tagged），
+/// 这样无论是 newtype 变体（`Paragraph(Vec<Inline>)`）还是 struct 变体
+/// （`Heading { level, content }`）都能均匀承载，前端按统一 shape 解析。
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum BlockKind {
     /// 普通段落
     Paragraph(Vec<Inline>),
@@ -52,16 +63,17 @@ pub enum BlockKind {
 }
 
 /// 表格数据
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TableData {
     /// 每列对齐方式
+    #[serde(serialize_with = "serialize_alignments")]
     pub alignments: Vec<pulldown_cmark::Alignment>,
     /// 行数据：rows[row_idx][col_idx] = 单元格内的 inline 元素
     pub rows: Vec<Vec<Vec<Inline>>>,
 }
 
 /// 列表数据
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ListData {
     /// 是否为有序列表
     pub ordered: bool,
@@ -72,7 +84,7 @@ pub struct ListData {
 }
 
 /// 列表项
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ListItem {
     /// Task list 标记：`Some(true)` = `[x]`，`Some(false)` = `[ ]`，`None` = 非 task list
     pub checked: Option<bool>,
@@ -83,7 +95,10 @@ pub struct ListItem {
 }
 
 /// Inline 级元素
-#[derive(Debug, Clone)]
+///
+/// 序列化策略同 [`BlockKind`]：adjacently-tagged。
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum Inline {
     /// 普通文本
     Text(String),
@@ -101,4 +116,24 @@ pub enum Inline {
     SoftBreak,
     /// 硬换行（显式 `<br>` 或行尾 `\`）
     HardBreak,
+}
+
+/// 将 `pulldown_cmark::Alignment` 列表序列化为字符串列表
+/// （`"none"` / `"left"` / `"center"` / `"right"`），供前端使用。
+fn serialize_alignments<S: Serializer>(
+    alignments: &[pulldown_cmark::Alignment],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeSeq;
+    let mut seq = serializer.serialize_seq(Some(alignments.len()))?;
+    for a in alignments {
+        let s = match a {
+            pulldown_cmark::Alignment::None => "none",
+            pulldown_cmark::Alignment::Left => "left",
+            pulldown_cmark::Alignment::Center => "center",
+            pulldown_cmark::Alignment::Right => "right",
+        };
+        seq.serialize_element(s)?;
+    }
+    seq.end()
 }

@@ -15,3 +15,6 @@ example/
 论文.md
 毕设/
 bishe/
+
+# `j read` 命令的 Reader Web SPA 构建产物（由 `make build-reader-web` 生成）
+/assets/reader_web/

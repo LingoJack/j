@@ -7,6 +7,7 @@ pub mod list;
 pub mod lock;
 pub mod notebook;
 pub mod open;
+pub mod read;
 pub mod report;
 pub mod script;
 pub mod system;

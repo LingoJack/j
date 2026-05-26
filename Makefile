@@ -31,6 +31,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         docker-build docker-run \
         pre-commit \
         build-remote \
+        build-reader-web \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -151,6 +152,11 @@ build-web: ## 构建 Web 前端
 	@echo "🌐 构建 Web 前端..."
 	@cd web && npm install --silent && npm run build
 	@echo "☑️ Web 前端构建完成"
+
+build-reader-web: ## 构建 `j read` 命令使用的 Reader SPA（产物嵌入二进制）
+	@echo "📖 构建 Reader SPA..."
+	@cd web && npm install --silent && npm run build:reader
+	@echo "☑️ Reader SPA 构建完成（输出至 assets/reader_web/）"
 
 build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
 	@echo "🔴 构建 j-indicator..."

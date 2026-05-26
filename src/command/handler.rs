@@ -163,6 +163,11 @@ command_handlers! {
         let target = self.target.as_deref().unwrap_or(".");
         crate::command::lock::handle_unlock(&self.password, target);
     },
+
+    // ========== 文件预览（Web UI） ==========
+    ReadCmd { file_path: String, port: Option<u16>, no_open: bool } => |self, config| {
+        crate::command::read::handle_read(&self.file_path, self.port, self.no_open, config);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -245,6 +250,17 @@ impl SubCmd {
             // 文件加密/解密
             SubCmd::Lock { password, target } => Box::new(LockCmd { password, target }),
             SubCmd::Unlock { password, target } => Box::new(UnlockCmd { password, target }),
+
+            // 文件预览（Web UI）
+            SubCmd::Read {
+                file_path,
+                port,
+                no_open,
+            } => Box::new(ReadCmd {
+                file_path,
+                port,
+                no_open,
+            }),
         }
     }
 }

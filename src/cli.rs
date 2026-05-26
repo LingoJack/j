@@ -275,4 +275,18 @@ pub enum SubCmd {
         /// 目标 .lock 文件或目录路径（默认当前目录 .）
         target: Option<String>,
     },
+
+    // ========== 文件预览（Web UI） ==========
+    /// 在浏览器中预览文件（只读，支持 Markdown，未来扩展 PPT/DOCX/XLSX）
+    #[command(alias = "rd")]
+    Read {
+        /// 要预览的文件路径
+        file_path: String,
+        /// 监听端口（默认随机分配空闲端口）
+        #[arg(long)]
+        port: Option<u16>,
+        /// 不自动打开浏览器，只输出访问 URL
+        #[arg(long)]
+        no_open: bool,
+    },
 }
