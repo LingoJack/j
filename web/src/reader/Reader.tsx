@@ -40,6 +40,15 @@ export function Reader() {
     }
   }, [])
 
+  // 页面关闭时通知后端 shutdown
+  useEffect(() => {
+    const handleUnload = () => {
+      navigator.sendBeacon('/api/shutdown')
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [])
+
   if (state.kind === 'loading') {
     return (
       <div className="min-h-screen bg-[#faf9f6] text-stone-500 flex items-center justify-center text-sm">
@@ -68,7 +77,7 @@ export function Reader() {
             {kind}
           </span>
         </div>
-        <span className="text-xs text-stone-400">在终端按 Ctrl-C 关闭</span>
+        <span className="text-xs text-stone-400">关闭此页面将自动停止服务</span>
       </header>
       <main className="max-w-3xl mx-auto px-6 py-8">
         {renderPayload(kind, payload)}

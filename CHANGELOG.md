@@ -1,3 +1,26 @@
+# v12.10.81
+
+
+### 新功能
+
+- **`j read` 命令**: 在浏览器中预览 Markdown 文件。启动本地 HTTP 服务（仅绑定 127.0.0.1），自动打开浏览器展示渲染后的文档内容，支持 `--port` 指定端口和 `--no-open` 禁止自动打开浏览器
+- **目录侧边栏导航**: Reader 页面右侧自动提取 Markdown 标题生成可点击的目录导航，支持滚动高亮当前标题、平滑滚动定位，可收起/展开
+- **~ 路径展开**: `j read` 命令支持 `~` 和 `~/...` 路径自动展开为用户 home 目录
+- **纯文本兜底**: 非 Markdown 文件自动以纯文本模式预览，前端展示等宽字体原文
+- **文件大小保护**: 预览文件限制为 5 MiB 以内，超大文件给出明确提示
+
+### 改进
+
+- **Markdown IR 支持 JSON 序列化**: 为所有 IR 类型（`ParsedDocument`、`Block`、`Inline`、`TableData` 等）添加 `Serialize` 实现，采用 adjacently-tagged 格式，便于前后端数据交互
+- **交互式 Shell 补全**: `read` / `rd` 命令支持 Tab 补全，包括 `--port`、`--no-open` 参数提示和文件路径补全
+- **Reader SPA 嵌入二进制**: 使用 `rust-embed` 将前端构建产物编译期嵌入，单二进制分发无需额外文件
+- **新增 `build-reader-web` Makefile 目标**: 一键构建 Reader SPA 前端资源
+
+### Bug 修复
+
+- **soft_break 渲染修复**: `soft_break` 元素正确渲染为换行而非空格
+</result
+
 # v12.10.80
 
 

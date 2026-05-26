@@ -11,21 +11,23 @@ use axum::{
     extract::State,
     http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Json, Response},
-    routing::get,
+    routing::{get, post},
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Notify;
 
 use super::embed::ReaderAssets;
 use super::renderer::RenderedDoc;
 
-/// 服务端共享状态：渲染好的文档（不可变，多线程共享）。
+/// 服务端共享状态：渲染好的文档（不可变，多线程共享）+ shutdown 信号。
 #[derive(Clone)]
 struct AppState {
     doc: Arc<RenderedDoc>,
+    shutdown: Arc<Notify>,
 }
 
-/// 启动 server 并阻塞当前线程，直到 server 退出（Ctrl-C 由调用方处理）。
+/// 启动 server 并阻塞当前线程，直到 server 退出（Ctrl-C 或浏览器页面关闭）。
 ///
 /// 返回实际监听的地址（用于打印 URL / 打开浏览器）。
 pub fn serve_blocking(doc: RenderedDoc, port: Option<u16>) -> Result<(), String> {
@@ -44,31 +46,39 @@ pub fn serve_blocking(doc: RenderedDoc, port: Option<u16>) -> Result<(), String>
             .local_addr()
             .map_err(|e| format!("获取监听地址失败：{e}"))?;
 
-        let state = AppState { doc: Arc::new(doc) };
+        let shutdown = Arc::new(Notify::new());
+        let state = AppState {
+            doc: Arc::new(doc),
+            shutdown: shutdown.clone(),
+        };
         let app = Router::new()
             .route("/api/doc", get(api_doc))
+            .route("/api/shutdown", post(api_shutdown))
             .route("/", get(index_handler))
             .fallback(static_handler)
             .with_state(state);
 
         let url = format!("http://{}/", local_addr);
         println!("📖 reader 已启动：{url}");
-        println!("   按 Ctrl-C 停止");
-
-        // 在另一个任务中触发浏览器打开（如果调用方已经做过了，这里不会被调）
-        // 这里不做打开，由 mod.rs 在 `serve_blocking` 之前完成。
+        println!("   关闭浏览器页面将自动停止服务，或按 Ctrl-C 停止");
 
         axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal())
+            .with_graceful_shutdown(shutdown_signal(shutdown))
             .await
             .map_err(|e| format!("server 异常退出：{e}"))?;
         Ok::<(), String>(())
     })
 }
 
-async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
-    println!("\n📖 reader 已关闭");
+async fn shutdown_signal(shutdown: Arc<Notify>) {
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            println!("\n📖 reader 已关闭");
+        }
+        _ = shutdown.notified() => {
+            println!("📖 reader 已关闭（页面已关闭）");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +90,12 @@ async fn api_doc(State(state): State<AppState>) -> Json<serde_json::Value> {
     let value = serde_json::to_value(&*state.doc)
         .unwrap_or_else(|e| serde_json::json!({ "error": format!("序列化失败：{e}") }));
     Json(value)
+}
+
+/// 浏览器页面关闭时通过 `navigator.sendBeacon` 调用此接口，触发服务 shutdown。
+async fn api_shutdown(State(state): State<AppState>) -> &'static str {
+    state.shutdown.notify_one();
+    "ok"
 }
 
 async fn index_handler() -> Response {
