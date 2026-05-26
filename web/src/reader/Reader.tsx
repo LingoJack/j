@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MarkdownIR } from './MarkdownIR'
+import { TableOfContents, extractHeadings } from './TableOfContents'
 import type { ParsedDocument, RenderedDoc } from './types'
 
 type LoadState =
@@ -9,6 +10,15 @@ type LoadState =
 
 export function Reader() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
+
+  // 所有 hooks 必须在条件 return 之前调用（React Hooks 规则）
+  const docKind = state.kind === 'ready' ? state.doc.kind : null
+  const docPayload = state.kind === 'ready' ? state.doc.payload : null
+
+  const headings = useMemo(() => {
+    if (docKind !== 'markdown' || !docPayload) return []
+    return extractHeadings(docPayload as ParsedDocument)
+  }, [docKind, docPayload])
 
   useEffect(() => {
     let cancelled = false
@@ -47,6 +57,7 @@ export function Reader() {
   }
 
   const { filename, kind, payload } = state.doc
+  const hasToc = headings.length > 0
 
   return (
     <div className="min-h-screen bg-[#faf9f6] text-stone-800">
@@ -62,6 +73,11 @@ export function Reader() {
       <main className="max-w-3xl mx-auto px-6 py-8">
         {renderPayload(kind, payload)}
       </main>
+      {hasToc && (
+        <div className="hidden lg:block fixed right-0 top-16 bottom-0 z-20">
+          <TableOfContents headings={headings} />
+        </div>
+      )}
     </div>
   )
 }

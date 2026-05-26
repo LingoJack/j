@@ -2,6 +2,50 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { Block, Inline, ListData, ListItem, TableData, ParsedDocument } from './types'
 
+// ---------------------------------------------------------------------------
+// Heading ID 生成
+// ---------------------------------------------------------------------------
+
+/** 从 Inline[] 提取纯文本 */
+export function extractText(inlines: Inline[]): string {
+  return inlines
+    .map((inline) => {
+      switch (inline.type) {
+        case 'text':
+          return inline.value
+        case 'strong':
+        case 'emphasis':
+        case 'strikethrough':
+          return extractText(inline.value)
+        case 'code':
+          return inline.value
+        case 'link':
+          return extractText(inline.value.text)
+        default:
+          return ''
+      }
+    })
+    .join('')
+}
+
+let _headingIdCounter: Map<string, number> = new Map()
+
+/** 生成 heading id（支持重复标题去重） */
+function headingId(text: string): string {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fff]+/g, '-')
+    .replace(/^-|-$/g, '')
+  const count = _headingIdCounter.get(slug) ?? 0
+  _headingIdCounter.set(slug, count + 1)
+  return count === 0 ? slug : `${slug}-${count}`
+}
+
+/** 重置 heading id 计数器（每次渲染前调用） */
+export function resetHeadingIdCounter() {
+  _headingIdCounter = new Map()
+}
+
 // 与 `web/src/components/docs/Markdown.tsx` 同一份语言映射，保持代码块高亮一致。
 const langMap: Record<string, string> = {
   bash: 'bash', shell: 'bash', sh: 'bash', zsh: 'bash',
@@ -193,8 +237,10 @@ function renderBlock(block: Block, key: string): React.ReactNode {
                 ? 'text-base font-semibold text-stone-800 mt-6 mb-3'
                 : 'text-sm font-semibold text-stone-700 mt-5 mb-2'
       const Tag = (`h${Math.min(Math.max(level, 1), 6)}` as unknown) as keyof React.JSX.IntrinsicElements
+      const text = extractText(content)
+      const id = headingId(text)
       return (
-        <Tag key={key} className={cls}>
+        <Tag key={key} id={id} className={cls}>
           {renderInlineList(content, `${key}-h`)}
         </Tag>
       )
@@ -257,5 +303,6 @@ interface Props {
 }
 
 export function MarkdownIR({ doc }: Props) {
+  resetHeadingIdCounter()
   return <>{renderBlocks(doc.blocks, 'b')}</>
 }
