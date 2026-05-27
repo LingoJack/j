@@ -702,8 +702,26 @@ fn handle_mouse_event(
         MouseEventKind::Down(MouseButton::Left) => {
             handle_left_click(app, mouse.column, mouse.row, layout, editor_area);
         }
-        MouseEventKind::Drag(MouseButton::Left) => handle_drag(app, mouse.column, layout),
-        MouseEventKind::Up(MouseButton::Left) => handle_mouse_up(app),
+        MouseEventKind::Drag(MouseButton::Left) => {
+            // 分割线拖拽（调整面板比例）优先，其次把 Drag 透给编辑器以驱动鼠标拖选
+            if app.is_dragging_panel {
+                handle_drag(app, mouse.column, layout);
+            } else if app.focus == Focus::Editor
+                && rect_contains(editor_area, mouse.column, mouse.row)
+                && let Some(ref mut editor) = app.editor
+            {
+                editor.handle_mouse(mouse, editor_area);
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            handle_mouse_up(app);
+            // 同时通知编辑器结束拖选（提交 mouse_selection）
+            if app.focus == Focus::Editor
+                && let Some(ref mut editor) = app.editor
+            {
+                editor.handle_mouse(mouse, editor_area);
+            }
+        }
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             handle_scroll(
                 app,

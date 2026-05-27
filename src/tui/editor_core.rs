@@ -3,7 +3,6 @@
 //! 完全摆脱 tui-textarea 依赖，支持自动折行。
 
 mod history;
-mod markdown_cache;
 mod renderer;
 mod search;
 pub mod text_buffer;

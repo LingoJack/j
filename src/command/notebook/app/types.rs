@@ -432,14 +432,18 @@ impl NotebookApp {
             cursor_policy: crate::tui::editor_core::CursorPolicy::default(),
         };
 
-        self.editor = Some(MarkdownEditor::new(
+        let mut editor = MarkdownEditor::new(
             opts.title,
             content,
             opts.theme,
             opts.highlight_fn,
             opts.theme_gallery,
             opts.cursor_policy,
-        ));
+        );
+        // notebook 自身已绘制圆角边框（顶部状态栏 + 笔记列表 + 编辑区占位），
+        // 编辑器关掉自带边框后与外侧 panel 视觉无缝衔接
+        editor.set_show_border(false);
+        self.editor = Some(editor);
     }
 
     /// 保存当前编辑器内容到磁盘

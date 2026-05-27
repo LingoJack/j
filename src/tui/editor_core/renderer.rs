@@ -3,6 +3,7 @@
 //! 负责将文本渲染为 ratatui 的 Line/Widget。
 //! 支持代码块围栏样式、表格、Markdown 语法高亮等高级渲染。
 
+mod block_cache;
 mod code_block;
 mod inline;
 mod line;
@@ -19,15 +20,15 @@ use super::wrap_engine::VisualLine;
 use super::{search::SearchState, text_buffer::TextBuffer};
 use crate::util::text::char_width;
 
-use code_block::CodeBlockCache;
+use block_cache::BlockCache;
 
 /// Markdown 渲染器
 pub struct MarkdownRenderer {
     theme: EditorTheme,
     /// 水平滚动偏移
     horizontal_scroll: usize,
-    /// 代码块缓存
-    code_block_cache: CodeBlockCache,
+    /// 块级缓存（基于 pulldown-cmark 解析结果）
+    pub(crate) block_cache: BlockCache,
     /// 语法高亮函数
     highlight_fn: HighlightFn,
     /// 是否显示行号
@@ -40,7 +41,7 @@ impl MarkdownRenderer {
         Self {
             theme,
             horizontal_scroll: 0,
-            code_block_cache: CodeBlockCache::new(),
+            block_cache: BlockCache::new(),
             highlight_fn,
             show_line_numbers: true,
         }
@@ -48,7 +49,7 @@ impl MarkdownRenderer {
 
     /// 使代码块缓存失效
     pub fn invalidate_cache(&mut self) {
-        self.code_block_cache.invalidate();
+        self.block_cache.invalidate();
     }
 
     /// 切换主题
@@ -85,10 +86,10 @@ impl MarkdownRenderer {
         }
     }
 
-    /// 确保代码块缓存有效
-    pub fn ensure_cache_valid(&mut self, lines: &[String]) {
-        if !self.code_block_cache.valid || self.code_block_cache.line_count != lines.len() {
-            self.code_block_cache.build(lines);
+    /// 确保块级缓存有效（按需重建）
+    pub fn ensure_cache_valid(&mut self, lines: &[String], width: usize) {
+        if !self.block_cache.is_valid_for(lines, width) {
+            self.block_cache.build(lines, width);
         }
     }
 
@@ -96,7 +97,7 @@ impl MarkdownRenderer {
     ///
     /// 返回值如 `[(3, 8), (12, 20)]`，表示第 3~8 行和第 12~20 行是代码块内容行。
     pub fn code_block_content_ranges(&self) -> Vec<(usize, usize)> {
-        self.code_block_cache.content_ranges()
+        self.block_cache.content_ranges()
     }
 
     // ========== 基础样式辅助方法 ==========
@@ -180,8 +181,8 @@ impl MarkdownRenderer {
 
         // ---- 光标行：显示源码 + 光标 ----
         // 代码块内的光标行用 wrap_width 驱动右边框对齐
-        let code_block_max_width = if !Self::is_code_fence_line(&line_content)
-            && self.is_line_in_complete_code_block(logical_line, lines)
+        let code_block_max_width = if !self.block_cache.is_fence_line(logical_line)
+            && self.block_cache.is_in_code_block_content(logical_line)
         {
             // wrap_width 已减去行号宽度，再减去边框 4 字符
             Some(wrap_width.max(10).saturating_sub(4))
@@ -257,8 +258,8 @@ impl MarkdownRenderer {
         // 但代码块内的续行需要保持代码块的边框样式
         if is_continuation {
             // 检查续行是否在代码块内（非围栏行）
-            let in_code_block = !Self::is_code_fence_line(line_content)
-                && self.is_line_in_complete_code_block(logical_line, lines);
+            let in_code_block = !self.block_cache.is_fence_line(logical_line)
+                && self.block_cache.is_in_code_block_content(logical_line);
 
             // 代码块续行走统一的代码块内容渲染（带边框），不再单独处理
             if in_code_block {
@@ -291,7 +292,7 @@ impl MarkdownRenderer {
             // 不再相等（render_table_rows 自行决定 T）。这种不一致本来就存在，
             // 此修复只是让"多余的输出"消失，不引入新的不一致。Insert 模式下光标
             // 行走 render_cursor_visual_line（不经过这里），编辑长表格行的体验不变。
-            if Self::is_table_row(line_content) {
+            if self.block_cache.is_table_line(logical_line) {
                 return vec![];
             }
 
@@ -370,11 +371,14 @@ impl MarkdownRenderer {
         let truncated = Self::truncate_to_display_width(line_content, wrap_width);
 
         // 检查是否是代码块围栏行
-        if Self::is_code_fence_line(line_content) {
-            if self.is_fence_line_paired(logical_line, lines) {
-                return vec![self.render_code_fence_line(line_content, logical_line, wrap_width)];
-            }
-            // 不成对的围栏，渲染为普通文本
+        if self.block_cache.is_fence_line(logical_line) {
+            // BlockCache 中标记的 fence 行一定有配对的 CodeBlock
+            return vec![self.render_code_fence_line(line_content, logical_line, wrap_width)];
+        }
+        // 解析器未识别的 ``` 行（极少见：pulldown-cmark 对未闭合 fence 也会
+        // 产出延伸到 EOF 的 CodeBlock，但若 fence 出现在非块语法上下文里
+        // 偶尔会被吞），回退到普通文本渲染，避免空白屏。
+        if line_content.trim_start().starts_with("```") {
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
@@ -385,7 +389,7 @@ impl MarkdownRenderer {
         }
 
         // 检查是否在完整的代码块内
-        if self.is_line_in_complete_code_block(logical_line, lines) {
+        if self.block_cache.is_in_code_block_content(logical_line) {
             // 代码块内容行：需要用 vl_text（折行片段）而非完整 line_content，
             // 否则首行 VL 会渲染完整内容，续行又重复渲染尾部，造成字符重复。
             let text_for_render = if is_continuation || line_content.chars().count() > vl.end_col {

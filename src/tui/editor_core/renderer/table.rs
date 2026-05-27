@@ -1,8 +1,8 @@
 //! 表格渲染子模块
 //!
-//! 使用共享层 `markdown::render::table` 渲染表格，支持内联语法（bold, code, emphasis 等）。
-//! Editor 在逐行调用时，仅在表格首行（start_idx）触发完整表格渲染，
-//! 后续行返回 `vec![]` 以避免重复输出。
+//! 表格识别已迁到 `super::block_cache::BlockCache`（pulldown-cmark 解析器），
+//! 不再用 `|...|` 启发式扫描。Editor 在逐行调用时，仅在表格首行（start_idx）
+//! 触发完整表格渲染，后续行返回 `vec![]` 以避免重复输出。
 
 use ratatui::{
     style::{Color, Style},
@@ -24,56 +24,18 @@ pub struct TableContext {
 impl MarkdownRenderer {
     // ========== 表格处理 ==========
 
-    /// 判断一行是否是表格行
-    pub fn is_table_row(line: &str) -> bool {
-        let trimmed = line.trim();
-        trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.contains('|')
-    }
-
-    /// 查找包含指定行的表格上下文
+    /// 查找包含指定行的表格上下文（委托 BlockCache）
     pub(super) fn find_table_context(
         &self,
         line_idx: usize,
-        lines: &[String],
+        _lines: &[String],
     ) -> Option<TableContext> {
-        let line = lines.get(line_idx)?;
-        if !Self::is_table_row(line) {
-            return None;
-        }
-
-        // 向上查找表格开始
-        let mut start_idx = line_idx;
-        while start_idx > 0 {
-            if let Some(prev) = lines.get(start_idx - 1) {
-                if Self::is_table_row(prev) {
-                    start_idx -= 1;
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        // 向下查找表格结束
-        let mut end_idx = line_idx;
-        while end_idx < lines.len() - 1 {
-            if let Some(next) = lines.get(end_idx + 1) {
-                if Self::is_table_row(next) {
-                    end_idx += 1;
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        if end_idx - start_idx < 1 {
-            return None;
-        }
-
-        Some(TableContext { start_idx, end_idx })
+        self.block_cache
+            .table_range_at(line_idx)
+            .map(|(s, e)| TableContext {
+                start_idx: s,
+                end_idx: e,
+            })
     }
 
     /// 扫描整篇文档，返回所有表格的 `(start_idx, end_idx, rendered_height)`。
@@ -90,31 +52,20 @@ impl MarkdownRenderer {
         wrap_width: usize,
     ) -> Vec<(usize, usize, usize)> {
         let mut blocks = Vec::new();
-        let mut i = 0;
-        while i < lines.len() {
-            // 仅在表格首行触发：向后查找连续的表格行
-            if let Some(line) = lines.get(i)
-                && Self::is_table_row(line)
-            {
-                let mut end = i;
-                while end + 1 < lines.len()
-                    && lines.get(end + 1).is_some_and(|l| Self::is_table_row(l))
-                {
-                    end += 1;
-                }
-                if end > i {
-                    // 至少 2 行才认定为表格（与 find_table_context 的判定一致）
-                    let source_lines: Vec<&str> =
-                        lines[i..=end].iter().map(|s| s.as_str()).collect();
-                    if let Some(table_data) = parse_table_from_source(&source_lines) {
-                        let height = measure_table_height(&table_data, wrap_width);
-                        blocks.push((i, end, height));
-                    }
-                }
-                i = end + 1;
+        for (start, end) in self.block_cache.table_blocks_iter() {
+            // 解析器给出的 source.end_line 已包含分隔行 / 数据行；按闭区间取源码
+            let bounded_end = end.min(lines.len().saturating_sub(1));
+            if bounded_end <= start {
                 continue;
             }
-            i += 1;
+            let source_lines: Vec<&str> = lines[start..=bounded_end]
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
+            if let Some(table_data) = parse_table_from_source(&source_lines) {
+                let height = measure_table_height(&table_data, wrap_width);
+                blocks.push((start, bounded_end, height));
+            }
         }
         blocks
     }

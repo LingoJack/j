@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
 };
 
 /// 绘制 TUI 界面
@@ -113,6 +113,7 @@ fn render_title_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
     .block(
         Block::default()
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Cyan)),
     );
     f.render_widget(title_block, area);
@@ -203,6 +204,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
     let list_block = Block::default()
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(if app.focus == Focus::Tree {
             Color::Cyan
         } else {
@@ -281,10 +283,8 @@ fn render_editor(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
     if let Some(ref mut editor) = app.editor {
         editor.render(f, area);
     } else {
-        // 无内容时显示提示
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray));
+        // 无内容时显示提示（与开启编辑器时保持一致：编辑区不画边框）
+        let block = Block::default();
         let content = Paragraph::new(Line::from(Span::styled(
             "  选择笔记以编辑内容",
             Style::default().fg(Color::DarkGray),

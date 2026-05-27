@@ -160,6 +160,12 @@ pub struct MarkdownEditor {
     /// 鼠标拖选状态（渲染坐标）。`Some` 表示当前有未清空的鼠标选区，
     /// 渲染端会叠加高亮、`y`/`c` 复制时优先用它（走渲染 spans 提取）。
     mouse_selection: Option<MouseSelection>,
+    /// 是否绘制外层圆角边框（含状态栏覆盖的底边）。默认 `true`。
+    /// 关闭后：
+    ///  - 不画顶部 / 左右边框，标题也不渲染（外层 UI 自行画标题）；
+    ///  - 内容区可用宽度 = `area.width`，可用高度仅扣除状态栏 / 命令栏；
+    ///  - 鼠标坐标与各类悬浮 popup 的锚点不再做边框偏移。
+    show_border: bool,
 }
 
 impl MarkdownEditor {
@@ -224,7 +230,17 @@ impl MarkdownEditor {
             mouse_anchor: None,
             mouse_render_anchor: None,
             mouse_selection: None,
+            show_border: true,
         }
+    }
+
+    /// 设置是否绘制外层边框（含上 / 左 / 右 / 底，状态栏始终画在最后一行）。
+    ///
+    /// 默认 `true`（与 `j report` / `j scripts` 等老入口行为一致）。
+    /// `notebook` 这类自带外层 frame 的场景应在创建后调用 `set_show_border(false)`，
+    /// 让编辑区与外侧 panel 视觉无缝衔接。
+    pub fn set_show_border(&mut self, show: bool) {
+        self.show_border = show;
     }
 
     /// 获取用户选择的主题ID（退出时读取）
@@ -817,19 +833,22 @@ impl MarkdownEditor {
 
     /// 重建折行缓存
     fn rebuild_wrap_cache(&mut self) {
-        // 先确保代码块缓存有效，获取代码块范围
-        self.renderer.ensure_cache_valid(self.buffer.lines());
-        let cb_ranges = self.renderer.code_block_content_ranges();
-
-        // 计算表格渲染高度，灌进 wrap_engine。`wrap_width` 用上一帧 render() 缓存的
-        // viewport.width 推算（首帧 viewport.width 为默认 80，差几个像素无关紧要——
-        // 第二帧 set_width 不同会触发 `dirty`，自动重建）。
+        // 先确定 wrap_width，再据此构建块级缓存（parser 需要 width）。
+        // `wrap_width` 用上一帧 render() 缓存的 viewport.width 推算（首帧 viewport.width
+        // 为默认 80，差几个像素无关紧要——第二帧 set_width 不同会触发 `dirty`，自动重建）。
         let line_num_width = if self.renderer.is_show_line_numbers() {
             6
         } else {
             0
         };
         let wrap_width = self.viewport.width.saturating_sub(line_num_width).max(10);
+
+        // 块级缓存（fenced 代码块、表格等）按当前 wrap_width 重建
+        self.renderer
+            .ensure_cache_valid(self.buffer.lines(), wrap_width);
+        let cb_ranges = self.renderer.code_block_content_ranges();
+
+        // 计算表格渲染高度，灌进 wrap_engine
         let table_blocks = self
             .renderer
             .compute_table_block_heights(self.buffer.lines(), wrap_width);
@@ -854,8 +873,15 @@ impl MarkdownEditor {
             self.vim.mode(),
             Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
         );
-        let reserved: u16 = if has_cmd_bar { 3 } else { 2 };
+        let top_border: u16 = if self.show_border { 1 } else { 0 };
+        // 顶边框（可选）+ 状态栏 1 行 + 命令栏（可选）
+        let reserved: u16 = top_border + 1 + if has_cmd_bar { 1 } else { 0 };
         area.height.saturating_sub(reserved) as usize
+    }
+
+    /// 单侧水平边框宽度（左 / 右各占 1 列），关掉边框时为 0。
+    fn border_pad(&self) -> u16 {
+        if self.show_border { 1 } else { 0 }
     }
 
     // ========== 鼠标操作 ==========
@@ -870,8 +896,9 @@ impl MarkdownEditor {
         area: Rect,
     ) -> Option<(usize, usize)> {
         // 减去边框偏移，得到内容区域内的坐标
-        let content_x = screen_x.saturating_sub(area.x + 1) as usize; // 左边框 1 列
-        let content_y = screen_y.saturating_sub(area.y + 1) as usize; // 上边框 1 行
+        let pad = self.border_pad();
+        let content_x = screen_x.saturating_sub(area.x + pad) as usize; // 左边框（可能为 0）
+        let content_y = screen_y.saturating_sub(area.y + pad) as usize; // 上边框（可能为 0）
 
         let content_height = self.viewport_content_height(area);
         let line_num_width = if self.renderer.is_show_line_numbers() {
@@ -960,8 +987,9 @@ impl MarkdownEditor {
     ) -> Option<(usize, usize)> {
         use crate::tui::components::selection::spans_to_char_offset;
 
-        // area 内左上角是上边框 + 左边框
-        let content_y = screen_y.saturating_sub(area.y + 1) as usize;
+        // area 内左上角是上边框 + 左边框（关闭边框时为 0）
+        let pad = self.border_pad();
+        let content_y = screen_y.saturating_sub(area.y + pad) as usize;
         let content_height = self.viewport_content_height(area);
         if content_y >= content_height {
             return None;
@@ -976,7 +1004,7 @@ impl MarkdownEditor {
         // 屏幕 X：按显示宽度匹配 spans 拼接后的字符偏移。spans 已经包含
         // 行号 / 边框 / padding 等装饰，所以 char_offset 直接是"渲染行内"
         // 的真实偏移，复制时由 extract_selection_text 自动跳过装饰部分。
-        let local_x = screen_x.saturating_sub(area.x + 1) as usize;
+        let local_x = screen_x.saturating_sub(area.x + pad) as usize;
         let char_offset = spans_to_char_offset(&line.spans, local_x);
         Some((global_row, char_offset))
     }
@@ -1214,8 +1242,11 @@ mod tests {
 
     #[test]
     fn move_cursor_visual_down_skips_table_block_to_line_after() {
-        // 文档：3 行普通文字 + 4 行表格 + 1 行结尾
-        let content = "para1\npara2\npara3\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\nepilogue";
+        // 文档：3 行普通文字 + 空行 + 4 行表格 + 1 行结尾。
+        // GFM 表格要求与上文有空行分隔，否则 pulldown-cmark 会把首行并入段落。
+        // 旧 `is_table_row` 用 `|...|` 启发式忽略了这个规则；新 BlockCache 严格按 CommonMark/GFM
+        // 解析，所以测试数据补一个空行让表格被正确识别。
+        let content = "para1\npara2\npara3\n\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\nepilogue";
         let mut editor = MarkdownEditor::new(
             "test",
             content,
@@ -1228,16 +1259,16 @@ mod tests {
         editor.viewport.width = 78;
         editor.rebuild_wrap_cache();
 
-        // 光标定位到表格首行（line 3）
-        editor.buffer.set_cursor(3, 0);
-        assert_eq!(editor.buffer.cursor().0, 3);
+        // 光标定位到表格首行（line 4）
+        editor.buffer.set_cursor(4, 0);
+        assert_eq!(editor.buffer.cursor().0, 4);
 
-        // 按一次 j：从表格首行应跳到表格末行 + 1 = line 7（epilogue）
+        // 按一次 j：从表格首行应跳到表格末行 + 1 = line 8（epilogue）
         editor.move_cursor_visual_down();
         assert_eq!(
             editor.buffer.cursor().0,
-            7,
-            "光标在表格首行按 j 应跳过整张表到 line 7 (epilogue)"
+            8,
+            "光标在表格首行按 j 应跳过整张表到 line 8 (epilogue)"
         );
     }
 

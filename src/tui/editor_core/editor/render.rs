@@ -28,9 +28,11 @@ impl MarkdownEditor {
             self.vim.mode(),
             Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
         );
-        let reserved_rows: u16 = if has_cmd_bar { 3 } else { 2 };
+        let pad = self.border_pad();
+        // reserved = 顶边框（pad）+ 状态栏 1 行 + 命令栏（可选）
+        let reserved_rows: u16 = pad + 1 + if has_cmd_bar { 1 } else { 0 };
         let content_height = area.height.saturating_sub(reserved_rows) as usize;
-        let content_width = area.width.saturating_sub(2) as usize; // 左右边框
+        let content_width = area.width.saturating_sub(pad * 2) as usize; // 左右边框
 
         self.viewport.height = content_height;
         self.viewport.width = content_width;
@@ -59,8 +61,9 @@ impl MarkdownEditor {
             }
         }
 
-        // 确保代码块缓存有效（用于快速判断行是否在代码块内）
-        self.renderer.ensure_cache_valid(self.buffer.lines());
+        // 确保块级缓存有效（fenced 代码块、表格 - 用于快速判断行所属 block 类型）
+        self.renderer
+            .ensure_cache_valid(self.buffer.lines(), wrap_width);
 
         // ---- 阶段 1：基于当前 scroll_offset 计算渲染范围 ----
         // 计算视口范围内需要渲染的逻辑行（O(log n)）
@@ -291,11 +294,17 @@ impl MarkdownEditor {
 
         // 渲染主内容
         let border_color = self.vim.mode().border_color();
-        let block = Block::default()
-            .title(format!(" {} ", self.title))
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color))
-            .style(Style::default().bg(self.theme.bg_primary));
+        let block = if self.show_border {
+            Block::default()
+                .title(format!(" {} ", self.title))
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(border_color))
+                .style(Style::default().bg(self.theme.bg_primary))
+        } else {
+            // 关闭边框时，标题留给外层 UI；这里只保留背景色
+            Block::default().style(Style::default().bg(self.theme.bg_primary))
+        };
 
         let paragraph = Paragraph::new(lines_to_render).block(block);
         f.render_widget(paragraph, area);
@@ -458,7 +467,8 @@ impl MarkdownEditor {
         };
         let map_index = self.render_meta.map_index;
         let vl_map = &self.render_meta.vl_map;
-        let content_height = area.height.saturating_sub(2) as usize; // 上下边框
+        let pad = self.border_pad();
+        let content_height = self.viewport_content_height(area);
 
         let mut found_screen_y: Option<u16> = None;
         let mut found_start_col: usize = 0;
@@ -491,26 +501,26 @@ impl MarkdownEditor {
             .collect();
         let display_x = unicode_width::UnicodeWidthStr::width(prefix_text.as_str()) as u16;
 
-        // 屏幕坐标：area 内左上角是 area.x/area.y，加 1 给上/左边框
-        let mut x = area.x + 1 + line_num_width + display_x;
-        let mut y = area.y + 1 + screen_y + 1; // 锚点下方一行
+        // 屏幕坐标：area 内左上角是 area.x/area.y，加 pad 给上/左边框（关闭边框时为 0）
+        let mut x = area.x + pad + line_num_width + display_x;
+        let mut y = area.y + pad + screen_y + 1; // 锚点下方一行
 
         // 边界处理：popup 不能溢出 area
-        let max_x = area.x + area.width.saturating_sub(popup_width + 1);
+        let max_x = area.x + area.width.saturating_sub(popup_width + pad);
         if x > max_x {
             x = max_x;
         }
-        if x < area.x + 1 {
-            x = area.x + 1;
+        if x < area.x + pad {
+            x = area.x + pad;
         }
         // 如果下方装不下 popup_height，就放到锚点上方
         if y + popup_height > area.y + area.height.saturating_sub(1) {
-            let above_y = area.y + 1 + screen_y;
+            let above_y = area.y + pad + screen_y;
             if above_y >= popup_height {
                 y = above_y.saturating_sub(popup_height);
             } else {
                 // 上下都不够，截断到顶部
-                y = area.y + 1;
+                y = area.y + pad;
             }
         }
 
