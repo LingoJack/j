@@ -338,6 +338,146 @@ fn inline_to_cell_pieces_recursive(
     }
 }
 
+/// 仅计算单元格内容按 `max_width` 折行后产出多少子行（不构造 Span，等价于
+/// `wrap_cell_inlines(...).len()`，但避免分配）。
+///
+/// 必须与 `wrap_cell_inlines` 的折行规则保持一致：硬换行立即起新行；当下一个字符
+/// 加入会超出 `max_width` 且当前行非空时换行；空内容仍算 1 行。
+pub fn measure_cell_wrap_lines(inlines: &[Inline], max_width: usize) -> usize {
+    let max_width = max_width.max(2);
+
+    fn collect_text(inline: &Inline, out: &mut Vec<char>) {
+        match inline {
+            Inline::Text(s) | Inline::Code(s) => {
+                for ch in s.chars() {
+                    out.push(ch);
+                }
+            }
+            Inline::Strong(children)
+            | Inline::Emphasis(children)
+            | Inline::Strikethrough(children) => {
+                for child in children {
+                    collect_text(child, out);
+                }
+            }
+            Inline::Link { text, .. } => {
+                for child in text {
+                    collect_text(child, out);
+                }
+            }
+            Inline::SoftBreak => out.push(' '),
+            Inline::HardBreak => out.push('\n'),
+        }
+    }
+
+    let mut chars: Vec<char> = Vec::new();
+    for inline in inlines {
+        collect_text(inline, &mut chars);
+    }
+
+    let mut lines: usize = 0;
+    let mut cur_w: usize = 0;
+    let mut cur_has_content: bool = false;
+
+    for ch in &chars {
+        if *ch == '\n' {
+            // wrap_cell_inlines 中 '\n' 始终把当前行 push 入 lines（即便为空），
+            // 这里复刻同样行为。
+            lines += 1;
+            cur_w = 0;
+            cur_has_content = false;
+            continue;
+        }
+        let cw = char_width(*ch);
+        if cur_w + cw > max_width && cur_w > 0 {
+            lines += 1;
+            cur_w = 0;
+        }
+        cur_w += cw;
+        cur_has_content = true;
+    }
+    if cur_has_content || lines == 0 {
+        lines += 1;
+    }
+    lines
+}
+
+/// 仅测量整个表格在给定 `content_width` 下的渲染高度（行数），不分配 Span。
+///
+/// 计算公式：
+///   1（顶边框）
+/// + Σ 每行 max(1, max_rows_of_wrapped_cells)
+/// + (rows - 1)（行间分隔线）
+/// + 1（底边框）
+///
+/// 列宽计算逻辑必须与 `render_table` 一致——这是高度准确性的唯一前提。
+pub fn measure_table_height(data: &TableData, content_width: usize) -> usize {
+    if data.rows.is_empty() {
+        return 0;
+    }
+    let num_cols = data.rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    if num_cols == 0 {
+        return 0;
+    }
+
+    // 列宽：与 render_table 完全同步
+    let mut col_widths: Vec<usize> = vec![0; num_cols];
+    for row in &data.rows {
+        for (i, cell) in row.iter().enumerate() {
+            let w = inline_display_width(cell);
+            if w > col_widths[i] {
+                col_widths[i] = w;
+            }
+        }
+    }
+
+    let sep_w = num_cols + 1;
+    let pad_w = num_cols * 2;
+    let avail = content_width.saturating_sub(sep_w + pad_w);
+    let max_col_w = avail * 2 / 3;
+    for cw in col_widths.iter_mut() {
+        if *cw > max_col_w {
+            *cw = max_col_w;
+        }
+    }
+    let total_col_w: usize = col_widths.iter().sum();
+    if total_col_w > avail && total_col_w > 0 {
+        let mut remaining = avail;
+        for (i, cw) in col_widths.iter_mut().enumerate() {
+            if i == num_cols - 1 {
+                *cw = remaining.max(1);
+            } else {
+                *cw = ((*cw) * avail / total_col_w).max(1);
+                remaining = remaining.saturating_sub(*cw);
+            }
+        }
+    }
+
+    // 顶边框 + 底边框
+    let mut height: usize = 2;
+    let row_count = data.rows.len();
+
+    for (row_idx, row) in data.rows.iter().enumerate() {
+        let max_sub = col_widths
+            .iter()
+            .enumerate()
+            .map(|(i, cw)| {
+                let cell = row.get(i).map(|v| v.as_slice()).unwrap_or(&[]);
+                measure_cell_wrap_lines(cell, *cw)
+            })
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        height += max_sub;
+
+        if row_idx < row_count - 1 {
+            height += 1; // 行间分隔线
+        }
+    }
+
+    height
+}
+
 /// 计算 inline 元素列表的显示宽度（用于列宽计算）
 #[allow(dead_code)]
 pub fn display_width_inlines(inlines: &[Inline]) -> usize {

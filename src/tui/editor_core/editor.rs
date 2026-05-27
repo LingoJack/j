@@ -229,7 +229,28 @@ impl MarkdownEditor {
         if current_visual == 0 {
             return;
         }
+
+        // 当前光标所在 logical 是否处于表格块续行（不该停留），先把光标拉回首行
+        let (cursor_row, _) = self.buffer.cursor();
+        if let Some((tbl_start, _tbl_end)) = self.wrap.table_block_for_line(cursor_row)
+            && cursor_row != tbl_start
+        {
+            self.buffer.set_cursor(tbl_start, 0);
+            // 直接以 tbl_start 为基准再触发一次上移
+            return self.move_cursor_visual_up();
+        }
+
         let target_visual = current_visual - 1;
+
+        // 目标视觉行如果落在某个表格块的"膨胀区"（视觉行 N..N+height 之间），
+        // 跳到表格首行的最后一个有效列；这是穿越表格上行的语义。
+        if let Some((tbl_start, _)) = self.wrap.table_block_for_visual_row(target_visual) {
+            let line = self.buffer.line(tbl_start).map_or("", |v| v);
+            let end_col = line.chars().count();
+            self.buffer.set_cursor(tbl_start, end_col);
+            return;
+        }
+
         let (current_row, current_col) = self.buffer.cursor();
 
         // 确保目标行的缓存已构建
@@ -272,10 +293,52 @@ impl MarkdownEditor {
 
         let current_visual = self.cursor_visual_line();
         let total_visual = self.wrap.visual_line_count();
+
+        // 当前光标所在 logical 是否处于表格块续行（不该停留），先把光标拉到首行
+        let (cursor_row, _) = self.buffer.cursor();
+        if let Some((tbl_start, _tbl_end)) = self.wrap.table_block_for_line(cursor_row)
+            && cursor_row != tbl_start
+        {
+            self.buffer.set_cursor(tbl_start, 0);
+            return self.move_cursor_visual_down();
+        }
+
+        // 当前光标在表格首行：穿越整张表，跳到表格末行 + 1（如果存在）
+        if let Some((tbl_start, tbl_end)) = self.wrap.table_block_for_line(cursor_row)
+            && cursor_row == tbl_start
+        {
+            let after = tbl_end + 1;
+            if after < self.buffer.line_count() {
+                self.buffer.set_cursor(after, 0);
+                return;
+            }
+            // 表格在 EOF：cursor 不动，但视口往下推一格，让用户能看到表格底部。
+            // `scroll_locked = true` 防止下一帧光标同步把视口拉回去。
+            let max_offset = total_visual.saturating_sub(1);
+            if self.viewport.scroll_offset < max_offset {
+                self.viewport.scroll_offset += 1;
+                self.viewport.scroll_locked = true;
+            }
+            return;
+        }
+
         if current_visual >= total_visual.saturating_sub(1) {
             return;
         }
         let target_visual = current_visual + 1;
+
+        // 目标视觉行如果落在某个表格块的"膨胀区"，把光标放到该表格末行 + 1
+        // （或者 EOF 时停在表格首行，由下一次 j 触发上面的"表格首行"分支）。
+        if let Some((tbl_start, tbl_end)) = self.wrap.table_block_for_visual_row(target_visual) {
+            let after = tbl_end + 1;
+            if after < self.buffer.line_count() {
+                self.buffer.set_cursor(after, 0);
+            } else {
+                self.buffer.set_cursor(tbl_start, 0);
+            }
+            return;
+        }
+
         let (current_row, current_col) = self.buffer.cursor();
 
         // 确保目标行的缓存已构建
@@ -685,71 +748,24 @@ impl MarkdownEditor {
         // 先确保代码块缓存有效，获取代码块范围
         self.renderer.ensure_cache_valid(self.buffer.lines());
         let cb_ranges = self.renderer.code_block_content_ranges();
+
+        // 计算表格渲染高度，灌进 wrap_engine。`wrap_width` 用上一帧 render() 缓存的
+        // viewport.width 推算（首帧 viewport.width 为默认 80，差几个像素无关紧要——
+        // 第二帧 set_width 不同会触发 `dirty`，自动重建）。
+        let line_num_width = if self.renderer.is_show_line_numbers() {
+            6
+        } else {
+            0
+        };
+        let wrap_width = self.viewport.width.saturating_sub(line_num_width).max(10);
+        let table_blocks = self
+            .renderer
+            .compute_table_block_heights(self.buffer.lines(), wrap_width);
+
         self.wrap
-            .rebuild_cache_with_code_blocks(self.buffer.lines(), &cb_ranges);
+            .rebuild_cache_with_blocks(self.buffer.lines(), &cb_ranges, &table_blocks);
         // 同时使渲染器缓存失效（语法高亮等）
         self.renderer.invalidate_cache();
-    }
-
-    /// 在当前帧渲染的 `all_vl_meta` 中找到光标行对应的渲染行索引。
-    ///
-    /// 返回光标行在 `all_visual_lines` 中的起始索引（第一行匹配 `cursor_row` 的位置）。
-    fn find_cursor_in_rendered_lines(
-        &self,
-        cursor_row: usize,
-        all_vl_meta: &[RenderedVL],
-        _visual_offset: usize,
-        _visual_map: &[usize],
-        _cursor_visual_pos: usize,
-    ) -> Option<usize> {
-        // 找第一个 logical_line == cursor_row 的渲染行
-        all_vl_meta
-            .iter()
-            .position(|m| m.logical_line == cursor_row)
-    }
-
-    /// 基于 `visual_map` 和当前 `scroll_offset` 计算可见行范围。
-    ///
-    /// 返回 `(visible_start, visible_end)` 在 `all_visual_lines` 中的索引范围。
-    fn compute_visible_range(
-        &self,
-        visual_map: &[usize],
-        visual_offset: usize,
-        all_len: usize,
-        content_height: usize,
-    ) -> Option<(usize, usize)> {
-        let scroll_local = self.viewport.scroll_offset.saturating_sub(visual_offset);
-        let visible_start = if scroll_local < visual_map.len() {
-            visual_map[scroll_local]
-        } else {
-            // 超出映射范围（文件末尾滚动），使用 all_visual_lines 的末尾
-            all_len.saturating_sub(content_height)
-        };
-        let visible_start = visible_start.min(all_len.saturating_sub(1));
-        let visible_end = (visible_start + content_height).min(all_len);
-        Some((visible_start, visible_end))
-    }
-
-    /// 将 `scroll_offset` 调整到使 `new_visible_start` 对应屏幕顶部。
-    ///
-    /// 通过反向查找 `visual_map`，找到映射到 `new_visible_start` 的视觉行索引。
-    fn adjust_scroll_to_visible_start(
-        &mut self,
-        new_visible_start: usize,
-        visual_map: &[usize],
-        visual_offset: usize,
-    ) {
-        // 在 visual_map 中找最接近 new_visible_start 的索引
-        let best = visual_map
-            .iter()
-            .enumerate()
-            .filter(|&(_, &idx)| idx <= new_visible_start)
-            .max_by_key(|&(_, &idx)| idx)
-            .map(|(i, _)| i);
-
-        if let Some(local_idx) = best {
-            self.viewport.scroll_offset = visual_offset + local_idx;
-        }
     }
 
     /// 计算编辑区可用的内容行数。
@@ -1010,5 +1026,74 @@ mod tests {
         // 滚轮下滚 → 光标按 3 视觉行下移；render() 自动追视口，因此解锁。
         assert_eq!(editor.buffer.cursor().0, 3);
         assert!(!editor.viewport.scroll_locked);
+    }
+
+    #[test]
+    fn move_cursor_visual_down_skips_table_block_to_line_after() {
+        // 文档：3 行普通文字 + 4 行表格 + 1 行结尾
+        let content = "para1\npara2\npara3\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\nepilogue";
+        let mut editor = MarkdownEditor::new(
+            "test",
+            content,
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+        // 触发一次重建，让 wrap_engine 灌入表格高度（构造函数里的 rebuild_cache 不带表格信息）
+        editor.viewport.width = 78;
+        editor.rebuild_wrap_cache();
+
+        // 光标定位到表格首行（line 3）
+        editor.buffer.set_cursor(3, 0);
+        assert_eq!(editor.buffer.cursor().0, 3);
+
+        // 按一次 j：从表格首行应跳到表格末行 + 1 = line 7（epilogue）
+        editor.move_cursor_visual_down();
+        assert_eq!(
+            editor.buffer.cursor().0,
+            7,
+            "光标在表格首行按 j 应跳过整张表到 line 7 (epilogue)"
+        );
+    }
+
+    #[test]
+    fn move_cursor_visual_down_at_eof_table_pushes_viewport() {
+        // 文档：仅 1 行普通文字 + 4 行表格（表格在 EOF）
+        let content = "header\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |";
+        let mut editor = MarkdownEditor::new(
+            "test",
+            content,
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+        editor.viewport.width = 78;
+        editor.viewport.height = 6;
+        editor.rebuild_wrap_cache();
+
+        // 光标定位到表格首行（line 1）
+        editor.buffer.set_cursor(1, 0);
+        let initial_offset = editor.viewport.scroll_offset;
+
+        // 在 EOF 表格首行按 j：光标不动（无后继行），但视口 scroll_offset 应推进 1 行，
+        // 并且 scroll_locked 设为 true（避免下一帧把视口拉回光标位置）。
+        editor.move_cursor_visual_down();
+        assert_eq!(
+            editor.buffer.cursor().0,
+            1,
+            "EOF 表格无后继行，光标应留在表格首行"
+        );
+        assert!(
+            editor.viewport.scroll_offset > initial_offset,
+            "scroll_offset 应被推进；现在 = {}, 初始 = {}",
+            editor.viewport.scroll_offset,
+            initial_offset
+        );
+        assert!(
+            editor.viewport.scroll_locked,
+            "推视口后必须 scroll_locked=true，否则下一帧光标同步会把它拉回去"
+        );
     }
 }

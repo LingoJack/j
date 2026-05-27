@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::markdown::parser::parse_table_from_source;
-use crate::markdown::render::table::render_table;
+use crate::markdown::render::table::{measure_table_height, render_table};
 
 use super::MarkdownRenderer;
 
@@ -74,6 +74,49 @@ impl MarkdownRenderer {
         }
 
         Some(TableContext { start_idx, end_idx })
+    }
+
+    /// 扫描整篇文档，返回所有表格的 `(start_idx, end_idx, rendered_height)`。
+    ///
+    /// `wrap_width` 必须与渲染时实际传入 `render_table_rows` 的 content_width 一致；
+    /// 通常等于 `viewport.width - line_num_width`（编辑区可写区减去行号列）。
+    ///
+    /// 高度反映 Normal 模式下整张表的渲染输出行数（顶/底边框 + 数据行 + 行间分隔线）。
+    /// Insert 模式下光标所在表格源码行会单独渲染源码（见 renderer.rs:render_cursor_visual_line），
+    /// 实际输出可能比这里返回的高度多 1 行；这是已接受的视觉抖动，不影响内容可达性。
+    pub fn compute_table_block_heights(
+        &self,
+        lines: &[String],
+        wrap_width: usize,
+    ) -> Vec<(usize, usize, usize)> {
+        let mut blocks = Vec::new();
+        let mut i = 0;
+        while i < lines.len() {
+            // 仅在表格首行触发：向后查找连续的表格行
+            if let Some(line) = lines.get(i)
+                && Self::is_table_row(line)
+            {
+                let mut end = i;
+                while end + 1 < lines.len()
+                    && lines.get(end + 1).is_some_and(|l| Self::is_table_row(l))
+                {
+                    end += 1;
+                }
+                if end > i {
+                    // 至少 2 行才认定为表格（与 find_table_context 的判定一致）
+                    let source_lines: Vec<&str> =
+                        lines[i..=end].iter().map(|s| s.as_str()).collect();
+                    if let Some(table_data) = parse_table_from_source(&source_lines) {
+                        let height = measure_table_height(&table_data, wrap_width);
+                        blocks.push((i, end, height));
+                    }
+                }
+                i = end + 1;
+                continue;
+            }
+            i += 1;
+        }
+        blocks
     }
 
     /// 渲染表格行。

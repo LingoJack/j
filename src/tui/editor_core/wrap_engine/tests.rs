@@ -141,3 +141,60 @@ fn test_compute_count_matches_wrap_line() {
     let reconstructed: String = vlines2.iter().map(|vl| vl.text.as_str()).collect();
     assert_eq!(reconstructed, long_line);
 }
+
+#[test]
+fn table_height_inflates_first_row() {
+    let mut engine = WrapEngine::new();
+    engine.set_width(80);
+
+    let lines: Vec<String> = vec![
+        "前言".to_string(),
+        "| a | b |".to_string(),
+        "|---|---|".to_string(),
+        "| 1 | 2 |".to_string(),
+        "| 3 | 4 |".to_string(),
+        "结尾".to_string(),
+    ];
+    // 假设表格 (1..=4) 渲染高度 = 8
+    let table_blocks = vec![(1usize, 4usize, 8usize)];
+    engine.rebuild_cache_with_blocks(&lines, &[], &table_blocks);
+
+    // 视觉行数：前言 1 + 表格 8 + 续行 0+0+0 + 结尾 1 = 10
+    assert_eq!(engine.visual_line_count(), 10);
+    assert_eq!(engine.line_visual_counts[0], 1);
+    assert_eq!(engine.line_visual_counts[1], 8);
+    assert_eq!(engine.line_visual_counts[2], 0);
+    assert_eq!(engine.line_visual_counts[3], 0);
+    assert_eq!(engine.line_visual_counts[4], 0);
+    assert_eq!(engine.line_visual_counts[5], 1);
+}
+
+#[test]
+fn table_block_for_visual_row_finds_block() {
+    let mut engine = WrapEngine::new();
+    engine.set_width(80);
+
+    let lines: Vec<String> = vec![
+        "前言".to_string(),
+        "| a | b |".to_string(),
+        "|---|---|".to_string(),
+        "| 1 | 2 |".to_string(),
+        "结尾".to_string(),
+    ];
+    let table_blocks = vec![(1usize, 3usize, 5usize)]; // 表格 5 行渲染
+    engine.rebuild_cache_with_blocks(&lines, &[], &table_blocks);
+
+    // 视觉行 0：前言（不在表格里）
+    assert_eq!(engine.table_block_for_visual_row(0), None);
+    // 视觉行 1..=5：表格的渲染膨胀区
+    for v in 1..=5 {
+        assert_eq!(
+            engine.table_block_for_visual_row(v),
+            Some((1, 3)),
+            "visual_row={} 应落在表格块内",
+            v
+        );
+    }
+    // 视觉行 6：结尾
+    assert_eq!(engine.table_block_for_visual_row(6), None);
+}

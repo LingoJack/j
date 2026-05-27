@@ -61,6 +61,11 @@ pub struct WrapEngine {
     dirty: bool,
     /// 每行是否在代码块内部（内容行，不含围栏行）
     code_block_lines: Vec<bool>,
+    /// 表格块范围列表 `(start, end)`（闭区间）。
+    /// 表格首行的 `line_visual_counts[start]` 已被设为整张表的渲染高度，
+    /// 续行 `(start, end]` 的 count = 0。本字段用于让 cursor 移动逻辑识别
+    /// "膨胀块"，从而执行跨块跳越（避免光标停留在续行上、卡在视觉行号断层处）。
+    table_blocks: Vec<(usize, usize)>,
 }
 
 impl Default for WrapEngine {
@@ -80,6 +85,7 @@ impl WrapEngine {
             prefix_sums: vec![0],
             dirty: true,
             code_block_lines: Vec::new(),
+            table_blocks: Vec::new(),
         }
     }
 
@@ -129,9 +135,26 @@ impl WrapEngine {
         lines: &[String],
         cb_ranges: &[(usize, usize)],
     ) {
+        self.rebuild_cache_with_blocks(lines, cb_ranges, &[]);
+    }
+
+    /// 重建元数据，同时支持代码块（窄折行）和表格（块级渲染高度膨胀）。
+    ///
+    /// `table_blocks` 是 `(start_idx, end_idx, rendered_height)` 列表（闭区间）。
+    /// 表格的整块渲染高度会被记到首行的 `line_visual_counts[start_idx]`，
+    /// 续行（start_idx+1 ..= end_idx）记 0；这样 `prefix_sums` 与
+    /// `visual_line_count()` 自动反映真实渲染坐标，光标视觉行号、滚动偏移、
+    /// 视口可见范围都不再需要额外的"渲染输出 vs 源码视觉"补正。
+    pub fn rebuild_cache_with_blocks(
+        &mut self,
+        lines: &[String],
+        cb_ranges: &[(usize, usize)],
+        table_blocks: &[(usize, usize, usize)],
+    ) {
         self.line_cache.clear();
         self.line_visual_counts.clear();
         self.prefix_sums.clear();
+        self.table_blocks.clear();
 
         // 构建每行是否在代码块内的 bitmap
         self.code_block_lines = vec![false; lines.len()];
@@ -141,14 +164,43 @@ impl WrapEngine {
             }
         }
 
+        // 构建表格信息：line -> (block_role, height)
+        // role: 0 = 非表格, 1 = 表格首行（visual count = height）, 2 = 表格续行（visual count = 0）
+        // 用 Option<usize> 表示表格首行的高度；None 表示非首行（如果在表格内则视为续行）
+        let mut table_first_row_height: Vec<Option<usize>> = vec![None; lines.len()];
+        let mut table_continuation: Vec<bool> = vec![false; lines.len()];
+        for &(start, end, height) in table_blocks {
+            if start < lines.len() {
+                table_first_row_height[start] = Some(height);
+                self.table_blocks
+                    .push((start, end.min(lines.len().saturating_sub(1))));
+            }
+            let cont_end = end.min(lines.len().saturating_sub(1));
+            if start < cont_end {
+                for slot in &mut table_continuation[(start + 1)..=cont_end] {
+                    *slot = true;
+                }
+            }
+        }
+        // 保证 table_blocks 按 start 升序，便于二分
+        self.table_blocks.sort_by_key(|&(s, _)| s);
+
         self.line_visual_counts.reserve(lines.len());
         self.prefix_sums.reserve(lines.len() + 1);
         self.prefix_sums.push(0);
 
         let mut sum: usize = 0;
         for (i, line) in lines.iter().enumerate() {
-            let w = self.effective_width(i);
-            let count = Self::compute_visual_line_count_with_width(line, w, self.enabled);
+            let count = if let Some(h) = table_first_row_height[i] {
+                // 表格首行：吃掉整张表的渲染高度
+                h
+            } else if table_continuation[i] {
+                // 表格续行：不贡献新视觉行
+                0
+            } else {
+                let w = self.effective_width(i);
+                Self::compute_visual_line_count_with_width(line, w, self.enabled)
+            };
             self.line_visual_counts.push(count);
             sum += count;
             self.prefix_sums.push(sum);
@@ -364,6 +416,42 @@ impl WrapEngine {
     #[allow(dead_code)]
     pub fn line_wrap_width(&self, line_idx: usize) -> usize {
         self.effective_width(line_idx)
+    }
+
+    /// 如果 `logical_line` 落在某个表格块内，返回该块的 `(start, end)`（闭区间）。
+    pub fn table_block_for_line(&self, logical_line: usize) -> Option<(usize, usize)> {
+        // table_blocks 按 start 升序；二分找最后一个 start <= logical_line。
+        let pos = self
+            .table_blocks
+            .partition_point(|&(s, _)| s <= logical_line);
+        if pos == 0 {
+            return None;
+        }
+        let (s, e) = self.table_blocks[pos - 1];
+        if logical_line >= s && logical_line <= e {
+            Some((s, e))
+        } else {
+            None
+        }
+    }
+
+    /// 如果某个视觉行号 `visual_row` 落在某个膨胀表格块的内部（即不是首行那一格、
+    /// 没有对应缓存的 vline），返回该块的 `(start, end)`。
+    ///
+    /// 用于 cursor 移动逻辑识别"目标视觉行落进了膨胀区"的情形。
+    pub fn table_block_for_visual_row(&self, visual_row: usize) -> Option<(usize, usize)> {
+        for &(start, end) in &self.table_blocks {
+            let block_start = self.prefix_sums.get(start).copied()?;
+            let block_end_exclusive = self
+                .prefix_sums
+                .get(end + 1)
+                .copied()
+                .unwrap_or_else(|| self.visual_line_count());
+            if visual_row >= block_start && visual_row < block_end_exclusive {
+                return Some((start, end));
+            }
+        }
+        None
     }
 }
 
