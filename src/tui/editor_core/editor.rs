@@ -85,7 +85,13 @@ struct ThemeState {
 struct RenderMeta {
     /// 每个屏幕行对应一个 RenderedVL（每次渲染时更新，用于鼠标点击定位）
     vl_map: Vec<RenderedVL>,
-    /// 当前屏幕顶部对应的渲染行索引（在 vl_map 中的偏移）
+    /// 当前屏幕顶部对应的渲染行**局部下标**——即 `rendered_lines` / `vl_map`
+    /// 数组里"屏幕顶行"的索引（render() 末尾写入的 `visible_start_local`）。
+    ///
+    /// ⚠️ 历史坑：注释一度写"全局渲染行号"，实际值是局部下标。
+    /// 局部下标 vs 全局渲染行号差一个 `rendered_offset`，滚动后两者不再相等。
+    /// 想拿全局行号，必须 `rendered_offset + map_index + screen_y`。
+    /// 详见 `BUGS_TROUBLESHOOTING.md` —— 鼠标选区高亮位置偏移。
     map_index: usize,
     /// 上一次渲染时的实际渲染行总数（用于鼠标滚动计算 max_offset）
     /// 注意：wrap_engine 的 visual_line_count() 是源码行的视觉行计数，
@@ -96,14 +102,16 @@ struct RenderMeta {
     /// 全局渲染行号 = `rendered_offset + 局部下标`。用于鼠标拖选复制时
     /// 调 `extract_selection_text` 提取可见正文。每帧 render() 重新写入。
     rendered_lines: Vec<ratatui::text::Line<'static>>,
-    /// `rendered_lines[0]` 对应的全局渲染行号偏移。
+    /// `rendered_lines[0]` 对应的全局渲染行号偏移（= 当帧的 `visual_offset`）。
     rendered_offset: usize,
 }
 
 /// 鼠标拖选状态（**渲染坐标**，独立于 Vim Visual mode 的源码坐标）。
 ///
 /// `(rendered_row, char_in_row)`：
-///   - `rendered_row` 是 `render_meta.rendered_lines` 的索引（全局渲染行号）。
+///   - `rendered_row` 是**全局渲染行号**——不是 `rendered_lines` 的局部下标。
+///     局部下标 = `rendered_row - rendered_offset`。render 端高亮循环用
+///     `gline = visual_offset + idx` 比对 sr/er，必须按全局行号存。
 ///   - `char_in_row` 是该渲染行内拼接 spans 后的字符偏移（含装饰字符）。
 ///
 /// 选中表格 / 代码块 / 链接时，复制走 `extract_selection_text` 从渲染 spans 提取
@@ -981,12 +989,20 @@ impl MarkdownEditor {
         }
     }
 
-    /// 把屏幕坐标转换为"渲染坐标"`(rendered_row_global, char_in_row)`，
-    /// 其中 `rendered_row_global` 是 `render_meta.rendered_lines` 的索引，
-    /// `char_in_row` 是该渲染行内的字符偏移（含装饰字符）。
+    /// 把屏幕坐标转换为"渲染坐标"`(rendered_row_global, char_in_row)`：
+    /// - `rendered_row_global` 是**全局渲染行号**（= `rendered_offset + 局部下标`）。
+    /// - `char_in_row` 是该渲染行内的字符偏移（含装饰字符）。
     ///
     /// 这是鼠标拖选 / 复制走的坐标系——与 chat 的 `screen_to_text_pos` 同源。
     /// 失败时返回 `None`：点击在编辑区外、上一帧未渲染过、对应渲染行不存在。
+    ///
+    /// ⚠️ 坐标系易错点（详见 `BUGS_TROUBLESHOOTING.md` —— 鼠标选区高亮位置偏移）：
+    ///   `render_meta.map_index` 是**局部下标**（不是全局行号），
+    ///   `render_meta.rendered_offset` 是当帧 `visual_offset`。
+    ///   全局行号 = `rendered_offset + map_index + content_y`。
+    ///   render 端高亮循环用 `gline = visual_offset + idx` 比对 selection 的 sr/er，
+    ///   所以本函数**必须返回全局行号**——少加 rendered_offset 会让滚动后选区
+    ///   被高亮循环整段过滤掉，表现为"高亮位置和鼠标偏移 / 底部拖动看不到高亮"。
     fn screen_to_render_pos(
         &self,
         screen_x: u16,
@@ -1004,11 +1020,15 @@ impl MarkdownEditor {
             return None;
         }
 
-        // map_index 是当前屏幕顶行对应的全局渲染行号
-        let global_row = content_y + self.render_meta.map_index;
-        // 把全局行号换成 rendered_lines 局部下标
-        let local_idx = global_row.checked_sub(self.render_meta.rendered_offset)?;
+        // map_index 是当前屏幕顶行对应的 `rendered_lines` 局部下标
+        // （= visible_start_local，render() 末尾写入）。要还原成"全局渲染行号"，
+        // 必须再加上 rendered_offset (= visual_offset)。
+        // 之前漏加 rendered_offset，导致滚动后 (visual_offset > 0) 选区的行号
+        // 比真实值小 visual_offset：render 端 highlight 循环用 `gline = visual_offset + idx`
+        // 比对，整段选区都被 `gline > er` 过滤掉 → 看不到高亮；底部拖动尤其明显。
+        let local_idx = self.render_meta.map_index + content_y;
         let line = self.render_meta.rendered_lines.get(local_idx)?;
+        let global_row = self.render_meta.rendered_offset + local_idx;
 
         // 屏幕 X：按显示宽度匹配 spans 拼接后的字符偏移。spans 已经包含
         // 行号 / 边框 / padding 等装饰，所以 char_offset 直接是"渲染行内"
@@ -1016,6 +1036,54 @@ impl MarkdownEditor {
         let local_x = screen_x.saturating_sub(area.x + h_pad) as usize;
         let char_offset = spans_to_char_offset(&line.spans, local_x);
         Some((global_row, char_offset))
+    }
+
+    /// 拖选 fallback：当鼠标超出 editor area 时，把它"夹"到最近的有效渲染行
+    /// 边缘并返回渲染坐标，用于持续更新 `mouse_selection.current`。
+    ///
+    /// 规则：
+    /// - 鼠标在 area 上方 → 选到第一个可见渲染行的行首；
+    /// - 鼠标在 area 下方 → 选到最后一个可见渲染行的行末；
+    /// - X 越界则 clamp 到 area 水平边界后再走标准换算。
+    fn clamped_render_pos_for_drag(&self, mouse: MouseEvent, area: Rect) -> Option<(usize, usize)> {
+        if area.width == 0 || area.height == 0 {
+            return None;
+        }
+        let max_col = area.x + area.width - 1;
+        let max_row = area.y + area.height - 1;
+
+        let v_pad = self.top_pad();
+        let content_height = self.viewport_content_height(area);
+        if content_height == 0 {
+            return None;
+        }
+
+        // 决定 fallback 到顶部还是底部：高于 area 走顶行，否则走底行。
+        let to_bottom = mouse.row > max_row || mouse.row >= area.y + v_pad + content_height as u16;
+        let visible_row = if to_bottom {
+            (content_height - 1) as u16
+        } else if mouse.row < area.y + v_pad {
+            0
+        } else {
+            mouse.row.saturating_sub(area.y + v_pad)
+        };
+
+        // 见 `screen_to_render_pos` 头部的坐标系警示：返回值必须是**全局行号**，
+        // 等于 `rendered_offset + 局部下标`。
+        let local_idx = visible_row as usize + self.render_meta.map_index;
+        let line = self.render_meta.rendered_lines.get(local_idx)?;
+        let global_row = self.render_meta.rendered_offset + local_idx;
+
+        // X 方向：超出底部时直接选到行末（包含整行内容）；否则按 clamp 后的列计算。
+        if to_bottom {
+            let total_chars: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
+            return Some((global_row, total_chars));
+        }
+        let clamped_x = mouse.column.clamp(area.x, max_col);
+        let h_pad = self.border_pad();
+        let local_x = clamped_x.saturating_sub(area.x + h_pad) as usize;
+        use crate::tui::components::selection::spans_to_char_offset;
+        Some((global_row, spans_to_char_offset(&line.spans, local_x)))
     }
 
     /// 将屏幕列号转换为字符偏移（考虑 CJK 等宽字符）。
@@ -1064,15 +1132,20 @@ impl MarkdownEditor {
                     self.buffer.set_cursor(row, col);
                 }
 
-                // 鼠标选区走渲染坐标——表格 / 代码块 / 链接里拖选 + 复制都准确
-                if let Some(anchor_render) = self.mouse_render_anchor
-                    && let Some(current_render) =
-                        self.screen_to_render_pos(mouse.column, mouse.row, area)
-                {
-                    self.mouse_selection = Some(MouseSelection {
-                        anchor: anchor_render,
-                        current: current_render,
-                    });
+                // 鼠标选区走渲染坐标——表格 / 代码块 / 链接里拖选 + 复制都准确。
+                // 鼠标拖出 area 是常态（向下/向上"甩"），此时 `screen_to_render_pos`
+                // 会返回 None；fallback 到最后一个/第一个有效渲染行末尾/首部，
+                // 让 mouse_selection.current 持续更新，下半段也会有高亮。
+                if let Some(anchor_render) = self.mouse_render_anchor {
+                    let current_render = self
+                        .screen_to_render_pos(mouse.column, mouse.row, area)
+                        .or_else(|| self.clamped_render_pos_for_drag(mouse, area));
+                    if let Some(current_render) = current_render {
+                        self.mouse_selection = Some(MouseSelection {
+                            anchor: anchor_render,
+                            current: current_render,
+                        });
+                    }
                 }
             }
             MouseEventKind::Up(MouseButton::Left) => {
