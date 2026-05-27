@@ -719,14 +719,27 @@ impl MarkdownEditor {
         content_height: usize,
     ) -> Option<(usize, usize)> {
         let scroll_local = self.viewport.scroll_offset.saturating_sub(visual_offset);
-        let visible_start = if scroll_local < visual_map.len() {
+        let mut visible_start = if scroll_local < visual_map.len() {
             visual_map[scroll_local]
         } else {
             // 超出映射范围（文件末尾滚动），使用 all_visual_lines 的末尾
             all_len.saturating_sub(content_height)
         };
-        let visible_start = visible_start.min(all_len.saturating_sub(1));
-        let visible_end = (visible_start + content_height).min(all_len);
+        visible_start = visible_start.min(all_len.saturating_sub(1));
+        let mut visible_end = (visible_start + content_height).min(all_len);
+
+        // Bug #1 Fix: Ensure viewport is filled when possible.
+        // If we're at EOF and can't fill the viewport, back up visible_start
+        // so we show as much content as possible while filling the available space.
+        if visible_end - visible_start < content_height && all_len > 0 {
+            visible_end = all_len;
+            if all_len > content_height {
+                visible_start = all_len - content_height;
+            } else {
+                visible_start = 0;
+            }
+        }
+
         Some((visible_start, visible_end))
     }
 
@@ -766,18 +779,36 @@ impl MarkdownEditor {
     /// 使用 wrap_engine 的视觉行总数计算底部边界，因为 `scroll_offset`
     /// 是 wrap_engine 坐标系中的偏移量。`render_meta.rendered_line_count`
     /// 只反映上一帧渲染范围的行数（远小于全文件），用它会导致滚不动。
-    fn scroll_viewport_down(&mut self, step: usize, content_height: usize) {
+    fn scroll_viewport_down(&mut self, step: usize, content_height: usize) -> bool {
+        let old_offset = self.viewport.scroll_offset;
         let max_offset = self.wrap.visual_line_count().saturating_sub(content_height);
         self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
         self.viewport.scroll_locked = true;
+        
+        // Return true if scroll offset actually changed (for Bug #2 fix)
+        old_offset != self.viewport.scroll_offset
     }
 
     /// 滚轮滚动后将光标移动到视口内的对应位置。
     ///
     /// 计算光标当前视觉行，若不在可视区域内则将其移动到视口中央。
+    /// 对于内容较少的文档（小于视口高度），始终移动光标以提供反馈。
     fn cursor_follow_scroll(&mut self, area: Rect) {
         let content_height = area.height.saturating_sub(3) as usize;
         if content_height == 0 {
+            return;
+        }
+
+        let total_visual_lines = self.wrap.visual_line_count();
+        
+        // Bug #2 Fix: For small documents (content fits in viewport), always move cursor
+        // to provide UX feedback that the scroll action was recognized, even though
+        // the viewport can't actually scroll
+        if total_visual_lines <= content_height {
+            let offset = self.viewport.scroll_offset;
+            let target_visual = offset + content_height / 2;
+            let (logical_row, logical_col) = self.wrap.visual_to_logical(target_visual);
+            self.buffer.set_cursor(logical_row, logical_col);
             return;
         }
 
@@ -917,8 +948,13 @@ impl MarkdownEditor {
             }
             MouseEventKind::ScrollDown => {
                 let content_height = area.height.saturating_sub(3) as usize;
-                self.scroll_viewport_down(3, content_height);
-                self.cursor_follow_scroll(area);
+                let scroll_changed = self.scroll_viewport_down(3, content_height);
+                
+                // Bug #2 Fix: Call cursor_follow_scroll if viewport scrolled,
+                // or if document is small (provide UX feedback for small docs)
+                if scroll_changed || self.wrap.visual_line_count() <= content_height {
+                    self.cursor_follow_scroll(area);
+                }
             }
             _ => {}
         }
