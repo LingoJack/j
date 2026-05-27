@@ -1,7 +1,7 @@
 //! 编辑器渲染逻辑
 
 use super::MarkdownEditor;
-use super::selection::{RenderedVL, visual_line_selection_range};
+use super::selection::{RenderedVL, inclusive_end_col, visual_line_selection_range};
 use crate::tui::components::selection::{normalize_selection, rebuild_spans_with_selection};
 use crate::tui::editor_core::vim::{Mode, filter_commands, filter_insert_commands};
 use ratatui::{
@@ -166,6 +166,11 @@ impl MarkdownEditor {
             let (vs_row, vs_col) = self.vim.visual_start();
             let (ve_row, ve_col) = (cursor_row, cursor_col);
             let ((sr, sc), (er, ec)) = normalize_selection((vs_row, vs_col), (ve_row, ve_col));
+
+            // 把 ec 扩展为"包含光标字符"的半开区间右端，让屏幕高亮
+            // 与 vim::get_selection_text 复制到剪贴板的内容保持一致。
+            let er_line_len = self.buffer.line(er).map(|l| l.chars().count()).unwrap_or(0);
+            let ec = inclusive_end_col(er_line_len, ec);
 
             let sel_fg = self.theme.text_normal;
             let sel_bg = Color::DarkGray;

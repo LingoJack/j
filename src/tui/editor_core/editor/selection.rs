@@ -8,9 +8,14 @@ pub struct RenderedVL {
     pub end_col: usize,
 }
 
-/// 计算视觉行与选区 `[sr,sc)-(er,ec)` 的交集字符范围。
+/// 计算视觉行与选区的交集字符范围。
 ///
-/// 返回 `(hl_start, hl_end)`——需要高亮的逻辑列范围（闭区间左、开区间右）。
+/// 选区语义：character-wise visual mode 的两端均闭合——光标块所在的字符也算选中。
+/// 调用前请先用 `inclusive_end_col(buffer, er, ec)` 把 `ec` 扩展为半开区间右端
+/// （这里参数 `ec` 已经是扩展后的值），这样高亮范围与 `get_selection_text`
+/// 复制到剪贴板的内容一致。
+///
+/// 返回 `(hl_start, hl_end)`——需要高亮的逻辑列范围（半开区间）。
 /// 若无交集，返回 `(0, 0)`。
 pub(super) fn visual_line_selection_range(
     meta: &RenderedVL,
@@ -56,4 +61,13 @@ pub(super) fn visual_line_selection_range(
     }
 
     (0, 0)
+}
+
+/// 把"光标列 `ec`"扩展为"半开区间右端"——也就是把光标字符纳入选区。
+///
+/// 用于在调用 `visual_line_selection_range` / `get_selection_text` 之前
+/// 把 raw cursor col 转成 inclusive end col。当 `ec >= line_len`（光标越过
+/// 行末）时不再加 1，避免越界。
+pub(super) fn inclusive_end_col(line_len: usize, ec: usize) -> usize {
+    if ec >= line_len { ec } else { ec + 1 }
 }

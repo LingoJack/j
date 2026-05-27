@@ -407,7 +407,6 @@ impl WrapEngine {
     }
 
     /// 检查指定逻辑行是否在代码块内部
-    #[allow(dead_code)]
     pub fn is_code_block_line(&self, line_idx: usize) -> bool {
         self.code_block_lines.get(line_idx) == Some(&true)
     }

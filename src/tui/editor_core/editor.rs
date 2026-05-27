@@ -833,7 +833,13 @@ impl MarkdownEditor {
         let vl_start_col = vl_meta.start_col;
 
         // 减去行号区域得到内容列
-        let content_col = content_x.saturating_sub(line_num_width);
+        let content_col_pre_deco = content_x.saturating_sub(line_num_width);
+
+        // 减去渲染装饰列：代码块内容行渲染为 `│ <code> │`，左侧装饰占 2 列；
+        // 不补这个偏移，鼠标点击映射到的源码列就比真实位置后移 2 个字符
+        // （症状：选 `vscode` 复制成 `code .`）。
+        let deco_left_cols = self.row_left_decoration_cols(logical_row);
+        let content_col = content_col_pre_deco.saturating_sub(deco_left_cols);
 
         // 获取该逻辑行的原始文本
         let line_text = self.buffer.line(logical_row)?;
@@ -849,6 +855,23 @@ impl MarkdownEditor {
         let logical_col = logical_col.min(max_col);
 
         Some((logical_row, logical_col))
+    }
+
+    /// 给定源码逻辑行号，返回其渲染时左侧装饰占用的屏幕列数（除行号外）。
+    ///
+    /// 当前覆盖：
+    /// - 代码块内容行（含围栏行内部）：`│ ` 占 2 列
+    /// - 其他行：0
+    ///
+    /// 用于把鼠标点击的"屏幕列"还原成"源码字符列"。围栏行视觉上是
+    /// `╭───<lang>───╮`（顶/底边框），用户基本不会在围栏行点选文字；
+    /// 这里保守返回 0，落点是行首（行尾），不会出现偏移导致的复制错误。
+    fn row_left_decoration_cols(&self, logical_row: usize) -> usize {
+        if self.wrap.is_code_block_line(logical_row) {
+            2 // `│ `
+        } else {
+            0
+        }
     }
 
     /// 将屏幕列号转换为字符偏移（考虑 CJK 等宽字符）。
@@ -1095,5 +1118,165 @@ mod tests {
             editor.viewport.scroll_locked,
             "推视口后必须 scroll_locked=true，否则下一帧光标同步会把它拉回去"
         );
+    }
+
+    /// Visual 选区复制测试：character-wise visual mode 两端均闭合，
+    /// 屏幕上看到的高亮 + 光标块 = 复制到剪贴板的内容。
+    #[test]
+    fn visual_selection_copy_includes_cursor_char_single_line() {
+        let mut editor = MarkdownEditor::new(
+            "test",
+            "hello",
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+
+        // 模拟：光标在 (0, 0)，按 v 后再按 l 一次：visual_start=(0,0), cursor=(0,1)
+        editor.buffer.set_cursor(0, 0);
+        editor.vim.set_visual_start((0, 0));
+        editor.vim.set_mode(Mode::Visual);
+        editor.buffer.set_cursor(0, 1);
+
+        let copied = editor.vim.get_selection_text(&editor.buffer);
+        assert_eq!(
+            copied.as_deref(),
+            Some("he"),
+            "v + l 应选中 'he'（cursor 块字符也算选中）"
+        );
+    }
+
+    #[test]
+    fn visual_selection_copy_inclusive_at_line_end() {
+        let mut editor = MarkdownEditor::new(
+            "test",
+            "hello",
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+
+        // 光标在 (0, 0)，按 v 后跳到行末 cursor=(0, 4) on 'o'
+        editor.buffer.set_cursor(0, 0);
+        editor.vim.set_visual_start((0, 0));
+        editor.vim.set_mode(Mode::Visual);
+        editor.buffer.set_cursor(0, 4);
+
+        let copied = editor.vim.get_selection_text(&editor.buffer);
+        assert_eq!(
+            copied.as_deref(),
+            Some("hello"),
+            "v + 跳到 'o' 应选中 'hello'"
+        );
+    }
+
+    #[test]
+    fn visual_selection_copy_past_line_end_no_overshoot() {
+        let mut editor = MarkdownEditor::new(
+            "test",
+            "hello",
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+
+        // 光标越过行末（cursor=(0, 5) = line_len），不应在 'o' 后再多 +1 越界
+        editor.buffer.set_cursor(0, 0);
+        editor.vim.set_visual_start((0, 0));
+        editor.vim.set_mode(Mode::Visual);
+        editor.buffer.set_cursor(0, 5);
+
+        let copied = editor.vim.get_selection_text(&editor.buffer);
+        assert_eq!(
+            copied.as_deref(),
+            Some("hello"),
+            "光标已在 line_len 处不再 +1，避免越界 panic 或多取字符"
+        );
+    }
+
+    #[test]
+    fn visual_selection_copy_multi_line_inclusive_end() {
+        let mut editor = MarkdownEditor::new(
+            "test",
+            "hello\nworld",
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+
+        // 起点 (0,0)，cursor 在第二行第 2 个字符 (1, 2) on 'r'
+        editor.buffer.set_cursor(0, 0);
+        editor.vim.set_visual_start((0, 0));
+        editor.vim.set_mode(Mode::Visual);
+        editor.buffer.set_cursor(1, 2);
+
+        let copied = editor.vim.get_selection_text(&editor.buffer);
+        assert_eq!(
+            copied.as_deref(),
+            Some("hello\nwor"),
+            "多行选区结尾包含 cursor 字符 'r'"
+        );
+    }
+
+    #[test]
+    fn visual_selection_copy_chinese_inclusive() {
+        let mut editor = MarkdownEditor::new(
+            "test",
+            "你好世界",
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+
+        // 起点 (0,0)，cursor 在 '世' (col 2)
+        editor.buffer.set_cursor(0, 0);
+        editor.vim.set_visual_start((0, 0));
+        editor.vim.set_mode(Mode::Visual);
+        editor.buffer.set_cursor(0, 2);
+
+        let copied = editor.vim.get_selection_text(&editor.buffer);
+        assert_eq!(
+            copied.as_deref(),
+            Some("你好世"),
+            "中文按字符切片，cursor 块所在字也算选中"
+        );
+    }
+
+    /// 鼠标点击代码块内字符时，screen_col → logical_col 必须扣掉左侧
+    /// 装饰列（`│ ` 占 2 列）。否则点 `vscode` 的 'v' 实际落到 'c'（偏移 +2），
+    /// 后续选区复制就会变成错位的内容（例如 `code .`）。
+    #[test]
+    fn screen_to_logical_subtracts_code_block_decoration() {
+        // 文档：3 行围栏 + 1 行内容（在代码块内）
+        let content = "```bash\nset vscode \"/Applications/Visual Studio Code.app\"\n```";
+        let mut editor = MarkdownEditor::new(
+            "test",
+            content,
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::StartOfFile,
+        );
+        // 让 wrap_engine 重新加载 cb_ranges，code_block_lines 才能正确填充
+        editor.viewport.width = 78;
+        editor.rebuild_wrap_cache();
+
+        // 行 1 是代码块内容行 → is_code_block_line == true
+        assert!(
+            editor.wrap.is_code_block_line(1),
+            "行 1 应被识别为代码块内容行；当前 wrap.code_block_lines = {:?}",
+            (0..3)
+                .map(|i| editor.wrap.is_code_block_line(i))
+                .collect::<Vec<_>>()
+        );
+
+        // 装饰列 = 2（`│ `）
+        assert_eq!(editor.row_left_decoration_cols(1), 2);
+        assert_eq!(editor.row_left_decoration_cols(0), 0); // 围栏行不计装饰
     }
 }

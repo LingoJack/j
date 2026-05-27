@@ -277,6 +277,14 @@ impl Vim {
     }
 
     /// 提取 Visual 选区文本（用于复制到剪贴板）
+    ///
+    /// 语义：character-wise visual mode（Vim 的 `v`）的选区**两端均闭合**——
+    /// 光标块所在的那个字符也算被选中。这与渲染端 `visual_line_selection_range`
+    /// 保持一致：屏幕上看到的高亮 + 光标块 = 复制到剪贴板的内容。
+    ///
+    /// 实现：内部把 `ec`（结束列）扩展为 `min(ec + 1, end_row_len)`，
+    /// 然后用半开区间 `[sc, ec_inclusive)` 切片。当光标越过行末（`ec >= line_len`，
+    /// 例如按 `$` 后或刚换行）时不再 +1，避免越界。
     pub fn get_selection_text(&self, buffer: &TextBuffer) -> Option<String> {
         let (start_row, start_col) = self.visual_start;
         let (end_row, end_col) = buffer.cursor();
@@ -295,11 +303,17 @@ impl Vim {
         }
 
         let lines = buffer.lines();
+
+        // 把 ec 扩展为"包含光标字符"的开区间右端
+        let er_line_len = lines.get(er).map(|l| l.chars().count()).unwrap_or(0);
+        let ec_inclusive = if ec >= er_line_len { ec } else { ec + 1 };
+
         if sr == er {
             // 单行选区
             lines.get(sr).map(|line| {
                 let chars: Vec<char> = line.chars().collect();
-                chars[sc..ec].iter().collect()
+                let end = ec_inclusive.min(chars.len());
+                chars[sc..end].iter().collect()
             })
         } else {
             // 多行选区
@@ -310,7 +324,8 @@ impl Vim {
                     yanked.push_str(&chars[sc..].iter().collect::<String>());
                     yanked.push('\n');
                 } else if i == er {
-                    yanked.push_str(&chars[..ec].iter().collect::<String>());
+                    let end = ec_inclusive.min(chars.len());
+                    yanked.push_str(&chars[..end].iter().collect::<String>());
                 } else if i > sr && i < er {
                     yanked.push_str(line);
                     yanked.push('\n');
