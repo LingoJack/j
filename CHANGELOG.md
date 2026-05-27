@@ -1,3 +1,24 @@
+# v12.10.83
+
+
+### Bug 修复
+
+- **代码块鼠标点击列偏移**: 修复在代码块内容行中鼠标点击时光标位置偏右 2 个字符的问题（未扣除 `│ ` 装饰列），现在点击 `vscode` 的 `v` 能正确定位，不再变成 `c`
+- **Visual 选区复制闭合性**: 修复 character-wise visual mode 复制时选区右端不包含光标字符的问题，现在屏幕高亮范围与复制到剪贴板的内容完全一致
+
+### 新功能
+
+- **编辑器鼠标拖选复制（基于渲染 spans）**: 鼠标拖选高亮和复制现在基于渲染坐标而非源码坐标，跨表格单元格、代码块边框、链接语法拖选时，复制内容 = 屏幕上看到的可见文字，自动跳过边框、padding、行号等装饰元素。选中后按 `y` 或 `c` 复制，按 `Esc` 取消
+- **Notebook 括号粘贴（Bracketed Paste）**: Notebook 编辑器和输入框支持终端 bracketed paste，粘贴多行文本不再被逐字符处理，大幅提升粘贴体验
+- **Notebook 快捷键**: 目录树新增 `a` 新建、`r` 改名、`d` 删除、`s` 刷新、`o` 打开目录、`[`/`]` 调整面板比例、`q` 退出等快捷键
+- **Reader 按 Enter 停止**: `j read` 服务现在按 Enter 即可停止，不再需要 Ctrl-C
+
+### 改进
+
+- **选区工具函数公共化**: `is_selectable_line`、`extract_content_from_line`、`spans_to_char_offset` 等函数从 chat UI 迁移至 `tui/components/selection.rs`，编辑器和聊天界面共用同一套选区逻辑
+- **Notebook 重命名错误回显**: 重命名遇到目标文件已存在时，错误信息回显到状态栏，用户可继续修改输入而不会退出重命名模式
+- **tokio 特性扩展**: 新增 `io-std` 和 `io-util` feature，支持异步 stdin 读取
+
 # v12.10.82
 
 

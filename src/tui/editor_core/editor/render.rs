@@ -161,6 +161,13 @@ impl MarkdownEditor {
             self.viewport.scroll_offset = max_offset;
         }
 
+        // 保存"未叠选区高亮"的渲染输出，用于鼠标拖选复制时提取可见文本。
+        // 必须在叠加 Visual / mouse_selection 高亮之前 clone——这样
+        // extract_selection_text 看到的是干净的渲染 spans，is_decorative_span
+        // 才能准确识别哪些 span 是边框 / padding。
+        self.render_meta.rendered_lines = all_visual_lines.clone();
+        self.render_meta.rendered_offset = visual_offset;
+
         // Visual 模式：对选区范围内的行应用精确字符级高亮
         if *self.vim.mode() == Mode::Visual {
             let (vs_row, vs_col) = self.vim.visual_start();
@@ -201,6 +208,35 @@ impl MarkdownEditor {
                         sel_bg,
                     );
                 }
+            }
+        }
+
+        // 鼠标拖选高亮（渲染坐标）。与 Vim Visual 互斥使用——鼠标拖选不进
+        // Vim Visual 模式，Vim Visual 由键盘 v 触发；两个 if 块不会同时命中。
+        if let Some(sel) = self.mouse_selection {
+            let ((sr, sc), (er, ec)) = normalize_selection(sel.anchor, sel.current);
+            let sel_fg = self.theme.text_normal;
+            let sel_bg = Color::DarkGray;
+
+            // 局部下标 idx 的全局渲染行号 = visual_offset + idx
+            for (idx, line) in all_visual_lines.iter_mut().enumerate() {
+                let gline = visual_offset + idx;
+                if gline < sr || gline > er {
+                    continue;
+                }
+                let render_start = if gline == sr { sc } else { 0 };
+                let render_end = if gline == er { ec } else { usize::MAX };
+
+                // rebuild_spans_with_selection 用半开区间 [start, end)；
+                // 把整行字符数当作 end 的上限。
+                let line_chars: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
+                let hl_end = render_end.min(line_chars);
+                let hl_start = render_start.min(line_chars);
+                if hl_start >= hl_end {
+                    continue;
+                }
+                line.spans =
+                    rebuild_spans_with_selection(&line.spans, 0, hl_start, hl_end, sel_fg, sel_bg);
             }
         }
 

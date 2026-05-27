@@ -60,7 +60,7 @@ pub fn serve_blocking(doc: RenderedDoc, port: Option<u16>) -> Result<(), String>
 
         let url = format!("http://{}/", local_addr);
         println!("📖 reader 已启动：{url}");
-        println!("   关闭浏览器页面将自动停止服务，或按 Ctrl-C 停止");
+        println!("   按 Enter 键停止，或关闭浏览器页面自动停止");
 
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal(shutdown))
@@ -71,9 +71,18 @@ pub fn serve_blocking(doc: RenderedDoc, port: Option<u16>) -> Result<(), String>
 }
 
 async fn shutdown_signal(shutdown: Arc<Notify>) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let stdin_line = async {
+        let mut reader = BufReader::new(tokio::io::stdin());
+        let mut buf = String::new();
+        // 读取一行：用户按下 Enter 即返回；EOF（stdin 关闭）也视为停止信号。
+        let _ = reader.read_line(&mut buf).await;
+    };
+
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            println!("\n📖 reader 已关闭");
+        _ = stdin_line => {
+            println!("📖 reader 已关闭");
         }
         _ = shutdown.notified() => {
             println!("📖 reader 已关闭（页面已关闭）");

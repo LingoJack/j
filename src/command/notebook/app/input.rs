@@ -225,6 +225,7 @@ fn enter_renaming(app: &mut NotebookApp) {
         let old_path = note_file_path(old_name);
         let new_path = note_file_path(&new_name);
         if new_path.exists() {
+            // 不退出 Renaming 模式：把错误信息写到状态栏，让用户继续修改输入。
             app.message = Some(format!("目标笔记已存在: {}", new_name));
             return;
         }

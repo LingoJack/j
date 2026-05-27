@@ -390,6 +390,7 @@ fn run_notebook_tui() {
         let _ = terminal::disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
         let _ = execute!(io::stdout(), crossterm::event::DisableMouseCapture);
+        let _ = execute!(io::stdout(), crossterm::event::DisableBracketedPaste);
         default_hook(info);
     }));
 
@@ -419,8 +420,8 @@ fn handle_tree_focus_key(app: &mut NotebookApp, key: crossterm::event::KeyEvent)
             app.cmd_popup_selected = 0;
             app.message = None;
         }
-        // Esc 退出 notebook
-        KeyCode::Esc => {
+        // Esc / q 退出 notebook
+        KeyCode::Esc | KeyCode::Char('q') => {
             auto_save_if_dirty(app);
             app.should_exit = true;
         }
@@ -433,6 +434,62 @@ fn handle_tree_focus_key(app: &mut NotebookApp, key: crossterm::event::KeyEvent)
         KeyCode::Down | KeyCode::Char('j') => {
             auto_save_if_dirty(app);
             app.move_down();
+        }
+        // a 新建笔记
+        KeyCode::Char('a') => {
+            app.mode = AppMode::Adding;
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.message = None;
+        }
+        // r 重命名选中文件
+        KeyCode::Char('r') => {
+            if let Some(idx) = app.selected_real_index() {
+                app.input = app.notes[idx].path.clone();
+                app.cursor_pos = app.input.chars().count();
+                app.rename_index = Some(idx);
+                app.mode = AppMode::Renaming;
+                app.message = None;
+            } else {
+                app.message = Some("没有选中的笔记".to_string());
+            }
+        }
+        // d 删除选中文件（需 y 确认）
+        KeyCode::Char('d') => {
+            if app.selected_real_index().is_some() {
+                app.mode = AppMode::ConfirmDelete;
+            } else {
+                app.message = Some("没有选中的笔记".to_string());
+            }
+        }
+        // o 在文件管理器中打开 notebook 目录
+        KeyCode::Char('o') => {
+            super::app::io::open_in_finder();
+            app.message = Some("已打开目录".to_string());
+        }
+        // s 刷新笔记列表
+        KeyCode::Char('s') => {
+            auto_save_if_dirty(app);
+            app.reload();
+        }
+        // [ / ] 调整左侧面板比例
+        KeyCode::Char('[') => {
+            app.panel_ratio = app.panel_ratio.saturating_sub(5).max(15);
+            super::app::io::save_panel_ratio(app.panel_ratio);
+            app.message = Some(format!(
+                "面板比例: {}:{}",
+                app.panel_ratio,
+                100 - app.panel_ratio
+            ));
+        }
+        KeyCode::Char(']') => {
+            app.panel_ratio = app.panel_ratio.saturating_add(5).min(60);
+            super::app::io::save_panel_ratio(app.panel_ratio);
+            app.message = Some(format!(
+                "面板比例: {}:{}",
+                app.panel_ratio,
+                100 - app.panel_ratio
+            ));
         }
         // Enter: 目录→展开/折叠, 文件→焦点到编辑器
         KeyCode::Enter => {
@@ -483,11 +540,57 @@ fn handle_editor_focus_key(app: &mut NotebookApp, key: crossterm::event::KeyEven
     }
 }
 
+/// 处理 bracketed paste：根据当前模式把整段文本一次性灌入对应输入位置。
+fn handle_paste_event(app: &mut NotebookApp, text: String) {
+    match app.mode {
+        AppMode::Normal => {
+            // 仅当焦点在编辑器时才注入到 markdown 缓冲区，避免在目录树焦点
+            // 下意外修改笔记内容。
+            if app.focus == Focus::Editor
+                && let Some(ref mut editor) = app.editor
+            {
+                editor.insert_text(&text);
+                app.editor_dirty = true;
+            }
+        }
+        AppMode::Adding | AppMode::Renaming | AppMode::Search | AppMode::Mkdir | AppMode::Mv => {
+            insert_text_into_input(app, &text, /*digits_only=*/ false);
+        }
+        AppMode::RatioInput => {
+            insert_text_into_input(app, &text, /*digits_only=*/ true);
+        }
+        // CommandPopup / ConfirmDelete 模式下忽略粘贴。
+        _ => {}
+    }
+}
+
+/// 把字符串追加到 `app.input` 当前光标处（忽略换行）。
+/// `digits_only=true` 时仅保留数字与冒号（用于 RatioInput 模式）。
+fn insert_text_into_input(app: &mut NotebookApp, text: &str, digits_only: bool) {
+    for c in text.chars() {
+        if c == '\r' || c == '\n' {
+            continue;
+        }
+        if digits_only && !(c.is_ascii_digit() || c == ':') {
+            continue;
+        }
+        let byte_idx = app
+            .input
+            .char_indices()
+            .nth(app.cursor_pos)
+            .map(|(i, _)| i)
+            .unwrap_or(app.input.len());
+        app.input.insert(byte_idx, c);
+        app.cursor_pos += 1;
+    }
+}
+
 fn run_notebook_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     execute!(stdout, crossterm::event::EnableMouseCapture)?;
+    execute!(stdout, crossterm::event::EnableBracketedPaste)?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -548,6 +651,9 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                         }
                     }
                 }
+                Event::Paste(text) => {
+                    handle_paste_event(&mut app, text);
+                }
                 _ => {}
             }
         }
@@ -556,6 +662,10 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     execute!(
         terminal.backend_mut(),
         crossterm::event::DisableMouseCapture
+    )?;
+    execute!(
+        terminal.backend_mut(),
+        crossterm::event::DisableBracketedPaste
     )?;
     terminal::disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;

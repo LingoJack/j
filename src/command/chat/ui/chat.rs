@@ -8,10 +8,10 @@ use crate::command::chat::render::cache::copy_to_clipboard;
 use crate::markdown::image_cache::ImageState;
 use crate::markdown::image_loader::load_image;
 use crate::tui::components::selection::{
-    compute_line_selection_range, normalize_selection, rebuild_spans_with_selection,
+    compute_line_selection_range, extract_content_from_line, is_selectable_line,
+    normalize_selection, rebuild_spans_with_selection, spans_to_char_offset,
 };
 use crate::util::safe_lock;
-use crate::util::text::char_width;
 
 /// 消息气泡宽度占内部可用宽度的百分比。
 const BUBBLE_WIDTH_PERCENT: usize = 85;
@@ -172,88 +172,9 @@ pub fn screen_to_text_pos(
     Some((global_line, char_offset))
 }
 
-/// 判断一个渲染行是否可选（即非边框、非空行、非 label）
-/// 通过检查 spans 内容来区分：边框行只含空格和 box-drawing 字符
-fn is_selectable_line(line: &Line<'static>) -> bool {
-    let full_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
-    // 空行不可选
-    if full_text.trim().is_empty() {
-        return false;
-    }
-    // 纯边框行不可选（只含空格 + box-drawing 字符：╭╮╰╯│─┌┐└┘）
-    let trimmed = full_text.trim();
-    if trimmed
-        .chars()
-        .all(|c| "╭╮╰╯│─┌┐└┘┬┴┼┤├".contains(c) || c == ' ')
-    {
-        return false;
-    }
-    true
-}
-
-/// 判断一个 span 是否是装饰性的（边框、padding、图片标记）
-fn is_decorative_span(span: &Span<'static>) -> bool {
-    let content = span.content.as_ref();
-    // 图片标记
-    if content.starts_with("\x00IMG:") {
-        return true;
-    }
-    // 纯空格（padding）
-    if content.chars().all(|c| c == ' ') {
-        return true;
-    }
-    // 纯 box-drawing 字符（边框）
-    if content.chars().all(|c| "╭╮╰╯│─┌┐└┘┬┴┼┤├".contains(c)) {
-        return true;
-    }
-    false
-}
-
-/// 从渲染行的 spans 中提取纯内容文本（去掉装饰 span）
-/// 返回 (内容文本, 内容在渲染行中的起始字符偏移)
-fn extract_content_from_line(line: &Line<'static>) -> (String, usize) {
-    let mut content = String::new();
-    let mut content_start_offset = 0usize;
-    let mut in_content = false;
-
-    for span in &line.spans {
-        let span_chars = span.content.chars().count();
-        if is_decorative_span(span) {
-            if !in_content {
-                // 还在内容之前的装饰区域
-                content_start_offset += span_chars;
-            }
-            // 内容之后的装饰区域，忽略
-        } else {
-            // 内容 span
-            if !in_content {
-                in_content = true;
-            }
-            content.push_str(span.content.as_ref());
-        }
-    }
-
-    (content, content_start_offset)
-}
-
-/// 根据 spans 和屏幕 x 坐标计算字符偏移
-fn spans_to_char_offset(spans: &[Span<'static>], screen_col: usize) -> usize {
-    let mut acc_width = 0usize;
-    let mut char_offset = 0usize;
-
-    for span in spans {
-        for ch in span.content.chars() {
-            let w = char_width(ch);
-            if acc_width >= screen_col {
-                return char_offset;
-            }
-            acc_width += w;
-            char_offset += 1;
-        }
-    }
-    char_offset
-}
-
+// `is_selectable_line` / `is_decorative_span` / `extract_content_from_line` /
+// `spans_to_char_offset` 已迁移至 `tui/components/selection.rs`，由编辑器和
+// chat UI 共用。
 /// 根据选区范围，从渲染行中提取纯内容文本（去掉边框和 padding）。
 /// anchor/current 的字符偏移是相对于渲染行的，会自动转换为内容偏移。
 pub fn extract_selection_text(

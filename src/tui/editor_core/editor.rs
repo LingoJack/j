@@ -92,6 +92,27 @@ struct RenderMeta {
     /// 但表格等元素渲染后会产生更多行。此字段存储实际渲染输出行数，
     /// 确保鼠标滚动能到达表格底部。
     rendered_line_count: usize,
+    /// 上一帧渲染输出的全部 Line（**未叠选区高亮**），按局部下标排列。
+    /// 全局渲染行号 = `rendered_offset + 局部下标`。用于鼠标拖选复制时
+    /// 调 `extract_selection_text` 提取可见正文。每帧 render() 重新写入。
+    rendered_lines: Vec<ratatui::text::Line<'static>>,
+    /// `rendered_lines[0]` 对应的全局渲染行号偏移。
+    rendered_offset: usize,
+}
+
+/// 鼠标拖选状态（**渲染坐标**，独立于 Vim Visual mode 的源码坐标）。
+///
+/// `(rendered_row, char_in_row)`：
+///   - `rendered_row` 是 `render_meta.rendered_lines` 的索引（全局渲染行号）。
+///   - `char_in_row` 是该渲染行内拼接 spans 后的字符偏移（含装饰字符）。
+///
+/// 选中表格 / 代码块 / 链接时，复制走 `extract_selection_text` 从渲染 spans 提取
+/// 可见内容，跳过边框 / padding / 隐藏的 markdown 语法（`[` `]()` 等）。
+/// 复制内容 = 屏幕上看到的文字。
+#[derive(Clone, Copy, Debug)]
+struct MouseSelection {
+    anchor: (usize, usize),
+    current: (usize, usize),
 }
 
 /// 编辑器主结构
@@ -132,6 +153,13 @@ pub struct MarkdownEditor {
     insert_panel_anchor: Option<(usize, usize)>,
     /// 鼠标拖拽锚点（左键按下时的逻辑位置）
     mouse_anchor: Option<(usize, usize)>,
+    /// 鼠标拖拽锚点（左键按下时的**渲染坐标**），用于驱动 mouse_selection。
+    /// 这跟 `mouse_anchor` 是同一次按下事件的不同坐标系视图——前者用于
+    /// 编辑（光标/visual_start 等），后者用于跨装饰元素的选区复制。
+    mouse_render_anchor: Option<(usize, usize)>,
+    /// 鼠标拖选状态（渲染坐标）。`Some` 表示当前有未清空的鼠标选区，
+    /// 渲染端会叠加高亮、`y`/`c` 复制时优先用它（走渲染 spans 提取）。
+    mouse_selection: Option<MouseSelection>,
 }
 
 impl MarkdownEditor {
@@ -194,6 +222,8 @@ impl MarkdownEditor {
             cursor_before_search: None,
             insert_panel_anchor: None,
             mouse_anchor: None,
+            mouse_render_anchor: None,
+            mouse_selection: None,
         }
     }
 
@@ -205,6 +235,25 @@ impl MarkdownEditor {
     /// 获取编辑器当前全部文本内容
     pub fn content(&self) -> String {
         self.buffer.lines().join("\n")
+    }
+
+    /// 将一段文本批量插入到当前光标位置（用于终端 bracketed paste）。
+    ///
+    /// 直接走 `TextBuffer::insert_str`，会按 `\n` 切行；`\r` 会被过滤以兼容
+    /// 跨平台粘贴。批量结束后统一重建折行缓存并压入 undo 快照，避免逐字
+    /// 触发渲染节流时漏帧。该方法不改变 vim 模式，调用方按需先切到 Insert。
+    pub fn insert_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let normalized: String = text.chars().filter(|c| *c != '\r').collect();
+        if normalized.is_empty() {
+            return;
+        }
+        self.buffer.insert_str(&normalized);
+        self.rebuild_wrap_cache();
+        self.vim
+            .push_snapshot(Snapshot::new(self.buffer.snapshot()), self.buffer.cursor());
     }
 
     /// 判断编辑器是否处于"空闲 Normal 模式"（可安全拦截 Esc）
@@ -384,6 +433,29 @@ impl MarkdownEditor {
 
         // 清除状态消息
         self.status_message = None;
+
+        // 鼠标选区存在时优先拦截：
+        //   - y / c：从渲染 spans 提取可见文本复制（表格/代码块/链接都准）
+        //   - Esc：清空选区
+        //   - 其他按键：清空选区，然后正常往下走（让用户继续编辑）
+        if self.mouse_selection.is_some() {
+            let is_yank = self.vim.mode() == &Mode::Normal
+                && (input.key == Key::Char('y') || input.key == Key::Char('c'))
+                && !input.ctrl;
+            let is_esc = input.key == Key::Esc;
+
+            if is_yank {
+                self.copy_mouse_selection_to_clipboard();
+                self.mouse_selection = None;
+                return EditorAction::Continue;
+            }
+            if is_esc {
+                self.mouse_selection = None;
+                return EditorAction::Continue;
+            }
+            // 其他按键：选区取消，继续走原路径
+            self.mouse_selection = None;
+        }
 
         // 帮助弹窗模式：拦截所有按键
         if self.vim.mode() == &Mode::HelpPopup {
@@ -874,6 +946,41 @@ impl MarkdownEditor {
         }
     }
 
+    /// 把屏幕坐标转换为"渲染坐标"`(rendered_row_global, char_in_row)`，
+    /// 其中 `rendered_row_global` 是 `render_meta.rendered_lines` 的索引，
+    /// `char_in_row` 是该渲染行内的字符偏移（含装饰字符）。
+    ///
+    /// 这是鼠标拖选 / 复制走的坐标系——与 chat 的 `screen_to_text_pos` 同源。
+    /// 失败时返回 `None`：点击在编辑区外、上一帧未渲染过、对应渲染行不存在。
+    fn screen_to_render_pos(
+        &self,
+        screen_x: u16,
+        screen_y: u16,
+        area: Rect,
+    ) -> Option<(usize, usize)> {
+        use crate::tui::components::selection::spans_to_char_offset;
+
+        // area 内左上角是上边框 + 左边框
+        let content_y = screen_y.saturating_sub(area.y + 1) as usize;
+        let content_height = self.viewport_content_height(area);
+        if content_y >= content_height {
+            return None;
+        }
+
+        // map_index 是当前屏幕顶行对应的全局渲染行号
+        let global_row = content_y + self.render_meta.map_index;
+        // 把全局行号换成 rendered_lines 局部下标
+        let local_idx = global_row.checked_sub(self.render_meta.rendered_offset)?;
+        let line = self.render_meta.rendered_lines.get(local_idx)?;
+
+        // 屏幕 X：按显示宽度匹配 spans 拼接后的字符偏移。spans 已经包含
+        // 行号 / 边框 / padding 等装饰，所以 char_offset 直接是"渲染行内"
+        // 的真实偏移，复制时由 extract_selection_text 自动跳过装饰部分。
+        let local_x = screen_x.saturating_sub(area.x + 1) as usize;
+        let char_offset = spans_to_char_offset(&line.spans, local_x);
+        Some((global_row, char_offset))
+    }
+
     /// 将屏幕列号转换为字符偏移（考虑 CJK 等宽字符）。
     fn screen_col_to_char_offset(text: &str, screen_col: usize) -> usize {
         use crate::util::text::char_width;
@@ -892,12 +999,19 @@ impl MarkdownEditor {
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
+                // 任何点击都先清空旧的鼠标选区
+                self.mouse_selection = None;
+                self.mouse_render_anchor = None;
+
                 if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
                     // 点击有效区域：移动光标，解除滚动锁定让视口跟随
                     self.viewport.scroll_locked = false;
                     self.vim.set_mode(Mode::Normal);
                     self.buffer.set_cursor(row, col);
                     self.mouse_anchor = Some((row, col));
+                    // 记录渲染坐标的锚点；只有真正拖动后才会进入 mouse_selection
+                    self.mouse_render_anchor =
+                        self.screen_to_render_pos(mouse.column, mouse.row, area);
                 } else {
                     // 点击空白区域（边框、状态栏等）：取消选区
                     self.viewport.scroll_locked = false;
@@ -906,21 +1020,33 @@ impl MarkdownEditor {
                 }
             }
             MouseEventKind::Drag(MouseButton::Left) => {
+                self.viewport.scroll_locked = false;
+
+                // 同步光标到屏幕坐标对应的源码位置（让视口跟随、便于后续编辑）
                 if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
-                    // 拖拽时也解除滚动锁定，确保视口跟随光标移动
-                    self.viewport.scroll_locked = false;
-                    if let Some(anchor) = self.mouse_anchor
-                        && *self.vim.mode() != Mode::Visual
-                    {
-                        // 进入 Visual 模式，选区起点为按下位置
-                        self.vim.set_mode(Mode::Visual);
-                        self.vim.set_visual_start(anchor);
-                    }
                     self.buffer.set_cursor(row, col);
+                }
+
+                // 鼠标选区走渲染坐标——表格 / 代码块 / 链接里拖选 + 复制都准确
+                if let Some(anchor_render) = self.mouse_render_anchor
+                    && let Some(current_render) =
+                        self.screen_to_render_pos(mouse.column, mouse.row, area)
+                {
+                    self.mouse_selection = Some(MouseSelection {
+                        anchor: anchor_render,
+                        current: current_render,
+                    });
                 }
             }
             MouseEventKind::Up(MouseButton::Left) => {
                 self.mouse_anchor = None;
+                // 单击未拖动：选区起止相同 → 清掉，避免空选区扰民
+                if let Some(sel) = self.mouse_selection
+                    && sel.anchor == sel.current
+                {
+                    self.mouse_selection = None;
+                }
+                self.mouse_render_anchor = None;
             }
             MouseEventKind::ScrollUp => {
                 // 鼠标滚轮按 step 视觉行驱动光标，再让 render 自动追到视口；
@@ -948,6 +1074,41 @@ impl MarkdownEditor {
             .set_text(text)
             .map_err(|e| format!("复制到剪贴板失败: {e}"))?;
         Ok(())
+    }
+
+    /// 把当前鼠标选区对应的可见文本复制到剪贴板。
+    ///
+    /// 用渲染 spans（`render_meta.rendered_lines`）提取，自动跳过边框 / padding /
+    /// 行号等装饰，链接的 `[`、`]()` 也被跳过——复制下来就是屏幕上看到的字。
+    fn copy_mouse_selection_to_clipboard(&mut self) {
+        use crate::tui::components::selection::extract_selection_text;
+
+        let Some(sel) = self.mouse_selection else {
+            return;
+        };
+        // 把全局渲染行号换成 rendered_lines 的本地下标
+        let offset = self.render_meta.rendered_offset;
+        let local_anchor = (sel.anchor.0.saturating_sub(offset), sel.anchor.1);
+        let local_current = (sel.current.0.saturating_sub(offset), sel.current.1);
+
+        // 行号 gutter 占用的字符数（与 format_line_number 的 `{:>4}  ` 一致）
+        let line_num_width = if self.renderer.is_show_line_numbers() {
+            6
+        } else {
+            0
+        };
+
+        let text = extract_selection_text(
+            &self.render_meta.rendered_lines,
+            local_anchor,
+            local_current,
+            line_num_width,
+        );
+        if text.is_empty() {
+            return;
+        }
+        self.vim.set_yank_register(&text);
+        let _ = self.copy_to_clipboard(&text);
     }
 }
 
@@ -1278,5 +1439,123 @@ mod tests {
         // 装饰列 = 2（`│ `）
         assert_eq!(editor.row_left_decoration_cols(1), 2);
         assert_eq!(editor.row_left_decoration_cols(0), 0); // 围栏行不计装饰
+    }
+
+    // ====== 鼠标拖选 + 复制（基于渲染 spans，跨表格 / 代码块 / 链接）======
+    //
+    // 这组测试直接喂给共享的 extract_selection_text 一组手工构造的 Line（spans
+    // 已经包含装饰），验证选区复制的内容 = 屏幕上看到的可见文字。
+    // 不走完整的 render → mouse → handle_input 链路，避免依赖 ratatui Frame。
+
+    use crate::tui::components::selection::extract_selection_text;
+    use ratatui::style::Color as RColor;
+    use ratatui::style::Style as RStyle;
+    use ratatui::text::Line as RLine;
+    use ratatui::text::Span as RSpan;
+
+    fn deco(content: &'static str) -> RSpan<'static> {
+        // 装饰 span：要么纯空格，要么 box-drawing 字符——会被 is_decorative_span
+        // 识别出来不算可见正文
+        RSpan::styled(content.to_string(), RStyle::default())
+    }
+    fn body(content: &'static str) -> RSpan<'static> {
+        // 正文 span：用一个非装饰前景色作为标记，避免被误判
+        RSpan::styled(content.to_string(), RStyle::default().fg(RColor::White))
+    }
+
+    #[test]
+    fn mouse_copy_code_block_skips_left_border_padding() {
+        // 渲染行：`  42  │ set vscode "/path"  │`
+        // 装饰：行号 6 列（`{:>4}  ` = 4 字符右对齐 + 2 空格）+ `│` 1 列 + ` ` 1 列；
+        //       正文从字符偏移 8 开始。
+        let line = RLine::from(vec![
+            deco("  42  "), // line num: "{:>4}  " 模板对应 6 字符
+            deco("│"),      // left bar
+            deco(" "),      // pad
+            body(r#"set vscode "/Applications/Visual Studio Code.app""#),
+            deco(" "),
+            deco("│"),
+        ]);
+        let lines = vec![line];
+
+        // 用户拖选 vscode：正文偏移 4..10（'v' 在 4，'e' 末尾开区间在 10）。
+        // 渲染坐标 = 8 + 正文偏移 = [12, 18)。
+        let copied = extract_selection_text(&lines, (0, 12), (0, 18), 6);
+        assert_eq!(
+            copied, "vscode",
+            "代码块拖选 vscode 应复制 vscode；之前的 bug 会复制成 'code .' 类的偏移结果"
+        );
+    }
+
+    #[test]
+    fn mouse_copy_table_cell_content() {
+        // 渲染行：`  12  │ col1   │ col2   │`
+        // 装饰：行号 6 + `│` 1 + ` ` 1 = 8 列在前；正文 col1 从偏移 8 起。
+        let line = RLine::from(vec![
+            deco("  12  "),
+            deco("│"),
+            deco(" "),
+            body("col1"),
+            deco("   "), // cell padding
+            deco("│"),
+            deco(" "),
+            body("col2"),
+            deco("   "),
+            deco("│"),
+        ]);
+        let lines = vec![line];
+
+        // 选 col1: 渲染偏移 [8, 12)
+        let copied = extract_selection_text(&lines, (0, 8), (0, 12), 6);
+        assert_eq!(copied, "col1", "表格里拖选单元格内容应复制单元格内容");
+
+        // 跨 cell 选 col1 + col2:
+        // col2 起 = 8 + 4 (col1) + 3 (pad) + 1 (│) + 1 (space) = 17
+        // col2 末（4 个字符）= 21
+        let copied = extract_selection_text(&lines, (0, 8), (0, 21), 6);
+        // extract_content_from_line 把所有非装饰 span 拼起来 = "col1col2"
+        // （中间 cell padding 和 `│` 被 is_decorative_span 识别丢弃）
+        assert_eq!(
+            copied, "col1col2",
+            "跨表格 cell 拖选只保留可见正文 span，丢弃边框和 padding"
+        );
+    }
+
+    #[test]
+    fn mouse_copy_link_skips_brackets() {
+        // 链接 [Click here](https://example.com) 渲染时只有 "Click here" 可见，
+        // `[`、`](url)` 不进入渲染 spans。再叠加普通行号装饰。
+        let line = RLine::from(vec![
+            deco("   1  "), // line num: "   1  " 6 chars
+            body("Click here"),
+        ]);
+        let lines = vec![line];
+
+        // 拖选整个 "Click here"：行号 6 列 → 字符偏移 [6, 16)
+        let copied = extract_selection_text(&lines, (0, 6), (0, 16), 6);
+        assert_eq!(
+            copied, "Click here",
+            "链接拖选应复制可见文本，而不是源码 [Click here](url)"
+        );
+
+        // 拖选部分（"here"）：偏移 [12, 16)
+        let copied = extract_selection_text(&lines, (0, 12), (0, 16), 6);
+        assert_eq!(copied, "here");
+    }
+
+    #[test]
+    fn mouse_copy_multi_line_joins_with_newline() {
+        // 两行连续拖选
+        let lines = vec![
+            RLine::from(vec![deco("   1  "), body("first line")]),
+            RLine::from(vec![deco("   2  "), body("second line")]),
+        ];
+        // anchor (0, 6) = 'f'，current (1, 17) = 第二行末尾
+        // 第二行：行号 6 + "second line" 11 = 17
+        let copied = extract_selection_text(&lines, (0, 6), (1, 17), 6);
+        assert_eq!(
+            copied, "first line\nsecond line",
+            "多行拖选用 \\n 拼接，每行按可见正文提取"
+        );
     }
 }

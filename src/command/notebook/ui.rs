@@ -81,7 +81,9 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => match app.focus {
-            Focus::Tree => " / 命令面板 | ↑↓/jk 切换笔记 | Enter 编辑 | Esc 退出",
+            Focus::Tree => {
+                " / 命令面板 | a 新建 | r 改名 | d 删除 | s 刷新 | o 打开目录 | ↑↓/jk 切换 | Enter 编辑 | q/Esc 退出"
+            }
             Focus::Editor => " :w 保存 | :wq 保存退出 | :q 退出编辑 | Esc(Normal) 回目录树",
         },
         AppMode::Adding => " Enter 确认新建 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
@@ -300,7 +302,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             f.render_widget(status, area);
         }
         AppMode::Renaming => {
-            let status = Paragraph::new(Line::from(vec![
+            let mut spans = vec![
                 Span::styled(
                     " 重命名",
                     Style::default()
@@ -311,8 +313,15 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     " — 输入新名称后按 Enter 确认",
                     Style::default().fg(Color::DarkGray),
                 ),
-            ]))
-            .block(
+            ];
+            // 把错误信息（如"目标笔记已存在"）回显到状态栏，用户可继续编辑输入。
+            if let Some(msg) = &app.message {
+                spans.push(Span::styled(
+                    format!("  · {}", msg),
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ));
+            }
+            let status = Paragraph::new(Line::from(spans)).block(
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Yellow)),

@@ -262,6 +262,7 @@ impl Vim {
     }
 
     /// 设置 Visual 模式的选区起点
+    #[allow(dead_code)]
     pub fn set_visual_start(&mut self, pos: (usize, usize)) {
         self.visual_start = pos;
     }

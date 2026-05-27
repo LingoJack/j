@@ -3,7 +3,9 @@
 //! 提供精确到字符级别的选区高亮功能，供 Markdown 编辑器和 Chat UI 复用。
 
 use ratatui::style::{Color, Style};
-use ratatui::text::Span;
+use ratatui::text::{Line, Span};
+
+use crate::util::text::char_width;
 
 /// 归一化选区起点和终点，确保 start <= end。
 ///
@@ -170,4 +172,184 @@ fn append_content_spans(
             result.push(Span::styled(text, normal));
         }
     }
+}
+
+// ========== 渲染 spans → 可见内容提取 ==========
+//
+// 以下三个工具最早在 chat UI 内部使用，现在编辑器的鼠标选区复制也用同一套——
+// 把屏幕上看到的字（不含边框、padding、链接 markdown 语法等装饰）复制下来。
+
+/// 判断一行渲染输出是否"可选中"。
+///
+/// 用于跳过纯边框行、空行等非内容行。逻辑：
+///   - 空 trim 视为不可选
+///   - 全为空格 + box-drawing 字符（含表格 / 代码块边框）视为不可选
+///
+/// 注意：表格的**数据行**（如 `│ col1 │ col2 │`）含字母/数字字符，不会被
+/// 误判为不可选，因此选中表格内容仍然可行。
+pub fn is_selectable_line(line: &Line<'static>) -> bool {
+    let full_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+    if full_text.trim().is_empty() {
+        return false;
+    }
+    let trimmed = full_text.trim();
+    if trimmed
+        .chars()
+        .all(|c| "╭╮╰╯│─┌┐└┘┬┴┼┤├".contains(c) || c == ' ')
+    {
+        return false;
+    }
+    true
+}
+
+/// 判断一个 span 是否是"装饰性"的——不算可见内容。
+///
+/// 当前规则：
+///   - 图片占位标记（以 `\x00IMG:` 开头）
+///   - 纯空格（padding / 行号区域）
+///   - 纯 box-drawing 字符（边框，含代码块 `│`、表格 `│┌─┐` 等）
+///
+/// 复制时这些 span 会被跳过，只留可见正文。
+pub fn is_decorative_span(span: &Span<'static>) -> bool {
+    let content = span.content.as_ref();
+    if content.starts_with("\x00IMG:") {
+        return true;
+    }
+    if content.chars().all(|c| c == ' ') {
+        return true;
+    }
+    if content.chars().all(|c| "╭╮╰╯│─┌┐└┘┬┴┼┤├".contains(c)) {
+        return true;
+    }
+    false
+}
+
+/// 从渲染行中提取"可见内容文本 + 内容在渲染行中的起始字符偏移"。
+///
+/// 装饰区分两段：
+///   - 内容**之前**的装饰（行号、左侧边框、padding）→ `content_start_offset` 累加
+///   - 内容**之后**的装饰（右侧边框、padding）→ 直接丢弃
+///
+/// 返回 `(content_text, content_start_offset)`，其中 `content_start_offset`
+/// 用于把"渲染行字符偏移"还原成"内容字符偏移"：
+/// `content_offset = render_offset - content_start_offset`
+pub fn extract_content_from_line(line: &Line<'static>) -> (String, usize) {
+    let mut content = String::new();
+    let mut content_start_offset = 0usize;
+    let mut in_content = false;
+
+    for span in &line.spans {
+        let span_chars = span.content.chars().count();
+        if is_decorative_span(span) {
+            if !in_content {
+                content_start_offset += span_chars;
+            }
+            // 内容之后的装饰，忽略
+        } else {
+            in_content = true;
+            content.push_str(span.content.as_ref());
+        }
+    }
+
+    (content, content_start_offset)
+}
+
+/// 给定一组渲染行（Line）和 spans，把屏幕 X 列号（按显示宽度）映射为
+/// "渲染行内的字符偏移"——即 `line.spans` 拼接后的第几个字符。
+///
+/// 用于鼠标点击：屏幕 X → 渲染行内字符位置。
+pub fn spans_to_char_offset(spans: &[Span<'static>], screen_col: usize) -> usize {
+    let mut acc_width = 0usize;
+    let mut char_offset = 0usize;
+
+    for span in spans {
+        for ch in span.content.chars() {
+            if acc_width >= screen_col {
+                return char_offset;
+            }
+            acc_width += char_width(ch);
+            char_offset += 1;
+        }
+    }
+    char_offset
+}
+
+/// 从渲染行按"渲染坐标的字符偏移"切出可见正文，跳过装饰 span。
+///
+/// 这是 `extract_selection_text` 的单行实现：相比 `extract_content_from_line`
+/// 假设"装饰只在最前面一段连续出现"，本函数支持装饰可以分布在行内任意位置
+/// （例如代码块的 `[行号][│][ ][正文][ ][│]`、表格的 `│ col1 │ col2 │` 等）。
+///
+/// 实现思路：按字符遍历每个 span。对每个字符：
+///   - 当前 span 是装饰的 → 跳过，但 render 位移仍然 +1
+///   - 当前 span 是正文 → 如果 render 位移落在 [start, end) 内就纳入结果
+///
+/// 这样无论装饰在前 / 中 / 后都能正确扣除。
+fn extract_visible_chars_in_range(
+    line: &Line<'static>,
+    render_start: usize,
+    render_end: usize,
+    skip_prefix_chars: usize,
+) -> String {
+    let mut out = String::new();
+    let mut render_pos: usize = 0;
+
+    for span in &line.spans {
+        let is_deco = is_decorative_span(span);
+        for ch in span.content.chars() {
+            // 跳过 skip_prefix_chars 前缀（用于编辑器行号 gutter——即使行号
+            // 内含数字不被 is_decorative_span 识别，调用方也能强制跳过）
+            let in_skip_prefix = render_pos < skip_prefix_chars;
+            // 装饰字符 / skip 区里的字符都不计入正文
+            if !is_deco && !in_skip_prefix && render_pos >= render_start && render_pos < render_end
+            {
+                out.push(ch);
+            }
+            render_pos += 1;
+        }
+    }
+    out
+}
+
+/// 根据"渲染坐标"选区从一组渲染行中提取可见内容，行间用 `\n` 拼接。
+///
+/// 参数：
+/// - `lines`: 渲染行切片；`anchor.0` / `current.0` 是相对该切片的局部下标。
+/// - `anchor` / `current`: `(渲染行号, 渲染行内字符偏移)`。
+/// - `skip_prefix_chars`: 每行起始处需要无视的装饰字符数（编辑器行号 gutter）。
+///
+/// 表格 / 代码块 / 链接拖选都可以走这个函数：边框 / padding / 链接的
+/// `[`、`](url)` 都是装饰 span，不会被复制。
+pub fn extract_selection_text(
+    lines: &[Line<'static>],
+    anchor: (usize, usize),
+    current: (usize, usize),
+    skip_prefix_chars: usize,
+) -> String {
+    let ((sr, sc), (er, ec)) = normalize_selection(anchor, current);
+    let mut result = String::new();
+
+    for gline in sr..=er {
+        let line = match lines.get(gline) {
+            Some(l) => l,
+            None => continue,
+        };
+        if !is_selectable_line(line) {
+            continue;
+        }
+
+        let render_start = if gline == sr { sc } else { 0 };
+        let render_end = if gline == er { ec } else { usize::MAX };
+        let slice =
+            extract_visible_chars_in_range(line, render_start, render_end, skip_prefix_chars);
+        if slice.is_empty() {
+            continue;
+        }
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&slice);
+    }
+
+    result
 }
