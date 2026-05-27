@@ -65,7 +65,18 @@ pub fn render_table(
 
     let total_col_w_final: usize = col_widths.iter().sum();
     let table_row_w = sep_w + pad_w + total_col_w_final;
-    let table_right_pad = content_width.saturating_sub(table_row_w);
+    // 居中放置：把剩余宽度平分到左右两侧，形成左右 padding
+    let total_extra = content_width.saturating_sub(table_row_w);
+    let table_left_pad = total_extra / 2;
+    let table_right_pad = total_extra - table_left_pad;
+
+    let make_left_pad = || -> Option<Span<'static>> {
+        if table_left_pad > 0 {
+            Some(Span::raw(" ".repeat(table_left_pad)))
+        } else {
+            None
+        }
+    };
 
     // 顶边框 ┌─┬─┐
     let mut top = String::from("┌");
@@ -76,7 +87,11 @@ pub fn render_table(
         }
     }
     top.push('┐');
-    let mut top_spans = vec![Span::styled(top, border_style)];
+    let mut top_spans: Vec<Span> = Vec::new();
+    if let Some(p) = make_left_pad() {
+        top_spans.push(p);
+    }
+    top_spans.push(Span::styled(top, border_style));
     if table_right_pad > 0 {
         top_spans.push(Span::raw(" ".repeat(table_right_pad)));
     }
@@ -112,6 +127,9 @@ pub fn render_table(
 
         for sub_row in 0..max_rows {
             let mut row_spans: Vec<Span> = Vec::new();
+            if let Some(p) = make_left_pad() {
+                row_spans.push(p);
+            }
             row_spans.push(Span::styled("│", border_style));
             for (i, cw) in col_widths.iter().enumerate() {
                 let empty_line: (Vec<Span<'static>>, usize) = (Vec::new(), 0);
@@ -196,7 +214,11 @@ pub fn render_table(
                 }
             }
             sep.push('┤');
-            let mut sep_spans = vec![Span::styled(sep, border_style)];
+            let mut sep_spans: Vec<Span> = Vec::new();
+            if let Some(p) = make_left_pad() {
+                sep_spans.push(p);
+            }
+            sep_spans.push(Span::styled(sep, border_style));
             if table_right_pad > 0 {
                 sep_spans.push(Span::raw(" ".repeat(table_right_pad)));
             }
@@ -213,7 +235,11 @@ pub fn render_table(
         }
     }
     bottom.push('┘');
-    let mut bottom_spans = vec![Span::styled(bottom, border_style)];
+    let mut bottom_spans: Vec<Span> = Vec::new();
+    if let Some(p) = make_left_pad() {
+        bottom_spans.push(p);
+    }
+    bottom_spans.push(Span::styled(bottom, border_style));
     if table_right_pad > 0 {
         bottom_spans.push(Span::raw(" ".repeat(table_right_pad)));
     }
