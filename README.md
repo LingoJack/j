@@ -14,23 +14,23 @@
 
 </div>
 
-> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
+如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
 
 ---
 
-## ✨ 功能一览
+## 功能一览
 
 <table>
 <tr>
 <td width="50%">
 
-### 🤖 Agent 工作台
+### Agent 工作台
 内置终端 Agent，支持多模型、流式输出、多步推理、工具调用、权限确认，适合直接在仓库里分析、修改、执行任务
 
 </td>
 <td width="50%">
 
-### 🏷️ 别名打开
+### 别名打开
 `j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用
 
 </td>
@@ -38,13 +38,13 @@
 <tr>
 <td>
 
-### 📝 日报周报
+### 日报周报
 `j report "完成功能开发"` 快速记录，支持整篇 Markdown 编辑、自动周数管理，以及 `reportctl push/pull` 做 Git 同步
 
 </td>
 <td>
 
-### ✅ 待办备忘
+### 待办备忘
 `j todo` 进入全屏 TUI 管理，支持 Markdown checkbox、筛选排序、长内容预览，完成事项时还能顺手写入日报
 
 </td>
@@ -52,13 +52,13 @@
 <tr>
 <td>
 
-### 🖋️ Markdown 终端预览
+### Markdown 终端预览
 `j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENTS.md
 
 </td>
 <td>
 
-### 🔧 脚本工作流
+### 脚本工作流
 `j script deploy "npm run build"` 创建脚本后自动注册为别名，执行时会注入 `J_<ALIAS>` 环境变量，也支持新窗口运行
 
 </td>
@@ -78,7 +78,7 @@
 
 ---
 
-## 📸 截图
+## 截图
 
 <div align="center">
 <img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/1.png" width="80%" alt="Agent 对话与工具调用界面" />
@@ -112,7 +112,7 @@
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 安装
 
@@ -184,7 +184,7 @@ j
 
 ---
 
-## 📖 核心命令速览
+## 核心命令速览
 
 | 命令 | 说明 |
 |------|------|
@@ -203,7 +203,7 @@ j
 
 ---
 
-## 🛠️ 技术栈
+## 技术栈
 
 | 技术 | 用途 |
 |------|------|
@@ -216,7 +216,7 @@ j
 
 ---
 
-## 🖥️ GUI 版本
+## GUI 版本
 
 如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/jcli-gui) 提供了基于 Tauri 的桌面客户端（**目前正在研发中**），支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
 
@@ -228,6 +228,6 @@ j
 
 ---
 
-## 📄 License
+## License
 
 [MIT](https://opensource.org/licenses/MIT)
