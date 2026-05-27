@@ -1,5 +1,6 @@
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { CopyButton } from '../components/common/CopyButton'
 import type { Block, Inline, ListData, ListItem, TableData, ParsedDocument } from './types'
 
 // ---------------------------------------------------------------------------
@@ -75,13 +76,13 @@ function renderInline(inline: Inline, key: string): React.ReactNode {
       return <span key={key}>{inline.value}</span>
     case 'strong':
       return (
-        <strong key={key} className="font-medium text-stone-900">
+        <strong key={key} className="font-semibold text-stone-900">
           {renderInlineList(inline.value, key)}
         </strong>
       )
     case 'emphasis':
       return (
-        <em key={key} className="italic">
+        <em key={key} className="italic text-stone-800">
           {renderInlineList(inline.value, key)}
         </em>
       )
@@ -95,7 +96,7 @@ function renderInline(inline: Inline, key: string): React.ReactNode {
       return (
         <code
           key={key}
-          className="bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono"
+          className="bg-stone-100/80 text-stone-800 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono border border-stone-200/60"
         >
           {inline.value}
         </code>
@@ -107,13 +108,13 @@ function renderInline(inline: Inline, key: string): React.ReactNode {
           href={inline.value.url}
           target="_blank"
           rel="noreferrer noopener"
-          className="text-stone-700 underline decoration-stone-300 hover:decoration-stone-700"
+          className="text-stone-900 underline decoration-stone-300 decoration-1 underline-offset-[3px] hover:decoration-stone-700 transition-colors"
         >
           {renderInlineList(inline.value.text, key)}
         </a>
       )
     case 'soft_break':
-      return <br key={key} />
+      return <span key={key}> </span>
     case 'hard_break':
       return <br key={key} />
   }
@@ -139,15 +140,15 @@ function renderTable(data: TableData, key: string): React.ReactNode {
   const colCount = data.rows.reduce((max, row) => Math.max(max, row.length), 0)
   const alignClass = (col: number) => ALIGN_CLASS[data.alignments[col] ?? 'none'] ?? 'text-left'
   return (
-    <div key={key} className="overflow-x-auto my-4">
-      <table className="min-w-full border-collapse">
+    <div key={key} className="overflow-x-auto my-6 rounded-lg border border-stone-200">
+      <table className="min-w-full border-collapse text-[15px]">
         {headerRow && (
           <thead>
-            <tr>
+            <tr className="bg-stone-50/80">
               {Array.from({ length: colCount }).map((_, c) => (
                 <th
                   key={`h${c}`}
-                  className={`border border-stone-200 px-4 py-2 bg-stone-50 text-sm font-medium ${alignClass(c)}`}
+                  className={`border-b border-stone-200 px-4 py-2.5 font-medium text-stone-900 ${alignClass(c)}`}
                 >
                   {renderInlineList(headerRow[c] ?? [], `${key}-h${c}`)}
                 </th>
@@ -157,11 +158,11 @@ function renderTable(data: TableData, key: string): React.ReactNode {
         )}
         <tbody>
           {bodyRows.map((row, r) => (
-            <tr key={`r${r}`}>
+            <tr key={`r${r}`} className="border-b border-stone-100 last:border-0">
               {Array.from({ length: colCount }).map((_, c) => (
                 <td
                   key={`c${c}`}
-                  className={`border border-stone-200 px-4 py-2 text-sm ${alignClass(c)}`}
+                  className={`px-4 py-2.5 text-stone-700 ${alignClass(c)}`}
                 >
                   {renderInlineList(row[c] ?? [], `${key}-r${r}c${c}`)}
                 </td>
@@ -181,22 +182,22 @@ function renderListItem(item: ListItem, key: string): React.ReactNode {
         type="checkbox"
         checked={item.checked}
         readOnly
-        className="mr-2 align-middle"
+        className="mr-2 align-middle accent-stone-700"
       />
     )
   return (
-    <li key={key} className="text-stone-600 text-sm mb-1">
+    <li key={key} className="text-stone-700 text-[15px] leading-7 mb-1.5 marker:text-stone-400">
       {taskCheckbox}
       {renderInlineList(item.content, `${key}-c`)}
       {item.children.length > 0 && (
-        <div className="mt-1">{renderBlocks(item.children, `${key}-ch`)}</div>
+        <div className="mt-1.5">{renderBlocks(item.children, `${key}-ch`)}</div>
       )}
     </li>
   )
 }
 
 function renderList(data: ListData, key: string): React.ReactNode {
-  const baseClass = 'pl-6 my-3'
+  const baseClass = 'pl-6 my-4 space-y-1'
   if (data.ordered) {
     return (
       <ol
@@ -220,7 +221,7 @@ function renderBlock(block: Block, key: string): React.ReactNode {
   switch (kind.type) {
     case 'paragraph':
       return (
-        <p key={key} className="text-stone-600 text-sm leading-relaxed mb-3">
+        <p key={key} className="text-stone-700 text-[15px] leading-7 mb-5">
           {renderInlineList(kind.value, `${key}-p`)}
         </p>
       )
@@ -228,19 +229,19 @@ function renderBlock(block: Block, key: string): React.ReactNode {
       const { level, content } = kind.value
       const cls =
         level === 1
-          ? 'text-3xl font-light text-stone-900 mt-10 mb-6'
+          ? 'text-4xl font-light text-stone-900 tracking-tight mt-2 mb-8 pb-4 border-b border-stone-200/70'
           : level === 2
-            ? 'text-2xl font-light text-stone-900 mt-12 mb-5'
+            ? 'text-2xl font-light text-stone-900 tracking-tight mt-14 mb-5'
             : level === 3
-              ? 'text-lg font-medium text-stone-900 mt-8 mb-4'
+              ? 'text-xl font-medium text-stone-900 tracking-tight mt-10 mb-4'
               : level === 4
-                ? 'text-base font-semibold text-stone-800 mt-6 mb-3'
-                : 'text-sm font-semibold text-stone-700 mt-5 mb-2'
+                ? 'text-base font-semibold text-stone-900 mt-7 mb-3'
+                : 'text-sm font-semibold uppercase tracking-wider text-stone-600 mt-6 mb-2'
       const Tag = (`h${Math.min(Math.max(level, 1), 6)}` as unknown) as keyof React.JSX.IntrinsicElements
       const text = extractText(content)
       const id = headingId(text)
       return (
-        <Tag key={key} id={id} className={cls}>
+        <Tag key={key} id={id} className={`scroll-mt-20 ${cls}`}>
           {renderInlineList(content, `${key}-h`)}
         </Tag>
       )
@@ -249,26 +250,29 @@ function renderBlock(block: Block, key: string): React.ReactNode {
       const { lang: rawLang, code } = kind.value
       const lang = langMap[rawLang.toLowerCase()] || rawLang || 'text'
       return (
-        <div key={key} className="my-4">
+        <div key={key} className="relative group my-5">
           <SyntaxHighlighter
             language={lang}
             style={oneLight}
             customStyle={{
               margin: 0,
               borderRadius: '0.5rem',
-              fontSize: '0.875rem',
-              backgroundColor: '#faf9f6',
+              fontSize: '13.5px',
+              lineHeight: '1.65',
+              padding: '1rem 1.1rem',
+              backgroundColor: '#ffffff',
               border: '1px solid #e7e5e4',
             }}
             codeTagProps={{
               style: {
                 fontFamily:
-                  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                  '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
               },
             }}
           >
             {code}
           </SyntaxHighlighter>
+          <CopyButton text={code} />
         </div>
       )
     }
@@ -280,13 +284,13 @@ function renderBlock(block: Block, key: string): React.ReactNode {
       return (
         <blockquote
           key={key}
-          className="border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic"
+          className="border-l-2 border-stone-300 pl-5 py-1 my-5 text-stone-600 text-[15px] leading-7 [&>p]:mb-2 [&>p:last-child]:mb-0"
         >
           {renderBlocks(kind.value, `${key}-bq`)}
         </blockquote>
       )
     case 'rule':
-      return <hr key={key} className="my-6 border-stone-200" />
+      return <hr key={key} className="my-10 border-stone-200" />
   }
 }
 
