@@ -719,27 +719,14 @@ impl MarkdownEditor {
         content_height: usize,
     ) -> Option<(usize, usize)> {
         let scroll_local = self.viewport.scroll_offset.saturating_sub(visual_offset);
-        let mut visible_start = if scroll_local < visual_map.len() {
+        let visible_start = if scroll_local < visual_map.len() {
             visual_map[scroll_local]
         } else {
             // 超出映射范围（文件末尾滚动），使用 all_visual_lines 的末尾
             all_len.saturating_sub(content_height)
         };
-        visible_start = visible_start.min(all_len.saturating_sub(1));
-        let mut visible_end = (visible_start + content_height).min(all_len);
-
-        // Bug #1 Fix: Ensure viewport is filled when possible.
-        // If we're at EOF and can't fill the viewport, back up visible_start
-        // so we show as much content as possible while filling the available space.
-        if visible_end - visible_start < content_height && all_len > 0 {
-            visible_end = all_len;
-            if all_len > content_height {
-                visible_start = all_len - content_height;
-            } else {
-                visible_start = 0;
-            }
-        }
-
+        let visible_start = visible_start.min(all_len.saturating_sub(1));
+        let visible_end = (visible_start + content_height).min(all_len);
         Some((visible_start, visible_end))
     }
 
@@ -765,68 +752,22 @@ impl MarkdownEditor {
         }
     }
 
-    /// 向上滚动视口。
+    /// 计算编辑区可用的内容行数。
     ///
-    /// 鼠标滚轮只控制视口，不应在边界处回退到移动 buffer 光标；
-    /// 否则会和 render() 中的自动追光标逻辑互相抢状态，导致底部抖动。
-    fn scroll_viewport_up(&mut self, step: usize) {
-        self.viewport.scroll_offset = self.viewport.scroll_offset.saturating_sub(step);
-        self.viewport.scroll_locked = true;
-    }
-
-    /// 向下滚动视口。
+    /// 必须与 `render()` 中的 `content_height` 计算保持一致：
+    ///  - 顶部 block border 1 行
+    ///  - 底部状态栏 1 行（直接覆盖 block 底边框）
+    ///  - 命令栏可见时再多占 1 行
     ///
-    /// 使用 wrap_engine 的视觉行总数计算底部边界，因为 `scroll_offset`
-    /// 是 wrap_engine 坐标系中的偏移量。`render_meta.rendered_line_count`
-    /// 只反映上一帧渲染范围的行数（远小于全文件），用它会导致滚不动。
-    fn scroll_viewport_down(&mut self, step: usize, content_height: usize) -> bool {
-        let old_offset = self.viewport.scroll_offset;
-        let max_offset = self.wrap.visual_line_count().saturating_sub(content_height);
-        self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
-        self.viewport.scroll_locked = true;
-        
-        // Return true if scroll offset actually changed (for Bug #2 fix)
-        old_offset != self.viewport.scroll_offset
-    }
-
-    /// 滚轮滚动后将光标移动到视口内的对应位置。
-    ///
-    /// 计算光标当前视觉行，若不在可视区域内则将其移动到视口中央。
-    /// 对于内容较少的文档（小于视口高度），始终移动光标以提供反馈。
-    fn cursor_follow_scroll(&mut self, area: Rect) {
-        let content_height = area.height.saturating_sub(3) as usize;
-        if content_height == 0 {
-            return;
-        }
-
-        let total_visual_lines = self.wrap.visual_line_count();
-        
-        // Bug #2 Fix: For small documents (content fits in viewport), always move cursor
-        // to provide UX feedback that the scroll action was recognized, even though
-        // the viewport can't actually scroll
-        if total_visual_lines <= content_height {
-            let offset = self.viewport.scroll_offset;
-            let target_visual = offset + content_height / 2;
-            let (logical_row, logical_col) = self.wrap.visual_to_logical(target_visual);
-            self.buffer.set_cursor(logical_row, logical_col);
-            return;
-        }
-
-        let (cursor_row, cursor_col) = self.buffer.cursor();
-        let cursor_visual = self.wrap.logical_to_visual(cursor_row, cursor_col);
-        let offset = self.viewport.scroll_offset;
-        let visible_end = offset + content_height;
-
-        // 光标仍在可视区域内，无需移动
-        if cursor_visual >= offset && cursor_visual < visible_end {
-            return;
-        }
-
-        // 将光标移到视口中央行
-        let target_visual = offset + content_height / 2;
-        let (logical_row, logical_col) = self.wrap.visual_to_logical(target_visual);
-        self.buffer.set_cursor(logical_row, logical_col);
-        self.viewport.scroll_locked = false;
+    /// 之前误写为 `area.height - 3`，导致内容区底部少了一行可显示位置，
+    /// 表现为代码块/普通文本最末一行被替换成 `~` 占位符。
+    fn viewport_content_height(&self, area: Rect) -> usize {
+        let has_cmd_bar = matches!(
+            self.vim.mode(),
+            Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
+        );
+        let reserved: u16 = if has_cmd_bar { 3 } else { 2 };
+        area.height.saturating_sub(reserved) as usize
     }
 
     // ========== 鼠标操作 ==========
@@ -844,7 +785,7 @@ impl MarkdownEditor {
         let content_x = screen_x.saturating_sub(area.x + 1) as usize; // 左边框 1 列
         let content_y = screen_y.saturating_sub(area.y + 1) as usize; // 上边框 1 行
 
-        let content_height = area.height.saturating_sub(3) as usize; // 上边框 + 下边框 + 状态栏
+        let content_height = self.viewport_content_height(area);
         let line_num_width = if self.renderer.is_show_line_numbers() {
             6
         } else {
@@ -943,17 +884,17 @@ impl MarkdownEditor {
                 self.mouse_anchor = None;
             }
             MouseEventKind::ScrollUp => {
-                self.scroll_viewport_up(3);
-                self.cursor_follow_scroll(area);
+                // 鼠标滚轮按 step 视觉行驱动光标，再让 render 自动追到视口；
+                // 这样无论文档是否满屏都能给出一致的"光标随滚动"反馈。
+                self.viewport.scroll_locked = false;
+                for _ in 0..3 {
+                    self.move_cursor_visual_up();
+                }
             }
             MouseEventKind::ScrollDown => {
-                let content_height = area.height.saturating_sub(3) as usize;
-                let scroll_changed = self.scroll_viewport_down(3, content_height);
-                
-                // Bug #2 Fix: Call cursor_follow_scroll if viewport scrolled,
-                // or if document is small (provide UX feedback for small docs)
-                if scroll_changed || self.wrap.visual_line_count() <= content_height {
-                    self.cursor_follow_scroll(area);
+                self.viewport.scroll_locked = false;
+                for _ in 0..3 {
+                    self.move_cursor_visual_down();
                 }
             }
             _ => {}
@@ -1037,7 +978,7 @@ mod tests {
     }
 
     #[test]
-    fn scroll_down_at_bottom_keeps_cursor_and_offset_stable() {
+    fn scroll_down_moves_cursor_three_visual_lines() {
         let content = (0..20)
             .map(|idx| format!("line {idx}"))
             .collect::<Vec<_>>()
@@ -1051,13 +992,9 @@ mod tests {
             CursorPolicy::StartOfFile,
         );
         let area = Rect::new(0, 0, 80, 10);
-        let content_height = area.height.saturating_sub(3) as usize;
-        // max_offset 基于 wrap_engine 的视觉行总数（每行不折行 = 20 行）
-        let visual_total = editor.wrap.visual_line_count();
-        let max_offset = visual_total.saturating_sub(content_height);
 
         editor.buffer.set_cursor(0, 0);
-        editor.viewport.scroll_offset = max_offset;
+        editor.viewport.scroll_offset = 0;
         editor.viewport.scroll_locked = true;
 
         editor.handle_mouse(
@@ -1070,8 +1007,8 @@ mod tests {
             area,
         );
 
-        assert_eq!(editor.buffer.cursor(), (0, 0));
-        assert_eq!(editor.viewport.scroll_offset, max_offset);
-        assert!(editor.viewport.scroll_locked);
+        // 滚轮下滚 → 光标按 3 视觉行下移；render() 自动追视口，因此解锁。
+        assert_eq!(editor.buffer.cursor().0, 3);
+        assert!(!editor.viewport.scroll_locked);
     }
 }

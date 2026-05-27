@@ -19,7 +19,20 @@ impl MarkdownEditor {
     /// 渲染编辑器
     pub fn render(&mut self, f: &mut Frame<'_>, area: Rect) {
         // 计算可用内容区域
-        let content_height = area.height.saturating_sub(3) as usize; // 边框 + 状态栏
+        //
+        // 布局：area 自上而下为 top-border / 内容 / bottom-border-row
+        // 状态栏直接画在最后一行，覆盖 block 的 bottom border；
+        // 当处于命令/搜索/命令面板模式时，命令栏画在倒数第二行，会再吃掉一行内容。
+        //
+        // 因此：
+        //  - 普通模式 content_height = area.height - 2（顶边框 + 状态栏覆盖的底行）
+        //  - 命令栏可见时再 - 1
+        let has_cmd_bar = matches!(
+            self.vim.mode(),
+            Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
+        );
+        let reserved_rows: u16 = if has_cmd_bar { 3 } else { 2 };
+        let content_height = area.height.saturating_sub(reserved_rows) as usize;
         let content_width = area.width.saturating_sub(2) as usize; // 左右边框
 
         self.viewport.height = content_height;
