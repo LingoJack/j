@@ -17,44 +17,23 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // 标题栏
+            Constraint::Length(3), // 顶部栏（标题 / 状态合一）
             Constraint::Min(5),    // 主区域
-            Constraint::Length(3), // 状态栏
             Constraint::Length(1), // 帮助栏
         ])
         .split(size);
 
-    // ========== 标题栏 ==========
-    let total = app.notes.len();
-    let dir_count = app
-        .flat_entries
-        .iter()
-        .filter(|e| matches!(e.kind, FlatEntryKind::Dir { .. }))
-        .count();
-    let filter_suffix = match &app.search_filter {
-        Some(kw) => format!(" [搜索: {}]", kw),
-        None => String::new(),
-    };
-    let title = if dir_count > 0 {
-        format!(
-            " 笔记本{} — {} 篇笔记, {} 个文件夹 ",
-            filter_suffix, total, dir_count
-        )
+    // ========== 顶部栏（在 Normal 模式下是标题；其他模式用作状态/输入栏） ==========
+    if matches!(
+        app.mode,
+        AppMode::Normal | AppMode::Adding | AppMode::Renaming
+    ) {
+        // Normal: 显示笔记本概览
+        // Adding/Renaming: 输入框直接在列表内联渲染，顶部栏继续显示概览即可
+        render_title_bar(f, app, chunks[0]);
     } else {
-        format!(" 笔记本{} — 共 {} 篇 ", filter_suffix, total)
-    };
-    let title_block = Paragraph::new(Line::from(vec![Span::styled(
-        title,
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    )]))
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan)),
-    );
-    f.render_widget(title_block, chunks[0]);
+        render_status_bar(f, app, chunks[0]);
+    }
 
     // ========== 主区域 ==========
     {
@@ -74,9 +53,6 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
             draw_command_popup(f, app, chunks[1]);
         }
     }
-
-    // ========== 状态栏 ==========
-    render_status_bar(f, app, chunks[2]);
 
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
@@ -99,7 +75,47 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         help_text,
         Style::default().fg(Color::DarkGray),
     )));
-    f.render_widget(help_widget, chunks[3]);
+    f.render_widget(help_widget, chunks[2]);
+}
+
+/// 渲染顶部标题栏（Normal/Adding/Renaming 模式下展示笔记本概览）
+fn render_title_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
+    let total = app.notes.len();
+    let dir_count = app
+        .flat_entries
+        .iter()
+        .filter(|e| matches!(e.kind, FlatEntryKind::Dir { .. }))
+        .count();
+    let filter_suffix = match &app.search_filter {
+        Some(kw) => format!(" [搜索: {}]", kw),
+        None => String::new(),
+    };
+    let mut title = if dir_count > 0 {
+        format!(
+            " 笔记本{} — {} 篇笔记, {} 个文件夹 ",
+            filter_suffix, total, dir_count
+        )
+    } else {
+        format!(" 笔记本{} — 共 {} 篇 ", filter_suffix, total)
+    };
+    // 当前若有提示消息，附加显示在标题后（含 Normal 下的成功提示与 Renaming 下的错误回显）
+    if let Some(msg) = app.message.as_deref()
+        && !msg.is_empty()
+    {
+        title.push_str(&format!("· {} ", msg));
+    }
+    let title_block = Paragraph::new(Line::from(vec![Span::styled(
+        title,
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    )]))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    f.render_widget(title_block, area);
 }
 
 /// 渲染笔记列表（树形结构）
@@ -278,56 +294,9 @@ fn render_editor(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
     }
 }
 
-/// 渲染状态栏
+/// 渲染顶部输入/确认栏（用于 Mkdir/Mv/Search/ConfirmDelete/CommandPopup/RatioInput 模式）
 fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
     match &app.mode {
-        AppMode::Adding => {
-            let status = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " 新建笔记",
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " — 输入标题后按 Enter 创建",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Green)),
-            );
-            f.render_widget(status, area);
-        }
-        AppMode::Renaming => {
-            let mut spans = vec![
-                Span::styled(
-                    " 重命名",
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " — 输入新名称后按 Enter 确认",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ];
-            // 把错误信息（如"目标笔记已存在"）回显到状态栏，用户可继续编辑输入。
-            if let Some(msg) = &app.message {
-                spans.push(Span::styled(
-                    format!("  · {}", msg),
-                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-                ));
-            }
-            let status = Paragraph::new(Line::from(spans)).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
-            );
-            f.render_widget(status, area);
-        }
         AppMode::Mkdir => {
             draw_status_input(
                 f,
@@ -419,20 +388,8 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                 &app.theme,
             );
         }
-        _ => {
-            // Normal
-            let msg = app.message.as_deref().unwrap_or("");
-            let status_widget = Paragraph::new(Line::from(Span::styled(
-                format!(" {}", msg),
-                Style::default().fg(Color::Gray),
-            )))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)),
-            );
-            f.render_widget(status_widget, area);
-        }
+        // Normal/Adding/Renaming 走顶部标题栏，不会进入此分支
+        _ => {}
     }
 }
 
