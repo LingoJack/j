@@ -174,6 +174,14 @@ pub struct MarkdownEditor {
     ///  - 内容区可用宽度 = `area.width`，可用高度仅扣除状态栏 / 命令栏；
     ///  - 鼠标坐标与各类悬浮 popup 的锚点不再做边框偏移。
     show_border: bool,
+    /// 上次 `rebuild_wrap_cache()` 时光标所在的逻辑行号。
+    ///
+    /// 折行宽度的计算规则与"光标行 vs 其它行"耦合（光标行按源码字符宽，
+    /// 其它行按 Markdown 渲染后宽度）；当光标在不同逻辑行之间移动时，
+    /// 这两行的视觉行数都会变 —— 需要重建一次 wrap 缓存来吸收变化。
+    ///
+    /// 用 `None` 标记"尚未 rebuild 过"，强制下一次 render 走 rebuild 路径。
+    last_wrap_cursor_line: Option<usize>,
 }
 
 impl MarkdownEditor {
@@ -239,6 +247,7 @@ impl MarkdownEditor {
             mouse_render_anchor: None,
             mouse_selection: None,
             show_border: true,
+            last_wrap_cursor_line: None,
         }
     }
 
@@ -861,10 +870,54 @@ impl MarkdownEditor {
             .renderer
             .compute_table_block_heights(self.buffer.lines(), wrap_width);
 
-        self.wrap
-            .rebuild_cache_with_blocks(self.buffer.lines(), &cb_ranges, &table_blocks);
+        // 计算每行的"渲染后 per-char 显示宽度"数组。
+        // 只有 **Insert 模式且 cursor 在该行** 时该行才显示源码源码（参见
+        // `renderer.rs:render_visual_line` 的 `is_cursor_line && is_insert_mode`
+        // 分支）；Normal 模式下光标行也走渲染路径，所以这种情况不该把光标行
+        // 切到"按源码宽"，否则会出现光标在 Normal 模式下来回移动也触发 rebuild
+        // 而且光标行折行点跳变的诡异表现。
+        let cursor_line = if self.vim.mode() == &Mode::Insert {
+            Some(self.buffer.cursor().0)
+        } else {
+            None
+        };
+        let visible_widths = self
+            .renderer
+            .compute_line_visible_widths(self.buffer.lines(), cursor_line);
+
+        self.wrap.rebuild_cache_with_blocks_and_widths(
+            self.buffer.lines(),
+            &cb_ranges,
+            &table_blocks,
+            &visible_widths,
+        );
         // 同时使渲染器缓存失效（语法高亮等）
         self.renderer.invalidate_cache();
+        // 记录本次 rebuild 时的"按源码宽路径的光标行"，用于下次 render 判断
+        // 是否需要再 rebuild。Normal 模式下该值为 None（光标行没有特殊路径）。
+        self.last_wrap_cursor_line = cursor_line;
+    }
+
+    /// 如果"按源码宽路径"的光标行变化了，让 wrap engine 失效。
+    ///
+    /// 折行宽度只有在 **Insert 模式下光标所在行** 才走源码宽路径（其它都走
+    /// 渲染宽）。所以：
+    ///   - Insert 模式光标换行 → 需要 rebuild（旧光标行回到渲染宽、新光标行
+    ///     切到源码宽）；
+    ///   - 模式切换（Insert ↔ Normal）→ 也需要 rebuild（光标那一行宽度规则切换）；
+    ///   - Normal 模式下光标在不同逻辑行之间移动 → **不需要** rebuild，所有行
+    ///     都按渲染宽算。
+    ///
+    /// 每帧 render 入口处调用一次。
+    pub(crate) fn maybe_mark_wrap_dirty_for_cursor(&mut self) {
+        let current = if self.vim.mode() == &Mode::Insert {
+            Some(self.buffer.cursor().0)
+        } else {
+            None
+        };
+        if self.last_wrap_cursor_line != current {
+            self.wrap.mark_dirty();
+        }
     }
 
     /// 计算编辑区可用的内容行数。

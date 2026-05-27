@@ -435,3 +435,85 @@ editor 自己继续负责：
 - **editor 表格渲染简化**：`render_table_rows()` 仅在表格首行（`start_idx`）时调用 `parse_table_from_source()` + 共享层 `render_table()` 一次性渲染完整表格，后续行返回 `vec![]`
 - **删除旧代码**：`parse_table_cells()`（纯文本 `split('|')` 切分）、`is_table_separator_line()` 等废弃函数已移除
 - **直接修复**：表格单元格内的 `**bold**` / `` `code` `` / 链接现在正确渲染；`split('|')` 误切 code span 内管道符的问题不复存在
+
+---
+
+## Step 7：折行 + 光标 + 渲染的坐标系对齐（editor）
+
+> 这一步没有引入新的 markdown 解析能力，目的是把 editor 里**折行算法 / 光标行为 / 渲染产物**三者的坐标系对齐。下面是几条关键设计，给后人改这块时少踩坑。
+
+### 关键设计 1：光标行 vs 其它行 = 严格跟随渲染端口径
+
+editor 的 Typora 风格规则就一条：
+
+> **只有 Insert 模式 + 光标所在行**显示 markdown 源码，其它一律显示渲染产物。
+
+整个改造里所有"光标行有没有特殊处理"的地方都必须**严格跟随这一条**，否则就会出错：
+
+- `wrap_engine` 的"按源码字符宽折行"路径，**只**对"Insert 模式 + 光标行"开启；其它（含 Normal 模式的光标行）一律按渲染后宽度算。
+- 光标在不同逻辑行之间移动**只有 Insert 模式下**才触发 wrap rebuild；Normal 模式下移动光标不触发任何重算（因为所有行都按渲染宽，光标行没有特殊路径）。
+
+落地：`editor.rs:rebuild_wrap_cache` 算 `cursor_line` 时硬编码 `self.vim.mode() == &Mode::Insert`，`maybe_mark_wrap_dirty_for_cursor` 同口径。**改这两处时务必保持口径与 `renderer.rs:render_visual_line` 里 `is_cursor_line && is_insert_mode` 一致**——三处任一不对齐都会出现"光标移动诡异 rebuild"或"光标行折行规则与显示规则错配"。
+
+### 关键设计 2：三个坐标系，由 wrap_engine 单一来源给出
+
+editor 这块至少要区分三个坐标系，永远不要在渲染端事后猜：
+
+| 坐标系 | 谁用 | 在 `VisualLine` 上的字段 |
+|---|---|---|
+| **源码 char 索引** | 光标、选区、鼠标定位、vim 移动 | `start_col` / `end_col` |
+| **渲染产物 char 索引** | 渲染端切 `render_inline(整行)` 的 spans | `visible_start_char` / `visible_end_char` |
+| **显示列宽** | 折行决策、对齐右边框 | `display_width`（与 `width` 比较） |
+
+`wrap_engine.wrap_line_inner` 在遍历源码 char 的同时同步推进这三个量：
+
+- `col` 每个源码 char +1（源码索引）
+- `visible_pos` 仅当 `char_width_for(ch, widths, idx) > 0` 才 +1（标记符号不推进）
+- `current_width` 累加 `char_width_for(...)`（渲染显示宽度）
+
+**强约束**：渲染端**禁止**自己用源码索引去切渲染产物。续行 `extract_span_range(full_line_spans, vl.visible_start_char, vl.visible_end_char)`——索引语义和 spans 同坐标系，由 wrap_engine 一次性算好。坐标系混用是这一类 bug 的通用根因（见 BUGS_TROUBLESHOOTING.md 条目 2）。
+
+### 关键设计 3：折行场景下"同一行的所有 vl 必须走同一条 markdown 解析路径"
+
+最容易踩坑的一点：**不要**让 vl[0] 独立解析 truncated 片段、vl[1+] 解析整行再切片。pulldown-cmark 对"独立片段 vs 完整行"的边界行为永远不一致：
+
+- 独立解析 `**aaaa bbbb** ` → trim 掉尾随空格变成 `aaaa bbbb`（少 1 char）
+- 独立解析 `**前面加粗一`（未闭合）→ 退化成 Text `**前面加粗一`（多 2 char）
+
+两条路径拼起来在折行边界**必然**少 / 多字符。
+
+所以渲染端的最终设计是：
+
+- **行只占 1 个视觉行（不折）** → 走完整 `render_single_line_with_number`，保留 heading 图标 / bullet / blockquote 竖条等块级前缀
+- **行被折成多段** → 所有 vl（包括 vl[0]）都走 `render_inline(整行) + extract_span_range(..., visible_*_char)`，渲染产物只有一份，char 序列在视觉行边界严格连续
+
+判据是 `is_wrapped = vl.end_col < line_content.chars().count()`。
+
+**已知取舍**：折行场景下块级前缀图标暂时不画，前缀字符（`# `/`- `/`> `）以源码形式 fall through 进 inline 切片。若以后要在折行场景也保留图标，**不要**回头去让 vl[0] 独立解析；正确做法是让 `compute_visible_widths` 与 `renderer/line.rs` 的前缀剥离规则深度对齐（heading `# `→`◆ ` 同宽、`## `→`◇ ` 少 1、`### `→`〈 〉` 多 2、`> `→`| ` 同宽…），把前缀图标作为 vl[0] 的额外 prefix span 单独画在 inline 切片之前。
+
+### 关键设计 4：每行的"可见宽度数组"= 复用既有 inline parser，不另写
+
+`compute_visible_widths(line) -> Vec<u8>`（`renderer/inline_width.rs`）：
+
+1. 调 `parse_inline_text(line)` 拿 `Vec<Inline>`（直接复用 `renderer/inline.rs`，与 Step 4 统一）
+2. 递归收集"可见文本片段"（`Text`/`Code`/`Strong`/`Emphasis`/`Strikethrough` 内容 + `Link.text`，丢弃 `Link.url`）
+3. 用游标在源码里按 char 子序列匹配回填——可见 char 给 `char_width`，跳过的源码 char 全是标记符号给 0
+
+输出长度严格 = `line.chars().count()`。`wrap_engine` 把这个数组按行存进 `line_visible_widths: Vec<Option<Vec<u8>>>`——`None` 表示该行按源码 `char_width` 算（光标行 / fence / 代码块内 / 表格行）。
+
+**不另起一套行内剥离器**——这是 [feedback_reuse_existing_parsers](../.codebuddy/...) 立的规矩，也是 Step 1~6 共享层的延续。
+
+### 关键设计 5：不变的契约
+
+为了让选区、搜索、鼠标、vim 移动这些**已经稳定**的逻辑零修改，本次改造严格保护这些契约：
+
+- `start_col` / `end_col` 仍是源码 char 索引（不要为了"可见宽度"重新定义）
+- `visual_to_logical` / `logical_to_visual` 输入输出语义不变
+- 代码块（fenced）和表格的特殊处理沿用 Step 4/5 已有逻辑（`-4` 边框补偿、块级膨胀）
+- 续行的 inline 解析仍用整行 `render_inline` 一份产物，只是切片索引换成了 `visible_*_char`
+
+新增的字段、API 都是**叠加**而非**替换**——旧 `rebuild_cache_with_blocks` 改成薄壳调用新 `rebuild_cache_with_blocks_and_widths`，保留所有老调用方。
+
+### 一句话总结
+
+> Step 7 的本质：**让 wrap_engine 和 renderer 用同一个"渲染产物坐标系"对话**——wrap 算出每段视觉行在渲染产物里的 char 区间，renderer 拿区间去切整行渲染产物。光标行为则严格跟随渲染端的 Insert/Normal 口径，所有"光标行特殊"的逻辑只在 Insert 模式生效，Normal 模式下整篇都是渲染产物，光标只是一个叠加。

@@ -45,6 +45,10 @@ impl MarkdownEditor {
         let wrap_width = content_width.saturating_sub(line_num_width);
         self.wrap.set_width(wrap_width);
 
+        // 折行宽度按"光标行 vs 其它行"区分：光标换行时强制重建一次缓存，
+        // 让旧光标行回到"渲染宽"路径、新光标行切到"源码宽"路径。
+        self.maybe_mark_wrap_dirty_for_cursor();
+
         // 重建折行元数据（视觉行计数 + 前缀和）
         if self.wrap.is_dirty() {
             self.rebuild_wrap_cache();

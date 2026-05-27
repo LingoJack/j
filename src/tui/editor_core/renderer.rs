@@ -6,6 +6,7 @@
 mod block_cache;
 mod code_block;
 mod inline;
+mod inline_width;
 mod line;
 mod table;
 mod visual_line;
@@ -98,6 +99,40 @@ impl MarkdownRenderer {
     /// 返回值如 `[(3, 8), (12, 20)]`，表示第 3~8 行和第 12~20 行是代码块内容行。
     pub fn code_block_content_ranges(&self) -> Vec<(usize, usize)> {
         self.block_cache.content_ranges()
+    }
+
+    /// 为给定的源码行集合计算"按渲染后宽度折行"用的 per-char 宽度数组。
+    ///
+    /// 返回 `Vec<Option<Vec<u8>>>`，长度 = `lines.len()`：
+    /// - `Some(widths)`：该行折行宽度按渲染后算（Markdown 标记符号 = 0）；
+    /// - `None`：该行按源码 `char_width` 算（fence 行、代码块内容行、表格行、
+    ///   以及光标所在行 `cursor_line`）。
+    ///
+    /// **调用方约定**：先调 `ensure_cache_valid` 让 `BlockCache` 对齐当前 lines/width，
+    /// 再调本方法。否则 fence / 代码块 / 表格行的判断可能基于旧的 block 缓存。
+    pub fn compute_line_visible_widths(
+        &self,
+        lines: &[String],
+        cursor_line: Option<usize>,
+    ) -> Vec<Option<Vec<u8>>> {
+        lines
+            .iter()
+            .enumerate()
+            .map(|(i, line)| {
+                // 光标所在行：严格按源码（让用户编辑标记符号时所见即所得）
+                if cursor_line == Some(i) {
+                    return None;
+                }
+                // 围栏行 / 代码块内 / 表格行：渲染逻辑特殊，不参与 inline 渲染宽度补偿
+                if self.block_cache.is_fence_line(i)
+                    || self.block_cache.is_in_code_block_content(i)
+                    || self.block_cache.is_table_line(i)
+                {
+                    return None;
+                }
+                Some(inline_width::compute_visible_widths(line))
+            })
+            .collect()
     }
 
     // ========== 基础样式辅助方法 ==========
@@ -343,13 +378,12 @@ impl MarkdownRenderer {
             // 普通续行：对完整逻辑行渲染 inline，然后提取对应视觉行的片段
             // 这样可以正确处理跨折行边界的 **bold** 等标记
             let full_line_spans = self.render_inline(line_content);
-            // vl.start_col / vl.end_col 已经是字符偏移（wrap_engine 使用字符索引）
-            // 无需再用 char_idx_at_display_col 转换（该函数把参数当显示宽度，对中文会出错）
-            let vl_start_char = vl.start_col;
-            let vl_end_char = vl.end_col;
-
-            // 从渲染结果中提取对应视觉行的片段
-            let vl_spans = extract_span_range(&full_line_spans, vl_start_char, vl_end_char);
+            // 注意坐标系：`full_line_spans` 是渲染后的产物，char 数 ≤ 源码 char 数
+            // （`**`/`[`/`]`/`(url)` 等标记符号已被消费）。所以这里要用 vl 上的
+            // "渲染端 char 索引" `visible_start_char / visible_end_char`，
+            // 而不是 `vl.start_col / vl.end_col`（那是源码 char 索引）。
+            let vl_spans =
+                extract_span_range(&full_line_spans, vl.visible_start_char, vl.visible_end_char);
 
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             if search.is_searching() && search.match_count() > 0 {
@@ -367,8 +401,23 @@ impl MarkdownRenderer {
         }
 
         // 非续行的非光标行：完整 Markdown 渲染
-        // 截断到折行宽度，防止终端二次折行导致重复渲染
-        let truncated = Self::truncate_to_display_width(line_content, wrap_width);
+        //
+        // 旧实现这里用 `truncate_to_display_width(line_content, wrap_width)` 按源码
+        // `char_width` 截断到 wrap_width，防止终端二次折行。但当 wrap_engine 改成
+        // 按"渲染后宽度"折行后，源码 char 数 ≠ 渲染 char 数：源码累加到 wrap_width
+        // 会把可见正文砍掉（标记符号占 0 列，必须读到更多源码 char 才凑够 wrap_width
+        // 个渲染列）。
+        //
+        // 正确的做法是用 wrap_engine 已经算好的 vl 范围（源码 char 边界）来截：
+        //   - 若该行只占 1 个视觉行（vl 覆盖整行）：保留全部 `line_content`；
+        //   - 若该行被折成多段：vl 是第一段（start_col=0..end_col），按 char 数
+        //     截到 `vl.end_col` 即可。
+        // 这两种情况都可统一成"截到 vl.end_col 个 char"。
+        let truncated: String = if vl.end_col >= line_content.chars().count() {
+            line_content.to_string()
+        } else {
+            line_content.chars().take(vl.end_col).collect()
+        };
 
         // 检查是否是代码块围栏行
         if self.block_cache.is_fence_line(logical_line) {
@@ -419,12 +468,34 @@ impl MarkdownRenderer {
         }
 
         // 其他行：搜索高亮优先，否则 Markdown 渲染（标题、列表、引用等）
+        //
+        // 关键决策：当 wrap_engine 按"渲染后宽度"折行后，**独立把第一段
+        // `truncated` 扔给 `render_single_line_with_number` 会出现 char 数与
+        // 整行渲染前 N char 不一致**（pulldown-cmark 会吃掉 Strong 闭合后的
+        // 末尾空格、把未闭合的 `**` 当 Text 多出 char……），导致 vl[0] 和
+        // vl[1+] 续行切片拼起来出现"少 / 多字符"。
+        //
+        // 修复：**只要该行被折成多段**，第一段也走和续行一致的"整行 inline
+        // 渲染 + 按 visible char 索引切片"路径，保证两条路径的 char 序列
+        // 严格连续。代价：折行场景下 heading 图标 / bullet / blockquote 竖条
+        // 等块级前缀不再渲染（前缀字符以源码形式 fall through 到 inline）；
+        // 这是与"字符不丢失"的取舍。未折行场景沿用 `render_single_line_with_number`。
+        let is_wrapped = vl.end_col < line_content.chars().count();
         if search.is_searching() && search.match_count() > 0 {
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             vec![Line::from(spans)]
+        } else if is_wrapped {
+            // 折行的第一段：走整行 inline 切片路径（与续行一致），统一渲染产物坐标系
+            let full_line_spans = self.render_inline(&line_content);
+            let vl_spans =
+                extract_span_range(&full_line_spans, vl.visible_start_char, vl.visible_end_char);
+            let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
+            spans.extend(vl_spans);
+            vec![Line::from(spans)]
         } else {
-            vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
+            // 未折行：完整一行，走块级前缀渲染（heading 图标 / bullet / blockquote 等）
+            vec![self.render_single_line_with_number(&line_content, logical_line, wrap_width)]
         }
     }
 
@@ -487,6 +558,7 @@ impl MarkdownRenderer {
     }
 
     /// 将文本截断到指定显示宽度（使用 unicode-width 精确计算）
+    #[allow(dead_code)]
     fn truncate_to_display_width(text: &str, max_width: usize) -> String {
         let mut result = String::new();
         let mut width = 0;
