@@ -707,10 +707,14 @@ fn handle_mouse_event(
             if app.is_dragging_panel {
                 handle_drag(app, mouse.column, layout);
             } else if app.focus == Focus::Editor
-                && rect_contains(editor_area, mouse.column, mouse.row)
                 && let Some(ref mut editor) = app.editor
             {
-                editor.handle_mouse(mouse, editor_area);
+                // 鼠标拖出 editor_area 是常态（向下/向上甩选）。把坐标 clamp 到
+                // editor_area 边界内再转发，editor 端 screen_to_render_pos 才不
+                // 会因为 content_y 越界返回 None，导致 mouse_selection.current
+                // 停更新、下半段不再高亮。
+                let clamped = clamp_mouse_to_area(mouse, editor_area);
+                editor.handle_mouse(clamped, editor_area);
             }
         }
         MouseEventKind::Up(MouseButton::Left) => {
@@ -719,7 +723,8 @@ fn handle_mouse_event(
             if app.focus == Focus::Editor
                 && let Some(ref mut editor) = app.editor
             {
-                editor.handle_mouse(mouse, editor_area);
+                let clamped = clamp_mouse_to_area(mouse, editor_area);
+                editor.handle_mouse(clamped, editor_area);
             }
         }
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {

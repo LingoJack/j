@@ -873,15 +873,22 @@ impl MarkdownEditor {
             self.vim.mode(),
             Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
         );
-        let top_border: u16 = if self.show_border { 1 } else { 0 };
-        // 顶边框（可选）+ 状态栏 1 行 + 命令栏（可选）
-        let reserved: u16 = top_border + 1 + if has_cmd_bar { 1 } else { 0 };
+        // 顶部留白（边框或空行）+ 状态栏 1 行 + 命令栏（可选）
+        let reserved: u16 = self.top_pad() + 1 + if has_cmd_bar { 1 } else { 0 };
         area.height.saturating_sub(reserved) as usize
     }
 
     /// 单侧水平边框宽度（左 / 右各占 1 列），关掉边框时为 0。
     fn border_pad(&self) -> u16 {
         if self.show_border { 1 } else { 0 }
+    }
+
+    /// 内容区与 area 顶部之间的留白行数。
+    ///
+    /// - `show_border = true` 时为 1（顶边框占的那一行）；
+    /// - `show_border = false` 时仍为 1，作为视觉呼吸空间，避免内容紧贴上方面板。
+    fn top_pad(&self) -> u16 {
+        1
     }
 
     // ========== 鼠标操作 ==========
@@ -896,9 +903,10 @@ impl MarkdownEditor {
         area: Rect,
     ) -> Option<(usize, usize)> {
         // 减去边框偏移，得到内容区域内的坐标
-        let pad = self.border_pad();
-        let content_x = screen_x.saturating_sub(area.x + pad) as usize; // 左边框（可能为 0）
-        let content_y = screen_y.saturating_sub(area.y + pad) as usize; // 上边框（可能为 0）
+        let h_pad = self.border_pad();
+        let v_pad = self.top_pad();
+        let content_x = screen_x.saturating_sub(area.x + h_pad) as usize; // 左边框（可能为 0）
+        let content_y = screen_y.saturating_sub(area.y + v_pad) as usize; // 顶部留白
 
         let content_height = self.viewport_content_height(area);
         let line_num_width = if self.renderer.is_show_line_numbers() {
@@ -987,9 +995,10 @@ impl MarkdownEditor {
     ) -> Option<(usize, usize)> {
         use crate::tui::components::selection::spans_to_char_offset;
 
-        // area 内左上角是上边框 + 左边框（关闭边框时为 0）
-        let pad = self.border_pad();
-        let content_y = screen_y.saturating_sub(area.y + pad) as usize;
+        // area 内左上角是上边框 + 左边框（关闭边框时左/右为 0，但顶部仍留 1 行呼吸空间）
+        let h_pad = self.border_pad();
+        let v_pad = self.top_pad();
+        let content_y = screen_y.saturating_sub(area.y + v_pad) as usize;
         let content_height = self.viewport_content_height(area);
         if content_y >= content_height {
             return None;
@@ -1004,7 +1013,7 @@ impl MarkdownEditor {
         // 屏幕 X：按显示宽度匹配 spans 拼接后的字符偏移。spans 已经包含
         // 行号 / 边框 / padding 等装饰，所以 char_offset 直接是"渲染行内"
         // 的真实偏移，复制时由 extract_selection_text 自动跳过装饰部分。
-        let local_x = screen_x.saturating_sub(area.x + pad) as usize;
+        let local_x = screen_x.saturating_sub(area.x + h_pad) as usize;
         let char_offset = spans_to_char_offset(&line.spans, local_x);
         Some((global_row, char_offset))
     }
