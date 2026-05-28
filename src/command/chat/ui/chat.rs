@@ -35,7 +35,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 
-    // 动态标题栏高度：顶部分割线(1) + 状态行(1) + 可选分割线(1) + 可选 teammate 行 + 可选 subagent 行
+    // 动态标题栏高度：状态行(1) + 可选分割线(1) + 可选 teammate 行 + 可选 subagent 行
     let has_teammates = app
         .teammate_manager
         .lock()
@@ -47,7 +47,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(title_height), // 标题栏（顶部分割线 + 内容行 + 可选 teammate 行）
+            Constraint::Length(title_height), // 标题栏（内容行 + 可选 teammate 行）
             Constraint::Min(5),               // 消息区
             Constraint::Length(5),            // 输入区
             Constraint::Length(1),            // 操作提示栏（始终可见）

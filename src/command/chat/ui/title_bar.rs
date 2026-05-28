@@ -35,7 +35,7 @@ pub fn calc_title_height(app: &ChatApp) -> u16 {
     let has_subagents = !app.sub_agent_tracker.display_snapshots().is_empty();
 
     if !has_teammates && !has_subagents {
-        return 2; // 分割线 + 状态行
+        return 1; // 状态行
     }
 
     // 需要估算实际行数（包含换行）
@@ -54,8 +54,8 @@ pub fn calc_title_height(app: &ChatApp) -> u16 {
         0
     };
 
-    // 基础：分割线(1) + 状态行(1) + agent分割线(1)
-    let mut height: u16 = 3;
+    // 基础：状态行(1) + agent分割线(1)
+    let mut height: u16 = 2;
 
     if tm_count > 0 {
         height += tm_count.min(u16::MAX as usize) as u16;
@@ -138,15 +138,7 @@ pub fn draw_title_bar(
         String::new()
     };
 
-    // 第一行：顶部分割线
-    let top_separator = Paragraph::new(Line::styled(
-        "─".repeat(area.width as usize),
-        Style::default().fg(t.border_title),
-    ))
-    .style(Style::default().bg(t.bg_primary));
-    f.render_widget(top_separator, Rect::new(area.x, area.y, area.width, 1));
-
-    // 第二行：状态信息（左侧：品牌+指标，右侧：动态状态）
+    // 第一行：状态信息（左侧：品牌+指标，右侧：动态状态）
     let icon = if app.ui.auto_approve {
         Span::styled(
             " ▶▶ ",
@@ -227,10 +219,10 @@ pub fn draw_title_bar(
     // 渲染内容行
     let content_line =
         Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_primary));
-    f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
+    f.render_widget(content_line, Rect::new(area.x, area.y, area.width, 1));
 
     // ========== 分割线 + Teammate + SubAgent 状态 ==========
-    let mut next_row = area.y + 2;
+    let mut next_row = area.y + 1;
 
     // 状态行与 teammate/subagent 之间的分割线
     if has_teammates || has_subagents {
