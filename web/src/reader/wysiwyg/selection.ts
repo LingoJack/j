@@ -107,7 +107,7 @@ export function offsetToSelection(
   source: string,
   offset: number,
 ): boolean {
-  const { line, col } = offsetToLineCol(source, offset)
+  const { line } = offsetToLineCol(source, offset)
 
   // 找到包含该行的 block 容器
   const blocks = article.querySelectorAll<HTMLElement>('[data-src-start]')

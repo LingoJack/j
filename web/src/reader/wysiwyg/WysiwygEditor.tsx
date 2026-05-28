@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { MarkdownIR } from '../MarkdownIR'
 import type { ParsedDocument, Tab } from '../types'
 import { offsetToSelection, selectionToOffset } from './selection'
@@ -70,12 +70,6 @@ export function WysiwygEditor({ tab, onChange, onParsed, onSave }: Props) {
       pendingCaretOffsetRef.current = null
     })
   }, [tab.doc, tab.source])
-
-  /** 当前选区 → source offset；找不到时 null */
-  const currentOffset = useCallback((): number | null => {
-    if (!articleRef.current) return null
-    return selectionToOffset(articleRef.current, tab.source)
-  }, [tab.source])
 
   /** 当前 selection 范围（start/end source offset） */
   const currentRange = useCallback((): { start: number; end: number } | null => {

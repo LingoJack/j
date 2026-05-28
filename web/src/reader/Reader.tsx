@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileTree } from './FileTree'
 import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
-import { WysiwygEditor } from './wysiwyg/WysiwygEditor'
+import { MarkdownLiveEditor } from './MarkdownLiveEditor'
 import { PlainTextEditor } from './PlainTextEditor'
 import { TableOfContents, extractHeadings } from './TableOfContents'
 import { Toast } from './Toast'
@@ -268,13 +268,13 @@ export function Reader() {
               <MarkdownLiveEditor
                 key={activeTab.path}
                 tab={activeTab}
-                onChange={(source) =>
+                onChange={(source: string) =>
                   updateTab(activeTab.path, { source, dirty: true })
                 }
-                onParsed={(doc) => updateTab(activeTab.path, { doc })}
+                onParsed={(doc: ParsedDocument) => updateTab(activeTab.path, { doc })}
                 onSave={() => saveTab(activeTab.path)}
                 editingBlockIdx={activeTab.editingBlockIdx ?? null}
-                setEditingBlockIdx={(idx) =>
+                setEditingBlockIdx={(idx: number | null) =>
                   updateTab(activeTab.path, { editingBlockIdx: idx })
                 }
               />
