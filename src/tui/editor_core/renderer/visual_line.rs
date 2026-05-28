@@ -148,6 +148,9 @@ impl MarkdownRenderer {
         }
 
         // 代码块光标行：添加右边框 + 填充
+        // 结构：[fill] [sp] [│] [右内边距 2 列]
+        // 右内边距与 code_block.rs 的 CODE_BLOCK_RIGHT_PADDING 对齐，
+        // 否则切到 Insert 模式时右边框列会跳一下。
         if let Some(max_width) = ctx.code_block_max_width {
             let fill_width = max_width.saturating_sub(text_display_width);
             spans.push(Span::styled(
@@ -159,6 +162,10 @@ impl MarkdownRenderer {
                 Style::default().bg(self.theme.bg_primary),
             ));
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
+            spans.push(Span::styled(
+                "  ",
+                Style::default().bg(self.theme.bg_primary),
+            ));
         }
 
         Line::from(spans)

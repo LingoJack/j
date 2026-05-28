@@ -44,8 +44,11 @@ impl VisualLine {
     }
 }
 
-/// 代码块边框占用的字符宽度：`│ ` (左 2) + ` │` (右 2) = 4
-const CODE_BLOCK_BORDER_WIDTH: usize = 4;
+/// 代码块每行围栏占用的字符宽度：左 `│ ` (2) + ` │` (2) + 右内边距 (2) = 6。
+///
+/// 必须等于 `renderer/code_block.rs` 里 `CODE_BLOCK_RIGHT_PADDING` (2) + 边框 4。
+/// 折行预算少一列，渲染时内容就会盖过右 `│` 把整条边框顶出屏幕（窄终端尤其明显）。
+const CODE_BLOCK_FRAME_WIDTH: usize = 6;
 
 /// 折行引擎
 ///
@@ -265,10 +268,10 @@ impl WrapEngine {
         self.dirty = false;
     }
 
-    /// 获取指定行的有效折行宽度（代码块内行减去边框宽度）
+    /// 获取指定行的有效折行宽度（代码块内行减去围栏 + 右内边距宽度）
     fn effective_width(&self, line_idx: usize) -> usize {
         if self.code_block_lines.get(line_idx) == Some(&true) {
-            self.width.saturating_sub(CODE_BLOCK_BORDER_WIDTH).max(10)
+            self.width.saturating_sub(CODE_BLOCK_FRAME_WIDTH).max(10)
         } else {
             self.width
         }

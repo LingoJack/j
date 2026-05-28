@@ -219,8 +219,9 @@ impl MarkdownRenderer {
         let code_block_max_width = if !self.block_cache.is_fence_line(logical_line)
             && self.block_cache.is_in_code_block_content(logical_line)
         {
-            // wrap_width 已减去行号宽度，再减去边框 4 字符
-            Some(wrap_width.max(10).saturating_sub(4))
+            // wrap_width 已减去行号宽度，再减去围栏 4 + 右内边距 2 = 6 列
+            // （与 wrap_engine::CODE_BLOCK_FRAME_WIDTH 和 code_block.rs 的 inner_width 保持一致）
+            Some(wrap_width.max(10).saturating_sub(6))
         } else {
             None
         };

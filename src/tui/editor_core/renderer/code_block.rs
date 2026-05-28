@@ -121,7 +121,9 @@ impl MarkdownRenderer {
         let highlighted_spans = (self.highlight_fn)(text, lang, &self.theme);
 
         // wrap_width 传入时已减去行号宽度，total_width = wrap_width - padding
-        // 内部可用 = total_width - 4（│+sp+内容+sp+│）
+        // 内部可用 = total_width - 4（│+sp+内容+sp+│）= wrap_width - 6
+        // 必须与 wrap_engine 的 CODE_BLOCK_FRAME_WIDTH (=6) 保持一致；
+        // 折行预算少一列就会让内容盖过右 │，把整条边框顶出屏幕。
         let total_width = wrap_width
             .saturating_sub(Self::CODE_BLOCK_RIGHT_PADDING)
             .max(10);

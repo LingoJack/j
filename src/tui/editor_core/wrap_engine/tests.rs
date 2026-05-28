@@ -332,9 +332,9 @@ fn code_block_line_keeps_border_compensation() {
     let line = "**bold** rest".to_string();
     let cb_ranges = vec![(0usize, 0usize)]; // 把行 0 当作代码块
     let mut engine = WrapEngine::new();
-    engine.set_width(14); // 减去边框 4 = 10
+    engine.set_width(14); // 代码块行减去围栏+右内边距 6 = 有效宽 max(10, 8) = 10
     engine.rebuild_cache_with_blocks_and_widths(&[line], &cb_ranges, &[], &[None]);
-    // 源码 13 char、有效宽 10 → 折 2 行
+    // 源码 13 char、有效宽 10（受 `.max(10)` 兜底）→ 折 2 行
     assert_eq!(engine.visual_line_count(), 2);
 }
 
