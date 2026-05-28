@@ -669,7 +669,12 @@ pub fn complete_file_path(partial: &str) -> Vec<Pair> {
 
 // ========== 使用技巧 ==========
 
-/// 从 tips.txt 中随机选取一条使用技巧
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// 全局轮转计数器，保证每条 tip 依次出现
+static TIP_INDEX: AtomicUsize = AtomicUsize::new(0);
+
+/// 从 tips.txt 中轮转选取一条使用技巧
 fn pick_random_tip() -> String {
     let tips: Vec<&str> = crate::assets::tips_text()
         .lines()
@@ -678,10 +683,6 @@ fn pick_random_tip() -> String {
     if tips.is_empty() {
         return String::new();
     }
-    let index = (std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos()
-        % tips.len() as u128) as usize;
+    let index = TIP_INDEX.fetch_add(1, Ordering::Relaxed) % tips.len();
     format!("({})", tips[index])
 }
