@@ -1,117 +1,386 @@
-import { useEffect, useMemo, useState } from 'react'
-import { MarkdownIR } from './MarkdownIR'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FileTree } from './FileTree'
+import { TabBar } from './TabBar'
+import { CloseConfirmDialog } from './CloseConfirmDialog'
+import { WysiwygEditor } from './wysiwyg/WysiwygEditor'
+import { PlainTextEditor } from './PlainTextEditor'
 import { TableOfContents, extractHeadings } from './TableOfContents'
-import type { ParsedDocument, RenderedDoc } from './types'
+import { Toast } from './Toast'
+import { MarkdownBaseDirContext } from './MarkdownIR'
+import type {
+  InitialResp,
+  ParsedDocument,
+  RenderedDoc,
+  Tab,
+} from './types'
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; doc: RenderedDoc }
+  | { kind: 'ready' }
+
+/** 同时打开新文件的并发上限（防误点把内存撑爆） */
+const MAX_TABS = 32
 
 export function Reader() {
-  const [state, setState] = useState<LoadState>({ kind: 'loading' })
+  const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' })
+  const [tabs, setTabs] = useState<Tab[]>([])
+  const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
+  const [treeRoot, setTreeRoot] = useState<string>('')
+  const [showHidden, setShowHidden] = useState(false)
+  /** 关闭 dirty Tab 时弹出三选项确认 */
+  const [closing, setClosing] = useState<{ path: string } | null>(null)
+  /** 错误 / 成功提示（替代 alert） */
+  const [toast, setToast] = useState<{ message: string; kind: 'error' | 'success' | 'info' } | null>(null)
+  /** TOC 折叠态，持久化到 localStorage */
+  const [tocCollapsed, setTocCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('jreader.tocCollapsed') === '1'
+  })
+  const toggleToc = useCallback(() => {
+    setTocCollapsed((prev) => {
+      const next = !prev
+      localStorage.setItem('jreader.tocCollapsed', next ? '1' : '0')
+      return next
+    })
+  }, [])
 
-  // 所有 hooks 必须在条件 return 之前调用（React Hooks 规则）
-  const docKind = state.kind === 'ready' ? state.doc.kind : null
-  const docPayload = state.kind === 'ready' ? state.doc.payload : null
-
-  const headings = useMemo(() => {
-    if (docKind !== 'markdown' || !docPayload) return []
-    return extractHeadings(docPayload as ParsedDocument)
-  }, [docKind, docPayload])
-
+  // —— 初始化：拉 /api/initial → （如果有 initial_path）打开 initial tab ——
   useEffect(() => {
     let cancelled = false
-    fetch('./api/doc')
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${await res.text()}`)
+    ;(async () => {
+      try {
+        const initial = (await fetch('./api/initial').then((r) => {
+          if (!r.ok) throw new Error(`initial HTTP ${r.status}`)
+          return r.json()
+        })) as InitialResp
+
+        if (cancelled) return
+        setTreeRoot(initial.root_dir)
+
+        if (!initial.initial_path) {
+          // 目录入口：仅显示文件树，不预选文件
+          setLoadState({ kind: 'ready' })
+          return
         }
-        return (await res.json()) as RenderedDoc
-      })
-      .then((doc) => {
-        if (!cancelled) setState({ kind: 'ready', doc })
-      })
-      .catch((err) => {
-        if (!cancelled) setState({ kind: 'error', message: String(err) })
-      })
+
+        const doc = (await fetch(
+          `./api/file?path=${encodeURIComponent(initial.initial_path)}`,
+        ).then((r) => {
+          if (!r.ok) throw new Error(`file HTTP ${r.status}`)
+          return r.json()
+        })) as RenderedDoc
+        if (cancelled) return
+
+        setTabs([docToTab(doc)])
+        setActiveTabPath(doc.path)
+        setLoadState({ kind: 'ready' })
+      } catch (e) {
+        if (!cancelled) setLoadState({ kind: 'error', message: String(e) })
+      }
+    })()
     return () => {
       cancelled = true
     }
   }, [])
 
-  // 页面关闭时通知后端 shutdown
+  const activeTab = useMemo(
+    () => tabs.find((t) => t.path === activeTabPath) ?? null,
+    [tabs, activeTabPath],
+  )
+  const anyDirty = tabs.some((t) => t.dirty)
+  /** 当前文档所在目录（用于解析 markdown 里的相对图片路径） */
+  const baseDir = useMemo(() => {
+    if (!activeTab) return null
+    const i = activeTab.path.lastIndexOf('/')
+    return i >= 0 ? activeTab.path.slice(0, i) : null
+  }, [activeTab])
+
+  // —— 标题栏 + beforeunload 同步 ——
+  useDirtyTitle(activeTab, anyDirty)
+
+  // —— Cmd+S：交给 active tab ——
+  const activeTabRef = useRef<Tab | null>(null)
+  activeTabRef.current = activeTab
   useEffect(() => {
-    const handleUnload = () => {
-      navigator.sendBeacon('/api/shutdown')
+    function onKey(e: KeyboardEvent) {
+      const isSave =
+        (e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')
+      if (!isSave) return
+      e.preventDefault()
+      const t = activeTabRef.current
+      if (t) void saveTab(t.path)
     }
-    window.addEventListener('beforeunload', handleUnload)
-    return () => window.removeEventListener('beforeunload', handleUnload)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  if (state.kind === 'loading') {
+  // —— Tab 操作 ——
+  const updateTab = useCallback((path: string, patch: Partial<Tab>) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.path === path ? { ...t, ...patch } : t)),
+    )
+  }, [])
+
+  const openFile = useCallback(
+    async (path: string) => {
+      // 已存在则切到该 tab
+      if (tabs.some((t) => t.path === path)) {
+        setActiveTabPath(path)
+        return
+      }
+      if (tabs.length >= MAX_TABS) {
+        setToast({ message: `已打开 ${MAX_TABS} 个 Tab，关闭一些再试`, kind: 'info' })
+        return
+      }
+      try {
+        const doc = (await fetch(
+          `./api/file?path=${encodeURIComponent(path)}`,
+        ).then((r) => {
+          if (!r.ok)
+            return r
+              .json()
+              .catch(() => ({ error: `HTTP ${r.status}` }))
+              .then((j) => {
+                throw new Error(j.error ?? `HTTP ${r.status}`)
+              })
+          return r.json()
+        })) as RenderedDoc
+        setTabs((prev) => [...prev, docToTab(doc)])
+        setActiveTabPath(doc.path)
+      } catch (e) {
+        setToast({ message: `打开失败：${String(e)}`, kind: 'error' })
+      }
+    },
+    [tabs],
+  )
+
+  const requestCloseTab = useCallback(
+    (path: string) => {
+      const t = tabs.find((x) => x.path === path)
+      if (!t) return
+      if (t.dirty) {
+        setClosing({ path })
+        return
+      }
+      forceCloseTab(path)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tabs],
+  )
+
+  const forceCloseTab = useCallback(
+    (path: string) => {
+      setTabs((prev) => {
+        const idx = prev.findIndex((t) => t.path === path)
+        if (idx < 0) return prev
+        const next = prev.filter((t) => t.path !== path)
+        // 切换 active：优先右邻 → 左邻 → null
+        if (activeTabPath === path) {
+          const fallback = prev[idx + 1]?.path ?? prev[idx - 1]?.path ?? null
+          setActiveTabPath(fallback)
+        }
+        return next
+      })
+    },
+    [activeTabPath],
+  )
+
+  const saveTab = useCallback(
+    async (path: string) => {
+      const t = tabs.find((x) => x.path === path)
+      if (!t) return
+      updateTab(path, { saving: 'saving', error: undefined })
+      try {
+        const res = await fetch('./api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: t.path, source: t.source }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error ?? `HTTP ${res.status}`)
+        }
+        updateTab(path, { saving: 'idle', dirty: false, error: undefined })
+      } catch (e) {
+        updateTab(path, { saving: 'error', error: String(e) })
+        setToast({ message: `保存失败：${String(e)}`, kind: 'error' })
+      }
+    },
+    [tabs, updateTab],
+  )
+
+  // —— TOC ——
+  const headings = useMemo(() => {
+    if (!activeTab || activeTab.kind !== 'markdown' || !activeTab.doc) return []
+    return extractHeadings(activeTab.doc as ParsedDocument)
+  }, [activeTab])
+
+  // —— Loading / Error 屏 ——
+  if (loadState.kind === 'loading') {
     return (
-      <div className="min-h-screen bg-[#faf9f6] text-stone-500 flex items-center justify-center text-sm tracking-wide">
+      <div className="h-full flex items-center justify-center text-seeyue-fg-muted text-sm">
         加载中…
       </div>
     )
   }
-
-  if (state.kind === 'error') {
+  if (loadState.kind === 'error') {
     return (
-      <div className="min-h-screen bg-[#faf9f6] text-red-600 flex items-center justify-center p-8 text-sm font-mono whitespace-pre-wrap">
-        加载失败：{state.message}
+      <div className="h-full flex items-center justify-center p-8 text-seeyue-danger text-sm font-mono whitespace-pre-wrap">
+        加载失败：{loadState.message}
       </div>
     )
   }
 
-  const { filename, kind, payload } = state.doc
-  const hasToc = headings.length > 0
-
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-stone-800">
-      <header className="fixed top-0 left-0 right-0 z-30 bg-[#faf9f6]/90 backdrop-blur-sm border-b border-stone-200/60">
-        <div className="px-6 py-3.5 flex items-center justify-between max-w-[1400px] mx-auto">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-xl font-bold text-stone-900 leading-none">j</span>
-            <span className="text-stone-300">/</span>
-            <span className="text-sm text-stone-700 truncate">{filename}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 uppercase tracking-wider font-medium">
-              {kind}
-            </span>
-          </div>
-          <span className="text-xs text-stone-400 hidden sm:inline">
-            关闭页面将自动停止服务
-          </span>
+    <MarkdownBaseDirContext.Provider value={baseDir}>
+    <div
+      className="h-full grid bg-seeyue-bg text-seeyue-fg"
+      style={{
+        gridTemplateColumns: tocCollapsed
+          ? '260px 1fr 24px'
+          : '260px 1fr 240px',
+      }}
+    >
+      {/* 左：文件树 */}
+      <aside className="border-r border-seeyue-border bg-seeyue-sidebar overflow-hidden">
+        <FileTree
+          root={treeRoot}
+          onChangeRoot={setTreeRoot}
+          showHidden={showHidden}
+          onToggleHidden={() => setShowHidden((v) => !v)}
+          activePath={activeTabPath}
+          onOpen={openFile}
+        />
+      </aside>
+
+      {/* 中：Tab 条 + 编辑区 */}
+      <main className="flex flex-col overflow-hidden">
+        <TabBar
+          tabs={tabs}
+          activePath={activeTabPath}
+          onActivate={setActiveTabPath}
+          onClose={requestCloseTab}
+        />
+        <div className="flex-1 overflow-hidden">
+          {activeTab ? (
+            activeTab.kind === 'markdown' ? (
+              <MarkdownLiveEditor
+                key={activeTab.path}
+                tab={activeTab}
+                onChange={(source) =>
+                  updateTab(activeTab.path, { source, dirty: true })
+                }
+                onParsed={(doc) => updateTab(activeTab.path, { doc })}
+                onSave={() => saveTab(activeTab.path)}
+                editingBlockIdx={activeTab.editingBlockIdx ?? null}
+                setEditingBlockIdx={(idx) =>
+                  updateTab(activeTab.path, { editingBlockIdx: idx })
+                }
+              />
+            ) : (
+              <PlainTextEditor
+                key={activeTab.path}
+                tab={activeTab}
+                onChange={(source) =>
+                  updateTab(activeTab.path, { source, dirty: true })
+                }
+                onSave={() => saveTab(activeTab.path)}
+              />
+            )
+          ) : (
+            <div className="h-full flex items-center justify-center text-seeyue-fg-dim text-sm">
+              没有打开的文件，左侧选一个吧
+            </div>
+          )}
         </div>
-      </header>
-      <main className="max-w-3xl mx-auto px-6 pt-24 pb-24">
-        {renderPayload(kind, payload)}
       </main>
-      {hasToc && (
-        <div className="hidden lg:block fixed right-0 top-16 bottom-0 z-20">
-          <TableOfContents headings={headings} />
-        </div>
+
+      {/* 右：TOC */}
+      <aside className="border-l border-seeyue-border bg-seeyue-sidebar overflow-y-auto">
+        <TableOfContents
+          headings={headings}
+          collapsed={tocCollapsed}
+          onToggleCollapsed={toggleToc}
+        />
+      </aside>
+
+      {/* 关闭确认 */}
+      {closing && (
+        <CloseConfirmDialog
+          filename={tabs.find((t) => t.path === closing.path)?.filename ?? ''}
+          onSave={async () => {
+            await saveTab(closing.path)
+            // 仅在确实已保存时才关
+            const latest = activeTabRef.current // 仅作占位，真正要看 tabs
+            void latest
+            setClosing(null)
+            // 用 setState 闭包内最新 tabs 判断
+            setTabs((prev) => {
+              const t = prev.find((x) => x.path === closing.path)
+              if (t && !t.dirty) {
+                queueMicrotask(() => forceCloseTab(closing.path))
+              }
+              return prev
+            })
+          }}
+          onDiscard={() => {
+            forceCloseTab(closing.path)
+            setClosing(null)
+          }}
+          onCancel={() => setClosing(null)}
+        />
+      )}
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          kind={toast.kind}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
+    </MarkdownBaseDirContext.Provider>
   )
 }
 
-function renderPayload(kind: RenderedDoc['kind'], payload: unknown): React.ReactNode {
-  if (kind === 'markdown') {
-    return <MarkdownIR doc={payload as ParsedDocument} />
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+function docToTab(doc: RenderedDoc): Tab {
+  return {
+    path: doc.path,
+    filename: doc.filename,
+    kind: doc.kind === 'markdown' || doc.kind === 'plain_text' ? doc.kind : 'plain_text',
+    source: doc.source,
+    doc:
+      doc.kind === 'markdown' && doc.payload ? (doc.payload as ParsedDocument) : null,
+    dirty: false,
+    saving: 'idle',
   }
-  if (kind === 'plain_text') {
-    const text = (payload as { text: string }).text
-    return (
-      <pre className="text-[13.5px] font-mono whitespace-pre-wrap text-stone-700 bg-white/60 border border-stone-200 rounded-lg p-5 leading-7">
-        {text}
-      </pre>
-    )
-  }
-  return (
-    <div className="text-stone-500 text-sm">
-      暂不支持的文档类型：<code className="font-mono">{kind}</code>
-    </div>
-  )
+}
+
+/** 同步 document.title 与 beforeunload 拦截。 */
+function useDirtyTitle(activeTab: Tab | null, anyDirty: boolean) {
+  // title
+  useEffect(() => {
+    const base = activeTab ? `${activeTab.filename} · j reader` : 'j reader'
+    document.title = (activeTab?.dirty ? '● ' : '') + base
+  }, [activeTab, activeTab?.dirty])
+
+  // beforeunload + shutdown beacon
+  useEffect(() => {
+    function handler(e: BeforeUnloadEvent) {
+      if (anyDirty) {
+        e.preventDefault()
+        // Chrome 仍要求 returnValue 设值
+        e.returnValue = ''
+      } else {
+        navigator.sendBeacon('./api/shutdown')
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [anyDirty])
 }

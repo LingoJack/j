@@ -1,0 +1,213 @@
+/*
+ * Reader SPA 专用样式入口（Typora 风 See-Yue Dark）。
+ *
+ * 设计来自用户给的 Typora 截图：
+ * - 中文衬线感弱、走系统中文字体（PingFang SC 优先）
+ * - 行内代码 = 浅绿色 + 弱边框（无块底）
+ * - 链接 = 前置 🔗 图标 + URL 用等宽字体
+ * - 代码块 = macOS 三圆点装饰栏 + 右上角语言徽章
+ * - 文件树 .md 文件用「M↓」徽章
+ *
+ * 不引外部 webfont（不再访问 Google Fonts），完全依赖系统字体兜底。
+ */
+@import 'tailwindcss';
+
+@theme {
+  /* —— 调色板（按截图微调） —— */
+  --color-seeyue-bg: #1d1f21;
+  --color-seeyue-sidebar: #16181a;
+  --color-seeyue-panel: #202325;
+  --color-seeyue-border: #2a2d2f;
+  --color-seeyue-border-strong: #3a3d3f;
+
+  /* 文本 */
+  --color-seeyue-fg: #c5c8c6;
+  --color-seeyue-fg-muted: #8a8d8f;
+  --color-seeyue-fg-dim: #5d6063;
+  --color-seeyue-fg-strong: #e8e8e8;
+
+  /* 强调 */
+  --color-seeyue-accent: #a3c9e0;        /* 链接、active 标签：淡蓝灰 */
+  --color-seeyue-accent-soft: #2d3a47;    /* 文件树 active 项底 */
+  --color-seeyue-warn: #e0a458;           /* dirty 圆点 */
+  --color-seeyue-danger: #d96e6e;
+
+  /* 代码 */
+  --color-seeyue-code-fg: #b5cea8;        /* 行内代码：浅绿 */
+  --color-seeyue-code-bg: #1f2123;        /* 代码块底（比正文区更深） */
+  --color-seeyue-code-border: #2a2d2f;
+
+  /* —— 字体栈 —— */
+  --font-cjk:
+    'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+  --font-mono:
+    'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+}
+
+/* —— 全局基线 —— */
+html,
+body,
+#reader-root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-seeyue-bg);
+  color: var(--color-seeyue-fg);
+  font-family: var(--font-cjk);
+  font-size: 15px;
+  line-height: 1.85;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(163, 201, 224, 0.25);
+  color: #ffffff;
+}
+
+/* —— 暗色滚动条 —— */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #34373a;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4d50;
+  background-clip: padding-box;
+}
+
+/* —— 编辑区 textarea 公共样式 —— */
+textarea.seeyue-textarea {
+  resize: none;
+  outline: none;
+  border: none;
+  background: transparent;
+  color: var(--color-seeyue-fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.7;
+  caret-color: var(--color-seeyue-accent);
+  tab-size: 4;
+}
+
+/* —— Markdown 预览正文 —— */
+.seeyue-prose {
+  font-family: var(--font-cjk);
+  font-size: 15px;
+  line-height: 1.85;
+  color: var(--color-seeyue-fg);
+}
+.seeyue-prose strong {
+  color: var(--color-seeyue-fg-strong);
+}
+.seeyue-prose a {
+  color: var(--color-seeyue-accent);
+}
+
+/* 引用块：左侧细线 + 略深底 */
+.seeyue-prose blockquote {
+  background: rgba(255, 255, 255, 0.02);
+  border-left-color: var(--color-seeyue-border-strong);
+}
+
+/* 表格行交替底色 */
+.seeyue-prose table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* —— 行内 code 胶囊 —— */
+.seeyue-prose :not(pre) > code {
+  color: var(--color-seeyue-code-fg);
+  background: transparent;
+  border: 1px solid var(--color-seeyue-code-border);
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* —— 链接前 🔗 图标 + URL 用 mono —— */
+.seeyue-prose a.seeyue-link::before {
+  content: '\1F517';   /* 🔗 */
+  margin-right: 0.3em;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+.seeyue-prose a.seeyue-link {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  text-decoration: underline;
+  text-decoration-color: rgba(163, 201, 224, 0.4);
+  text-underline-offset: 3px;
+}
+.seeyue-prose a.seeyue-link:hover {
+  text-decoration-color: var(--color-seeyue-accent);
+}
+
+/* —— 代码块装饰栏：macOS 三圆点 + 右上角 lang —— */
+.seeyue-codeblock {
+  position: relative;
+  margin: 1.2em 0;
+  border-radius: 8px;
+  border: 1px solid var(--color-seeyue-code-border);
+  background: var(--color-seeyue-code-bg);
+  overflow: hidden;
+}
+.seeyue-codeblock::before {
+  content: '';
+  display: block;
+  height: 28px;
+  background: var(--color-seeyue-panel);
+  border-bottom: 1px solid var(--color-seeyue-code-border);
+  /* 红黄绿三圆点：用径向渐变叠加 */
+  background-image:
+    radial-gradient(circle at 14px 14px, #ff5f57 4.5px, transparent 5px),
+    radial-gradient(circle at 32px 14px, #febc2e 4.5px, transparent 5px),
+    radial-gradient(circle at 50px 14px, #28c840 4.5px, transparent 5px);
+  background-repeat: no-repeat;
+}
+.seeyue-codeblock-lang {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-seeyue-fg-muted);
+  z-index: 1;
+}
+
+/* —— 文件树 .md 文件徽章「M↓」 —— */
+.seeyue-md-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #6cb6ff;
+  width: 16px;
+  height: 16px;
+  letter-spacing: -0.05em;
+}
+
+/* —— hr 分割线 —— */
+.seeyue-prose hr {
+  border: 0;
+  border-top: 1px solid var(--color-seeyue-border);
+  opacity: 0.5;
+  margin: 2.5em 0;
+}

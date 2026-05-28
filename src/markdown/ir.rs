@@ -120,6 +120,8 @@ pub enum Inline {
     Code(String),
     /// 链接
     Link { text: Vec<Inline>, url: String },
+    /// 图片：`![alt](url)`
+    Image { url: String, alt: String },
     /// 软换行（同段落内换行）
     SoftBreak,
     /// 硬换行（显式 `<br>` 或行尾 `\`）

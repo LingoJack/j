@@ -2641,6 +2641,7 @@ dependencies = [
  "serde_yaml",
  "sha2 0.11.0",
  "supports-color",
+ "tempfile",
  "termimad",
  "thiserror 2.0.18",
  "tokio",

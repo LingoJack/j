@@ -1,8 +1,8 @@
-//! 文件渲染器：把不同格式的源文件转换为 Web 前端可消费的 JSON payload。
+//! 文件渲染器：把单个文件转换为前端可消费的 JSON payload。
 //!
 //! 当前实现：
 //! - `MarkdownRenderer` — 复用 `crate::markdown::parser::parse_markdown` 产出 IR
-//! - `PlainTextRenderer` — 其它格式的兜底，原文打包为字符串
+//! - `PlainTextRenderer` — 其它格式的兜底
 //!
 //! 未来扩展（接口已预留，实现待补）：
 //! - `PptxRenderer` / `DocxRenderer` / `XlsxRenderer`
@@ -12,13 +12,13 @@
 use serde::Serialize;
 use std::path::Path;
 
-/// 文档类型 — 用于前端按类型分发渲染组件。
+/// 文档类型 — 用于前端按类型分发组件。
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DocKind {
     Markdown,
     PlainText,
-    // 以下为占位，本期不实现：
+    // 占位，本期不实现
     #[allow(dead_code)]
     Pptx,
     #[allow(dead_code)]
@@ -27,56 +27,54 @@ pub enum DocKind {
     Xlsx,
 }
 
-/// 渲染产物 — 直接序列化为 `/api/doc` 的响应体。
+/// `/api/file` 的响应：包含原始 source（编辑器初始内容）+ 解析后的 payload。
 #[derive(Debug, Serialize)]
 pub struct RenderedDoc {
+    /// 文件绝对路径（用于前端 Tab 标识 + /api/save 回传）
+    pub path: String,
     /// 文件名（不含路径，仅用于 UI 展示）
     pub filename: String,
-    /// 文档类型，前端按此分发组件
+    /// 文档类型
     pub kind: DocKind,
-    /// 类型特定的载荷：
+    /// 编辑器初始内容（textarea 的 value）
+    pub source: String,
+    /// 类型特定的载荷（首次解析的快照）：
     /// - Markdown → `ParsedDocument` JSON
-    /// - PlainText → `{ "text": "..." }`
+    /// - PlainText → `null`（前端不需要）
     pub payload: serde_json::Value,
 }
 
 /// 文件渲染器抽象。
 pub trait Renderer {
-    fn render(&self, bytes: &[u8], filename: &str) -> Result<RenderedDoc, String>;
+    fn render(&self, source: &str) -> Result<serde_json::Value, String>;
+    fn kind(&self) -> DocKind;
 }
 
 /// Markdown 渲染器：复用项目内 `parse_markdown`，输出 IR JSON。
 pub struct MarkdownRenderer;
 
 impl Renderer for MarkdownRenderer {
-    fn render(&self, bytes: &[u8], filename: &str) -> Result<RenderedDoc, String> {
-        let text =
-            std::str::from_utf8(bytes).map_err(|e| format!("文件不是合法的 UTF-8 编码：{e}"))?;
+    fn render(&self, source: &str) -> Result<serde_json::Value, String> {
         // max_width 仅影响表格分隔行预处理逻辑，传一个足够大的值即可
-        let doc = crate::markdown::parser::parse_markdown(text, 120);
-        let payload =
-            serde_json::to_value(&doc).map_err(|e| format!("Markdown IR 序列化失败：{e}"))?;
-        Ok(RenderedDoc {
-            filename: filename.to_string(),
-            kind: DocKind::Markdown,
-            payload,
-        })
+        let doc = crate::markdown::parser::parse_markdown(source, 120);
+        serde_json::to_value(&doc).map_err(|e| format!("Markdown IR 序列化失败：{e}"))
+    }
+
+    fn kind(&self) -> DocKind {
+        DocKind::Markdown
     }
 }
 
-/// 纯文本兜底渲染器：原文打包为 `{ "text": "..." }`。
+/// 纯文本兜底渲染器：payload 为 null，前端直接用 source 渲染 textarea。
 pub struct PlainTextRenderer;
 
 impl Renderer for PlainTextRenderer {
-    fn render(&self, bytes: &[u8], filename: &str) -> Result<RenderedDoc, String> {
-        // 非 UTF-8 时使用 lossy 转换，避免直接报错（如二进制文件用户也可能误用）
-        let text = String::from_utf8_lossy(bytes).into_owned();
-        let payload = serde_json::json!({ "text": text });
-        Ok(RenderedDoc {
-            filename: filename.to_string(),
-            kind: DocKind::PlainText,
-            payload,
-        })
+    fn render(&self, _source: &str) -> Result<serde_json::Value, String> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn kind(&self) -> DocKind {
+        DocKind::PlainText
     }
 }
 
@@ -91,4 +89,35 @@ pub fn pick_renderer(path: &Path) -> Box<dyn Renderer> {
         "md" | "markdown" => Box::new(MarkdownRenderer),
         _ => Box::new(PlainTextRenderer),
     }
+}
+
+/// 读取并渲染单文件，构建 `RenderedDoc`。
+///
+/// 调用方需提前完成路径校验（存在性、是普通文件、大小上限）。
+pub fn render_file(path: &Path) -> Result<RenderedDoc, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("读取文件失败：{e}"))?;
+    let renderer = pick_renderer(path);
+
+    // Markdown 必须 UTF-8；其它类型走 lossy 转换以兼容偶发 BOM / 非 UTF-8 文件
+    let source = match renderer.kind() {
+        DocKind::Markdown => std::str::from_utf8(&bytes)
+            .map_err(|e| format!("文件不是合法的 UTF-8 编码：{e}"))?
+            .to_string(),
+        _ => String::from_utf8_lossy(&bytes).into_owned(),
+    };
+
+    let payload = renderer.render(&source)?;
+    let filename = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("untitled")
+        .to_string();
+
+    Ok(RenderedDoc {
+        path: path.display().to_string(),
+        filename,
+        kind: renderer.kind(),
+        source,
+        payload,
+    })
 }

@@ -612,17 +612,14 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
 
             // ===== Image =====
             Event::Start(Tag::Image { dest_url, .. }) => {
-                ctx.flush_paragraph();
                 ctx.image_url = Some(dest_url.to_string());
                 ctx.image_alt.clear();
             }
             Event::End(TagEnd::Image) => {
-                // 图片在当前 IR 中作为 Paragraph 处理（带特殊 marker）
-                // 后续 Step 再添加 Image block kind
-                if let Some(_url) = ctx.image_url.take() {
-                    // 暂时忽略图片的 IR 处理，渲染时图片仍由外部机制处理
+                if let Some(url) = ctx.image_url.take() {
+                    let alt = std::mem::take(&mut ctx.image_alt);
+                    ctx.push_inline(Inline::Image { url, alt });
                 }
-                ctx.image_alt.clear();
             }
 
             _ => {}

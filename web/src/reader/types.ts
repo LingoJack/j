@@ -1,5 +1,5 @@
 // Rust IR JSON 类型定义 — 与 `src/markdown/ir.rs` 一一对应。
-// IR 由 `parse_markdown` 生成，通过 `/api/doc` 返回给前端。
+// IR 由 `parse_markdown` 生成，通过 `/api/file`、`/api/parse` 返回给前端。
 //
 // 序列化形式（adjacently-tagged）：
 //   { "type": "<variant>", "value": <payload> }
@@ -12,6 +12,7 @@ export type Inline =
   | { type: 'strikethrough'; value: Inline[] }
   | { type: 'code'; value: string }
   | { type: 'link'; value: { text: Inline[]; url: string } }
+  | { type: 'image'; value: { url: string; alt: string } }
   | { type: 'soft_break' }
   | { type: 'hard_break' }
 
@@ -52,11 +53,50 @@ export interface ParsedDocument {
   blocks: Block[]
 }
 
-// `/api/doc` 响应体
+// `/api/file` 响应：单文件渲染产物
 export type DocKind = 'markdown' | 'plain_text' | 'pptx' | 'docx' | 'xlsx'
 
 export interface RenderedDoc {
+  path: string
   filename: string
   kind: DocKind
-  payload: ParsedDocument | { text: string } | unknown
+  source: string
+  payload: ParsedDocument | null | unknown
+}
+
+// `/api/list` 响应：目录列出结果
+export interface DirEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+}
+
+export interface ListResp {
+  dir: string
+  parent: string | null
+  entries: DirEntry[]
+  truncated: boolean
+}
+
+// `/api/initial` 响应
+export interface InitialResp {
+  /** 目录入口时为 null */
+  initial_path: string | null
+  root_dir: string
+}
+
+// 编辑器内部使用的 Tab 状态
+export interface Tab {
+  path: string
+  filename: string
+  kind: DocKind
+  source: string
+  /** markdown 才有；首次打开 = 后端预渲染，之后 = /api/parse 实时结果 */
+  doc: ParsedDocument | null
+  dirty: boolean
+  saving: 'idle' | 'saving' | 'error'
+  error?: string
+  /** 当前光标所在 IR block 的索引；null = 全渲染态（Typora 风所见即所得） */
+  editingBlockIdx?: number | null
 }

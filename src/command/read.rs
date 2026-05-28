@@ -1,11 +1,11 @@
-//! `j read <file>` — 在浏览器中预览文件。
+//! `j read <file>` — 在浏览器中打开 Typora 风的实时编辑器。
 //!
-//! 入口：[`handle_read`]。当前实现支持 Markdown / 纯文本，
-//! 未来通过 [`renderer::Renderer`] trait 扩展到 PPT / DOCX / XLSX。
+//! 入口：[`handle_read`]。命令启动后会拉起一个本地 axum 服务，
+//! 浏览器打开三栏 UI（左：文件树 / 中：编辑+预览 / 右：大纲）。
 //!
 //! 子模块：
-//! - [`renderer`] — 文档→JSON payload 的转换
-//! - [`server`]   — axum HTTP 服务
+//! - [`renderer`] — 单文件 → JSON payload 转换（按需调用，不再启动期一次性渲染）
+//! - [`server`]   — axum HTTP 服务（多路由：`/api/initial`、`/api/file`、`/api/list`、`/api/parse`、`/api/save`）
 //! - [`embed`]    — 编译期嵌入的 Reader SPA 资源
 
 mod embed;
@@ -13,11 +13,17 @@ pub mod renderer;
 mod server;
 
 use crate::config::YamlConfig;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// 单文件大小上限：5 MiB。超过则拒绝（避免瞬间把巨型文件加载进内存）。
-const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
+/// 单文件大小上限：5 MiB。`/api/file` 与 `/api/save` 共用。
+pub(crate) const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
+
+/// 资源（图片等）大小上限：20 MiB。`/api/asset` 使用。
+pub(crate) const MAX_ASSET_SIZE: u64 = 20 * 1024 * 1024;
+
+/// 单次目录列出的最大条目数。超过则前端提示「目录过大」。
+pub(crate) const MAX_DIR_ENTRIES: usize = 2000;
 
 /// `j read <file>` 命令入口。
 pub fn handle_read(file_path: &str, port: Option<u16>, no_open: bool, _config: &mut YamlConfig) {
@@ -31,39 +37,38 @@ fn run(file_path: &str, port: Option<u16>, no_open: bool) -> Result<(), String> 
     let expanded = expand_tilde(file_path);
     let path = Path::new(&expanded);
 
-    // 1. 检查文件存在 & 大小
+    // 1. 校验：必须存在；按是文件还是目录分流
     let metadata =
-        std::fs::metadata(path).map_err(|e| format!("无法读取文件 \"{file_path}\"：{e}"))?;
-    if !metadata.is_file() {
-        return Err(format!("\"{file_path}\" 不是一个普通文件"));
-    }
-    if metadata.len() > MAX_FILE_SIZE {
-        return Err(format!(
-            "文件过大（{} 字节，超过 {} 字节上限），暂不支持预览",
-            metadata.len(),
-            MAX_FILE_SIZE
-        ));
-    }
+        std::fs::metadata(path).map_err(|e| format!("无法读取路径 \"{file_path}\"：{e}"))?;
+    let canonical =
+        std::fs::canonicalize(path).map_err(|e| format!("无法解析路径 \"{file_path}\"：{e}"))?;
 
-    // 2. 读取 + 渲染
-    let bytes = std::fs::read(path).map_err(|e| format!("读取文件 \"{file_path}\" 失败：{e}"))?;
-    let renderer = renderer::pick_renderer(path);
-    let filename = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(file_path)
-        .to_string();
-    let doc = renderer.render(&bytes, &filename)?;
+    let (initial_path, root_dir): (Option<PathBuf>, PathBuf) = if metadata.is_file() {
+        // 文件入口：作为 initial tab；root_dir = 父目录
+        if metadata.len() > MAX_FILE_SIZE {
+            return Err(format!(
+                "文件过大（{} 字节，超过 {} 字节上限），暂不支持预览",
+                metadata.len(),
+                MAX_FILE_SIZE
+            ));
+        }
+        let root = canonical
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| canonical.clone());
+        (Some(canonical), root)
+    } else if metadata.is_dir() {
+        // 目录入口：仅打开文件树，不预选任何文件
+        (None, canonical)
+    } else {
+        return Err(format!("\"{file_path}\" 不是普通文件或目录"));
+    };
 
-    // 3. 自动打开浏览器（在 server 启动前抢先打开，复用本进程的端口分配结果不现实，
-    //    所以我们改成：先绑定、拿到端口再打开 —— 在 server.rs 内做不便，这里先解析端口。）
-    //    简化做法：使用 `port` 给定值；未给定时，先临时绑一次拿到端口、立刻释放、再启动 axum。
-    //    （短窗口竞态可接受：仅在本机、用户唯一会话中使用。）
+    // 2. 抢先分配端口（若未指定）—— 用于在 server 启动前就打开浏览器
     let actual_port = match port {
         Some(p) => p,
         None => probe_free_port()?,
     };
-
     let url = format!("http://127.0.0.1:{actual_port}/");
 
     if !no_open {
@@ -75,8 +80,8 @@ fn run(file_path: &str, port: Option<u16>, no_open: bool) -> Result<(), String> 
         println!("📖 已禁用自动打开浏览器，请手动访问：{url}");
     }
 
-    // 4. 启动 server，阻塞至 Ctrl-C
-    server::serve_blocking(doc, Some(actual_port))
+    // 3. 启动 server，阻塞至 Ctrl-C / 浏览器关闭
+    server::serve_blocking(initial_path, root_dir, Some(actual_port))
 }
 
 /// 探测一个可用端口：绑定 `127.0.0.1:0`，立刻释放，返回端口号。

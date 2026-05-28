@@ -365,6 +365,15 @@ fn inline_to_cell_pieces_recursive(
         Inline::HardBreak => {
             out.push(("\n".to_string(), base_style));
         }
+        Inline::Image { alt, url } => {
+            // 终端表格中图片退化为 [图片: alt](url) 文本占位
+            let placeholder = if alt.is_empty() {
+                format!("[图片]({})", url)
+            } else {
+                format!("[图片: {}]({})", alt, url)
+            };
+            out.push((placeholder, base_style.add_modifier(Modifier::DIM)));
+        }
     }
 }
 
@@ -391,6 +400,14 @@ pub fn measure_cell_wrap_lines(inlines: &[Inline], max_width: usize) -> usize {
             Inline::Link { text, .. } => {
                 for child in text {
                     collect_text(child, out);
+                }
+            }
+            Inline::Image { alt, url } => {
+                // 与 inline_to_cell_pieces_recursive 占位保持一致
+                if alt.is_empty() {
+                    out.push_str(&format!("[图片]({})", url));
+                } else {
+                    out.push_str(&format!("[图片: {}]({})", alt, url));
                 }
             }
             Inline::SoftBreak => out.push(' '),
@@ -519,6 +536,14 @@ pub fn display_width_inlines(inlines: &[Inline]) -> usize {
             Inline::SoftBreak => width += 1,
             Inline::HardBreak => {}
             Inline::Link { text, .. } => width += display_width_inlines(text),
+            Inline::Image { alt, url } => {
+                // 与文本占位宽度一致
+                width += if alt.is_empty() {
+                    display_width(&format!("[图片]({})", url))
+                } else {
+                    display_width(&format!("[图片: {}]({})", alt, url))
+                };
+            }
         }
     }
     width

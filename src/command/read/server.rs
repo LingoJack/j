@@ -1,36 +1,47 @@
-//! `j read` 命令的本地 HTTP 服务。
+//! `j read` 命令的本地 HTTP 服务（多文件、多 Tab 编辑器）。
 //!
 //! 设计要点：
 //! - 仅绑定 `127.0.0.1`，不暴露到局域网。
-//! - 启动时一次性读取目标文件并渲染为 [`RenderedDoc`]，缓存在内存中；
-//!   `/api/doc` 只返回这一份，**不接受任意路径参数**，杜绝越权读盘。
+//! - 单用户本机使用；不加敏感路径 deny list（用户已确认）。
+//! - 路径全部 `canonicalize` 后处理；写入用 `tempfile::NamedTempFile` + `persist()` 原子替换。
 //! - 静态资源（reader SPA）来自编译期嵌入的 [`ReaderAssets`]。
 
 use axum::{
     Router,
-    extract::State,
+    extract::{Query, State},
     http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Json, Response},
     routing::{get, post},
 };
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
 use super::embed::ReaderAssets;
-use super::renderer::RenderedDoc;
+use super::renderer::{RenderedDoc, render_file};
+use super::{MAX_ASSET_SIZE, MAX_DIR_ENTRIES, MAX_FILE_SIZE};
 
-/// 服务端共享状态：渲染好的文档（不可变，多线程共享）+ shutdown 信号。
+/// 服务端共享状态。
 #[derive(Clone)]
 struct AppState {
-    doc: Arc<RenderedDoc>,
+    /// 启动文件（initial tab 路径）；目录入口时为 None
+    initial_path: Arc<Option<PathBuf>>,
+    /// 启动时左侧文件树的根目录（initial_path 的父目录或目录入口本身）
+    root_dir: Arc<PathBuf>,
+    /// shutdown 信号（前端在全部 tab 干净后通过 `/api/shutdown` 触发）
     shutdown: Arc<Notify>,
 }
 
-/// 启动 server 并阻塞当前线程，直到 server 退出（Ctrl-C 或浏览器页面关闭）。
+/// 启动 server 并阻塞当前线程，直到 server 退出。
 ///
-/// 返回实际监听的地址（用于打印 URL / 打开浏览器）。
-pub fn serve_blocking(doc: RenderedDoc, port: Option<u16>) -> Result<(), String> {
+/// `initial_path` 为 None 表示「目录入口」—— 前端只显示文件树，不预选任何文件。
+pub fn serve_blocking(
+    initial_path: Option<PathBuf>,
+    root_dir: PathBuf,
+    port: Option<u16>,
+) -> Result<(), String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -48,11 +59,17 @@ pub fn serve_blocking(doc: RenderedDoc, port: Option<u16>) -> Result<(), String>
 
         let shutdown = Arc::new(Notify::new());
         let state = AppState {
-            doc: Arc::new(doc),
+            initial_path: Arc::new(initial_path),
+            root_dir: Arc::new(root_dir),
             shutdown: shutdown.clone(),
         };
         let app = Router::new()
-            .route("/api/doc", get(api_doc))
+            .route("/api/initial", get(api_initial))
+            .route("/api/file", get(api_file))
+            .route("/api/list", get(api_list))
+            .route("/api/parse", post(api_parse))
+            .route("/api/save", post(api_save))
+            .route("/api/asset", get(api_asset))
             .route("/api/shutdown", post(api_shutdown))
             .route("/", get(index_handler))
             .fallback(static_handler)
@@ -76,7 +93,6 @@ async fn shutdown_signal(shutdown: Arc<Notify>) {
     let stdin_line = async {
         let mut reader = BufReader::new(tokio::io::stdin());
         let mut buf = String::new();
-        // 读取一行：用户按下 Enter 即返回；EOF（stdin 关闭）也视为停止信号。
         let _ = reader.read_line(&mut buf).await;
     };
 
@@ -91,29 +107,257 @@ async fn shutdown_signal(shutdown: Arc<Notify>) {
 }
 
 // ---------------------------------------------------------------------------
-// Handlers
+// /api/initial — 启动信息
 // ---------------------------------------------------------------------------
 
-async fn api_doc(State(state): State<AppState>) -> Json<serde_json::Value> {
-    // RenderedDoc 内部是 serde::Serialize；通过 to_value 一次性序列化，避免对 Arc<T> 直接派生。
-    let value = serde_json::to_value(&*state.doc)
-        .unwrap_or_else(|e| serde_json::json!({ "error": format!("序列化失败：{e}") }));
-    Json(value)
+#[derive(Serialize)]
+struct InitialResp {
+    /// 目录入口时为 null
+    initial_path: Option<String>,
+    root_dir: String,
 }
 
-/// 浏览器页面关闭时通过 `navigator.sendBeacon` 调用此接口，触发服务 shutdown。
+async fn api_initial(State(state): State<AppState>) -> Json<InitialResp> {
+    Json(InitialResp {
+        initial_path: state
+            .initial_path
+            .as_ref()
+            .as_ref()
+            .map(|p| p.display().to_string()),
+        root_dir: state.root_dir.display().to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// /api/file — 读取单文件并渲染
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct FileQuery {
+    path: String,
+}
+
+async fn api_file(Query(q): Query<FileQuery>) -> Result<Json<RenderedDoc>, ApiError> {
+    let path = canonicalize(&q.path)?;
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| ApiError::bad_request(format!("无法读取文件：{e}")))?;
+    if !metadata.is_file() {
+        return Err(ApiError::bad_request("不是一个普通文件"));
+    }
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(ApiError::bad_request(format!(
+            "文件过大（{} 字节，超过 {} 字节上限）",
+            metadata.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+    let doc = render_file(&path).map_err(ApiError::bad_request)?;
+    Ok(Json(doc))
+}
+
+// ---------------------------------------------------------------------------
+// /api/list — 列出目录内容
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ListQuery {
+    dir: String,
+    /// 是否包含 dotfile，默认 false。
+    /// 接受 "1" / "true" / "yes" / "on"（大小写不敏感）等任意 truthy 字符串；
+    /// 其余值视为 false。这样前端无论传 `'true'` 还是 `'1'` 都不会 400。
+    #[serde(default, deserialize_with = "deserialize_flexible_bool")]
+    hidden: bool,
+}
+
+#[derive(Serialize)]
+struct FileEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    size: u64,
+}
+
+#[derive(Serialize)]
+struct ListResp {
+    dir: String,
+    /// 父目录绝对路径；为根（无父）时为 null。前端用于「上一级」按钮。
+    parent: Option<String>,
+    entries: Vec<FileEntry>,
+    /// 目录条目数超过 [`MAX_DIR_ENTRIES`] 时为 true，前端展示「目录过大，仅显示前 N 条」
+    truncated: bool,
+}
+
+async fn api_list(Query(q): Query<ListQuery>) -> Result<Json<ListResp>, ApiError> {
+    let dir = canonicalize(&q.dir)?;
+    let metadata =
+        std::fs::metadata(&dir).map_err(|e| ApiError::bad_request(format!("无法读取目录：{e}")))?;
+    if !metadata.is_dir() {
+        return Err(ApiError::bad_request("不是一个目录"));
+    }
+
+    let read_dir =
+        std::fs::read_dir(&dir).map_err(|e| ApiError::bad_request(format!("无法列出目录：{e}")))?;
+
+    let mut all: Vec<FileEntry> = Vec::new();
+    for entry in read_dir.flatten() {
+        let name = match entry.file_name().to_str() {
+            Some(s) => s.to_string(),
+            None => continue, // 忽略非 UTF-8 文件名
+        };
+        if !q.hidden && name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        all.push(FileEntry {
+            name,
+            path: path.display().to_string(),
+            is_dir: meta.is_dir(),
+            size: meta.len(),
+        });
+    }
+
+    // 排序：目录在前；同类按名（不区分大小写）
+    all.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    let truncated = all.len() > MAX_DIR_ENTRIES;
+    if truncated {
+        all.truncate(MAX_DIR_ENTRIES);
+    }
+
+    Ok(Json(ListResp {
+        dir: dir.display().to_string(),
+        parent: dir.parent().map(|p| p.display().to_string()),
+        entries: all,
+        truncated,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// /api/parse — 解析 Markdown 字符串为 IR（不写盘）
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ParseReq {
+    source: String,
+}
+
+async fn api_parse(Json(req): Json<ParseReq>) -> Json<serde_json::Value> {
+    let doc = crate::markdown::parser::parse_markdown(&req.source, 120);
+    Json(serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null))
+}
+
+// ---------------------------------------------------------------------------
+// /api/save — 原子写回文件
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SaveReq {
+    path: String,
+    source: String,
+}
+
+#[derive(Serialize)]
+struct SaveResp {
+    ok: bool,
+    saved_at: u128,
+}
+
+async fn api_save(Json(req): Json<SaveReq>) -> Result<Json<SaveResp>, ApiError> {
+    if req.source.len() as u64 > MAX_FILE_SIZE {
+        return Err(ApiError::bad_request(format!(
+            "保存内容过大（{} 字节，超过 {} 字节上限）",
+            req.source.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+    let path = canonicalize(&req.path)?;
+    if !path.is_file() {
+        return Err(ApiError::bad_request("目标不是一个普通文件"));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| ApiError::bad_request("无法定位父目录"))?;
+
+    // tempfile + persist：在同目录创建临时文件 → 写入 → 原子 rename
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|e| ApiError::internal(format!("创建临时文件失败：{e}")))?;
+    use std::io::Write;
+    tmp.write_all(req.source.as_bytes())
+        .map_err(|e| ApiError::internal(format!("写入临时文件失败：{e}")))?;
+    tmp.as_file()
+        .sync_all()
+        .map_err(|e| ApiError::internal(format!("同步临时文件失败：{e}")))?;
+    tmp.persist(&path)
+        .map_err(|e| ApiError::internal(format!("原子替换失败：{e}")))?;
+
+    let saved_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    Ok(Json(SaveResp { ok: true, saved_at }))
+}
+
+// ---------------------------------------------------------------------------
+// /api/asset — 返回静态资源（图片等）
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct AssetQuery {
+    path: String,
+}
+
+async fn api_asset(Query(q): Query<AssetQuery>) -> Result<Response, ApiError> {
+    let path = canonicalize(&q.path)?;
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| ApiError::bad_request(format!("无法读取文件：{e}")))?;
+    if !metadata.is_file() {
+        return Err(ApiError::bad_request("不是一个普通文件"));
+    }
+    if metadata.len() > MAX_ASSET_SIZE {
+        return Err(ApiError::bad_request(format!(
+            "资源过大（{} 字节，超过 {} 字节上限）",
+            metadata.len(),
+            MAX_ASSET_SIZE
+        )));
+    }
+    let bytes =
+        std::fs::read(&path).map_err(|e| ApiError::internal(format!("读取资源失败：{e}")))?;
+    let mime = mime_guess::from_path(&path).first_or_octet_stream();
+    let mut response = Response::new(axum::body::Body::from(bytes));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(mime.as_ref())
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    Ok(response)
+}
+
+// ---------------------------------------------------------------------------
+// /api/shutdown — 浏览器关闭页面时触发
+// ---------------------------------------------------------------------------
+
 async fn api_shutdown(State(state): State<AppState>) -> &'static str {
     state.shutdown.notify_one();
     "ok"
 }
 
+// ---------------------------------------------------------------------------
+// Static assets
+// ---------------------------------------------------------------------------
+
 async fn index_handler() -> Response {
-    // Reader SPA 入口固定为 reader.html（由 `web/vite.config.reader.ts` 决定）。
     serve_embedded("reader.html").unwrap_or_else(not_found)
 }
 
 async fn static_handler(uri: Uri) -> Response {
-    // 去掉前导 `/`
     let path = uri.path().trim_start_matches('/');
     if path.is_empty() {
         return index_handler().await;
@@ -135,4 +379,75 @@ fn serve_embedded(path: &str) -> Option<Response> {
 
 fn not_found() -> Response {
     (StatusCode::NOT_FOUND, "404 Not Found").into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// 规范化路径（解析 `..`、软链、`~`），失败返回 4xx 错误。
+fn canonicalize(input: &str) -> Result<PathBuf, ApiError> {
+    let expanded = expand_tilde(input);
+    std::fs::canonicalize(&expanded)
+        .map_err(|e| ApiError::bad_request(format!("无法解析路径 \"{input}\"：{e}")))
+}
+
+fn expand_tilde(path: &str) -> String {
+    if (path == "~" || path.starts_with("~/"))
+        && let Some(home) = dirs::home_dir()
+    {
+        if path == "~" {
+            home.display().to_string()
+        } else {
+            format!("{}{}", home.display(), &path[1..])
+        }
+    } else {
+        path.to_string()
+    }
+}
+
+/// 宽容的 bool 反序列化 —— 用于 query string 字段。
+///
+/// 标准 serde bool 只接受 `true` / `false` 字面量；query string 里前端常用
+/// `1` / `0`、`yes` / `no`，直接走默认 deserializer 会 400。这里统一兜住。
+fn deserialize_flexible_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = String::deserialize(deserializer).unwrap_or_default();
+    Ok(matches!(
+        raw.to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on" | "y" | "t"
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// 统一错误响应
+// ---------------------------------------------------------------------------
+
+struct ApiError {
+    status: StatusCode,
+    message: String,
+}
+
+impl ApiError {
+    fn bad_request(msg: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            message: msg.into(),
+        }
+    }
+    fn internal(msg: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: msg.into(),
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let body = serde_json::json!({ "error": self.message });
+        (self.status, Json(body)).into_response()
+    }
 }

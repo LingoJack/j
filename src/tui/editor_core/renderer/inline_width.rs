@@ -130,6 +130,15 @@ fn collect_visible_text(inline: &Inline, out: &mut Vec<String>) {
                 collect_visible_text(c, out);
             }
         }
+        Inline::Image { alt, url } => {
+            // 与终端渲染的占位文本保持一致
+            let placeholder = if alt.is_empty() {
+                format!("[图片]({})", url)
+            } else {
+                format!("[图片: {}]({})", alt, url)
+            };
+            out.push(placeholder);
+        }
         Inline::SoftBreak | Inline::HardBreak => {}
     }
 }

@@ -87,6 +87,18 @@ fn render_inline(
             // 硬换行在 inline 层用换行符标记，上层 render_block 需要处理
             out.push(Span::raw("\n"));
         }
+        Inline::Image { url, alt } => {
+            // 终端 / TUI 不支持图片，退化为「[图片: alt](url)」纯文本占位
+            let placeholder = if alt.is_empty() {
+                format!("[图片]({})", url)
+            } else {
+                format!("[图片: {}]({})", alt, url)
+            };
+            out.push(Span::styled(
+                placeholder,
+                base_style.add_modifier(Modifier::DIM),
+            ));
+        }
     }
 }
 
@@ -101,6 +113,7 @@ fn collect_inline_text(inlines: &[Inline]) -> String {
             | Inline::Emphasis(children)
             | Inline::Strikethrough(children) => result.push_str(&collect_inline_text(children)),
             Inline::Link { text, .. } => result.push_str(&collect_inline_text(text)),
+            Inline::Image { alt, .. } => result.push_str(alt),
             Inline::SoftBreak => result.push(' '),
             Inline::HardBreak => result.push('\n'),
         }
@@ -121,6 +134,14 @@ pub fn inline_display_width(inlines: &[Inline]) -> usize {
             Inline::SoftBreak => 1,
             Inline::HardBreak => 0,
             Inline::Link { text, .. } => inline_display_width(text),
+            Inline::Image { alt, url } => {
+                // 与 render_inline 占位文本宽度一致
+                if alt.is_empty() {
+                    display_width(&format!("[图片]({})", url))
+                } else {
+                    display_width(&format!("[图片: {}]({})", alt, url))
+                }
+            }
         })
         .sum()
 }
