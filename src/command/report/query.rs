@@ -7,7 +7,7 @@ use crate::{error, info};
 use colored::Colorize;
 use std::path::Path;
 
-use super::io::{get_report_path, read_last_n_lines};
+use super::io::{get_report_path, read_last_n_lines, read_last_n_lines_block_aware};
 use super::write::handle_open_report;
 
 // ========== check 命令 ==========
@@ -44,7 +44,7 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
         return;
     }
 
-    let lines = read_last_n_lines(path, num);
+    let lines = read_last_n_lines_block_aware(path, num);
     info!("最近的 {} 行内容如下：", lines.len());
     let md_content = lines.join("\n");
     crate::md!("{}", md_content);

@@ -15,12 +15,41 @@ pub fn render_block(block: &Block, ctx: &RenderContext) -> Vec<Line<'static>> {
     match &block.kind {
         BlockKind::Paragraph(inlines) => render_paragraph(inlines, ctx),
         BlockKind::Heading { level, content } => render_heading(*level, content, ctx),
-        BlockKind::CodeBlock { lang, code } => render_code_block(lang, code, ctx.width, ctx.theme),
+        BlockKind::CodeBlock { lang, code, fenced } => {
+            if *fenced {
+                render_code_block(lang, code, ctx.width, ctx.theme)
+            } else {
+                // 缩进代码块（4 空格）退化为普通段落渲染：实际项目里它常常是
+                // 列表项的缩进续行，被切片喂给解析器后才被识别成代码块——画框
+                // 反而误导。editor_core 的 BlockCache 也是同样的策略。
+                render_indented_code_as_paragraph(code, ctx)
+            }
+        }
         BlockKind::Table(data) => render_table(data, &data.alignments, ctx.width, ctx.theme),
         BlockKind::List(data) => render_list(data, ctx, 0),
         BlockKind::BlockQuote(blocks) => render_blockquote(blocks, ctx),
         BlockKind::Rule => render_rule(ctx),
     }
+}
+
+/// 缩进代码块降级渲染：按行输出原始文本，不画围栏框。
+fn render_indented_code_as_paragraph(code: &str, ctx: &RenderContext) -> Vec<Line<'static>> {
+    let style = Style::default().fg(ctx.theme.text_normal());
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    for raw in code.lines() {
+        let spans = vec![Span::styled(raw.to_string(), style)];
+        // 按宽度折行，保持与普通段落一致
+        let wrapped = wrap_spans_with_prefix(spans, ctx.width, Vec::new(), Vec::new());
+        if wrapped.is_empty() {
+            lines.push(Line::from(""));
+        } else {
+            lines.extend(wrapped);
+        }
+    }
+    if lines.is_empty() {
+        lines.push(Line::from(""));
+    }
+    lines
 }
 
 /// 渲染段落

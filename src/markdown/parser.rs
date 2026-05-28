@@ -58,6 +58,7 @@ struct ParseContext {
     in_code_block: bool,
     code_block_content: String,
     code_block_lang: String,
+    code_block_fenced: bool,
 
     // --- List (栈式，支持嵌套) ---
     /// 列表栈：每进入一个 `Tag::List` push 一帧，`End` 时 pop
@@ -97,6 +98,7 @@ impl ParseContext {
             in_code_block: false,
             code_block_content: String::new(),
             code_block_lang: String::new(),
+            code_block_fenced: false,
             list_stack: Vec::new(),
             item_stack: Vec::new(),
             heading_level: None,
@@ -426,6 +428,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
                 ctx.flush_paragraph();
                 ctx.in_code_block = true;
                 ctx.code_block_content.clear();
+                ctx.code_block_fenced = matches!(kind, pulldown_cmark::CodeBlockKind::Fenced(_));
                 ctx.code_block_lang = match kind {
                     pulldown_cmark::CodeBlockKind::Fenced(lang) => lang.to_string(),
                     pulldown_cmark::CodeBlockKind::Indented => String::new(),
@@ -437,10 +440,12 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
                     kind: BlockKind::CodeBlock {
                         lang: std::mem::take(&mut ctx.code_block_lang),
                         code: std::mem::take(&mut ctx.code_block_content),
+                        fenced: ctx.code_block_fenced,
                     },
                 };
                 ctx.push_block(block);
                 ctx.in_code_block = false;
+                ctx.code_block_fenced = false;
             }
 
             // ===== Inline Code =====

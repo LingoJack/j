@@ -52,6 +52,11 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         if app.mode == AppMode::CommandPopup {
             draw_command_popup(f, app, chunks[1]);
         }
+
+        // 路径补全弹窗（与命令面板互斥）
+        if app.completion_active && app.mode != AppMode::CommandPopup {
+            draw_completion_popup(f, app, chunks[1]);
+        }
     }
 
     // ========== 帮助栏 ==========
@@ -62,14 +67,14 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
             }
             Focus::Editor => " :w 保存 | :wq 保存退出 | :q 退出编辑 | Esc(Normal) 回目录树",
         },
-        AppMode::Adding => " Enter 确认新建 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
-        AppMode::Renaming => " Enter 确认重命名 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
+        AppMode::Adding => " Enter 确认 | Tab 补全 | Esc 取消 | 目录用 / 分隔，如 ideas/note",
+        AppMode::Renaming => " Enter 确认 | Tab 补全 | Esc 取消 | ←→ 移动光标",
         AppMode::Search => " Enter 搜索 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
         AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | 输入筛选 | Esc 取消",
         AppMode::RatioInput => " Enter 确认 | Esc 取消 | 格式: x:y (如 20:80)",
-        AppMode::Mkdir => " Enter 确认创建目录 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
-        AppMode::Mv => " Enter 确认移动 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
+        AppMode::Mkdir => " Enter 确认 | Tab 补全 | Esc 取消 | 支持 a/b 嵌套",
+        AppMode::Mv => " Enter 确认 | Tab 补全 | Esc 取消 | 末尾 / = 放入该目录",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(
         help_text,
@@ -306,8 +311,8 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     label_color: Color::Cyan,
                     input: &app.input,
                     cursor_pos: app.cursor_pos,
-                    placeholder: "输入目录名…",
-                    hint: "Enter 确认 | Esc 取消",
+                    placeholder: "输入目录名 (支持 a/b 嵌套)",
+                    hint: "Enter 确认 | Tab 补全 | Esc 取消",
                 },
                 &app.theme,
             );
@@ -321,8 +326,8 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     label_color: Color::Magenta,
                     input: &app.input,
                     cursor_pos: app.cursor_pos,
-                    placeholder: "输入目标路径…",
-                    hint: "Enter 确认 | Esc 取消",
+                    placeholder: "目录路径或新文件名 · 末尾 / 放入目录",
+                    hint: "Enter 确认 | Tab 补全 | Esc 取消",
                 },
                 &app.theme,
             );
@@ -396,9 +401,10 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
 /// 绘制命令面板弹窗（浮动在主区域底部）
 fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: Rect) {
     let items = app.filtered_cmd_items();
+    // hotkey 放 key 列（左侧），中文 label 放 label 列（右侧）
     let cmd_items: Vec<CommandItem<'_>> = items
         .iter()
-        .map(|(_, key, label)| CommandItem::new(key, label))
+        .map(|(_, _, label, hotkey)| CommandItem::new(hotkey, label))
         .collect();
 
     let title = if app.cmd_popup_filter.is_empty() {
@@ -414,6 +420,32 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
             title,
             items: cmd_items,
             selected: app.cmd_popup_selected,
+            highlight_fg: Some(Color::Black),
+            theme: &app.theme,
+        },
+    );
+}
+
+/// 绘制路径补全弹窗（复用命令面板组件）。
+fn draw_completion_popup(f: &mut ratatui::Frame, app: &NotebookApp, main_area: Rect) {
+    if app.completion_candidates.is_empty() {
+        return;
+    }
+    let cmd_items: Vec<CommandItem<'_>> = app
+        .completion_candidates
+        .iter()
+        .map(|c| CommandItem::new(c.as_str(), ""))
+        .collect();
+
+    let title = format!(" 补全 ({}) ", app.completion_candidates.len());
+
+    render_command_popup(
+        f,
+        main_area,
+        &CommandPopupConfig {
+            title,
+            items: cmd_items,
+            selected: app.completion_selected,
             highlight_fg: Some(Color::Black),
             theme: &app.theme,
         },

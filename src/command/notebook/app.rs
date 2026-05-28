@@ -6,6 +6,7 @@
 //! - `flat_entries` — 树形目录扁平化构建
 //! - `input` — 各模式按键处理分发
 
+pub mod completion;
 pub mod flat_entries;
 pub mod input;
 pub mod io;

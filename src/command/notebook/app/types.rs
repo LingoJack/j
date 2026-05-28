@@ -127,17 +127,19 @@ pub enum AppMode {
     Mv,
 }
 
-/// 目录树命令面板选项列表 (key, 中文标签)
-pub const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
-    ("new", "新建笔记"),
-    ("search", "搜索"),
-    ("rename", "重命名"),
-    ("delete", "删除"),
-    ("mkdir", "新建目录"),
-    ("mv", "移动"),
-    ("open", "打开目录"),
-    ("ratio", "调整比例"),
-    ("help", "帮助"),
+/// 目录树命令面板选项列表 (key, 中文标签, 树焦点下的快捷键)
+///
+/// 第三列空字符串表示在目录树焦点下没有直接快捷键，必须从命令面板进入。
+pub const CMD_POPUP_ITEMS: &[(&str, &str, &str)] = &[
+    ("new", "新建笔记", "a"),
+    ("rename", "重命名", "r"),
+    ("delete", "删除", "d"),
+    ("search", "搜索", ""),
+    ("mkdir", "新建目录", ""),
+    ("mv", "移动", ""),
+    ("open", "打开目录", "o"),
+    ("ratio", "调整比例", ""),
+    ("help", "帮助", ""),
 ];
 
 // ========== TUI 应用状态 ==========
@@ -192,6 +194,16 @@ pub struct NotebookApp {
     pub focus: Focus,
     /// 标记是否需要退出 TUI
     pub should_exit: bool,
+
+    // ========== 路径补全 ==========
+    /// 补全弹窗是否激活
+    pub completion_active: bool,
+    /// 当前候选列表（已按前缀过滤）
+    pub completion_candidates: Vec<String>,
+    /// 弹窗中的高亮索引
+    pub completion_selected: usize,
+    /// 被替换的子串在 input 中的字符起点（即光标前最后一个 `/` 之后的位置）
+    pub completion_replace_start: usize,
 }
 
 impl Default for NotebookApp {
@@ -232,6 +244,10 @@ impl NotebookApp {
             is_dragging_panel: false,
             focus: Focus::Tree,
             should_exit: false,
+            completion_active: false,
+            completion_candidates: Vec::new(),
+            completion_selected: 0,
+            completion_replace_start: 0,
         };
         app.build_flat_entries();
         if !app.flat_entries.is_empty() {
@@ -255,6 +271,75 @@ impl NotebookApp {
         }
         self.load_editor_for_selected();
         self.message = Some(format!("已刷新，共 {} 篇笔记", self.notes.len()));
+    }
+
+    /// 刷新笔记列表，并尝试把选中位置定位到指定路径。
+    ///
+    /// - 找到对应文件条目 → 选中
+    /// - 未找到 → 退化为 clamp 行为
+    ///
+    /// 不覆盖 `message`（由调用者写入更具体的提示）。
+    pub fn reload_select_path(&mut self, target: Option<&str>) {
+        self.notes = load_notes();
+        self.build_flat_entries();
+        let count = self.flat_entries.len();
+        if count == 0 {
+            self.state.select(None);
+            self.load_editor_for_selected();
+            return;
+        }
+
+        if let Some(p) = target {
+            for (i, e) in self.flat_entries.iter().enumerate() {
+                if let FlatEntryKind::File { note_index } = &e.kind
+                    && self.notes[*note_index].path == p
+                {
+                    self.state.select(Some(i));
+                    self.load_editor_for_selected();
+                    return;
+                }
+            }
+        }
+
+        // fallback: clamp
+        if let Some(sel) = self.state.selected()
+            && sel >= count
+        {
+            self.state.select(Some(count - 1));
+        } else if self.state.selected().is_none() {
+            self.state.select(Some(0));
+        }
+        self.load_editor_for_selected();
+    }
+
+    /// 给定将要被删除的笔记路径，返回删除后应当选中的相邻笔记路径（同父目录）。
+    ///
+    /// 策略：
+    /// 1. 同父目录中按 path 字典序大于 deleted 的首条
+    /// 2. 否则同父目录中字典序最大的一条
+    /// 3. 否则 None（让 reload_select_path fallback）
+    pub fn find_neighbor_after_delete(&self, deleted_path: &str) -> Option<String> {
+        let parent = deleted_path.rsplit_once('/').map(|(p, _)| p);
+        let siblings: Vec<&str> = self
+            .notes
+            .iter()
+            .map(|n| n.path.as_str())
+            .filter(|p| *p != deleted_path)
+            .filter(|p| p.rsplit_once('/').map(|(d, _)| d) == parent)
+            .collect();
+
+        if siblings.is_empty() {
+            return None;
+        }
+
+        // 1. 字典序大于 deleted 的首条
+        let mut sorted = siblings.clone();
+        sorted.sort();
+        if let Some(p) = sorted.iter().find(|p| **p > deleted_path) {
+            return Some((*p).to_string());
+        }
+        // 2. 同父目录最后一条（字典序最大）
+        sorted.last().map(|s| s.to_string())
     }
 
     /// 获取过滤后的索引列表
@@ -486,19 +571,21 @@ impl NotebookApp {
         self.message = Some("已清除搜索过滤".to_string());
     }
 
-    /// 获取筛选后的命令面板选项
-    pub fn filtered_cmd_items(&self) -> Vec<(usize, &'static str, &'static str)> {
+    /// 获取筛选后的命令面板选项 (orig_idx, key, label, hotkey)
+    pub fn filtered_cmd_items(&self) -> Vec<(usize, &'static str, &'static str, &'static str)> {
         CMD_POPUP_ITEMS
             .iter()
             .enumerate()
-            .filter(|(_, (key, label))| {
+            .filter(|(_, (key, label, hotkey))| {
                 if self.cmd_popup_filter.is_empty() {
                     return true;
                 }
                 let f = self.cmd_popup_filter.to_lowercase();
-                key.to_lowercase().contains(&f) || label.contains(f.as_str())
+                key.to_lowercase().contains(&f)
+                    || label.contains(f.as_str())
+                    || hotkey.to_lowercase().contains(&f)
             })
-            .map(|(i, (k, l))| (i, *k, *l))
+            .map(|(i, (k, l, h))| (i, *k, *l, *h))
             .collect()
     }
 

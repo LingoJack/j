@@ -7,10 +7,111 @@ use super::io::{
     cleanup_empty_dirs, note_file_path, notebook_dir, open_in_finder, parse_ratio,
     save_expanded_dirs, save_panel_ratio,
 };
-use super::types::{AppMode, NotebookApp};
+use super::types::{AppMode, FlatEntryKind, NotebookApp};
+
+// ========== 模式入口 helper（命令面板与树焦点快捷键共用） ==========
+
+/// 进入新建笔记模式：根据当前选中条目预填目录前缀。
+///
+/// - 选中文件 `ideas/foo` → 预填 `ideas/`
+/// - 选中目录 `ideas`（无论是否展开）→ 预填 `ideas/`
+/// - 根目录或无选中 → 预填空
+///
+/// 光标置于末尾。
+pub fn enter_adding_mode(app: &mut NotebookApp) {
+    let prefix = adding_prefix_for_selection(app);
+    app.input = prefix;
+    app.cursor_pos = app.input.chars().count();
+    app.mode = AppMode::Adding;
+    app.message = None;
+}
+
+/// 进入重命名模式：预填完整路径，光标停在最后 `/` 之后（basename 起点）。
+pub fn enter_renaming_mode(app: &mut NotebookApp, idx: usize) {
+    if idx >= app.notes.len() {
+        return;
+    }
+    app.input = app.notes[idx].path.clone();
+    app.cursor_pos = basename_start_cursor(&app.input);
+    app.rename_index = Some(idx);
+    app.mode = AppMode::Renaming;
+    app.message = None;
+}
+
+/// 计算 Adding 模式应预填的目录前缀（含末尾 `/`）。
+fn adding_prefix_for_selection(app: &NotebookApp) -> String {
+    match app.selected_entry() {
+        Some(entry) => match &entry.kind {
+            FlatEntryKind::Dir { dir_path, .. } => format!("{}/", dir_path),
+            FlatEntryKind::File { note_index } => app
+                .notes
+                .get(*note_index)
+                .and_then(|n| n.parent_dir())
+                .map(|d| format!("{}/", d))
+                .unwrap_or_default(),
+        },
+        None => String::new(),
+    }
+}
+
+/// 计算重命名时光标位置：最后 `/` 之后；若无 `/` 则回到 0。
+fn basename_start_cursor(path: &str) -> usize {
+    match path.rfind('/') {
+        Some(b) => path[..=b].chars().count(),
+        None => 0,
+    }
+}
 
 /// 输入模式按键处理（添加/重命名/搜索/目录/移动通用）
 pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
+    // ========== 补全弹窗激活时的优先处理 ==========
+    if app.completion_active {
+        use super::completion::{
+            accept_completion, close_completion, move_completion_down, move_completion_up,
+        };
+        match key.code {
+            KeyCode::Up => {
+                move_completion_up(app);
+                return;
+            }
+            KeyCode::Down => {
+                move_completion_down(app);
+                return;
+            }
+            KeyCode::Enter | KeyCode::Tab => {
+                accept_completion(app);
+                return;
+            }
+            KeyCode::Esc => {
+                close_completion(app);
+                return;
+            }
+            // 其他可编辑键透传给原逻辑后刷新候选
+            KeyCode::Char(_)
+            | KeyCode::Backspace
+            | KeyCode::Delete
+            | KeyCode::Left
+            | KeyCode::Right
+            | KeyCode::Home
+            | KeyCode::End => {
+                // 落到下方常规处理
+            }
+            _ => return,
+        }
+    }
+
+    // ========== Tab 触发补全 ==========
+    if !app.completion_active
+        && key.code == KeyCode::Tab
+        && matches!(
+            app.mode,
+            AppMode::Adding | AppMode::Renaming | AppMode::Mkdir | AppMode::Mv
+        )
+    {
+        super::completion::open_completion(app);
+        return;
+    }
+
     let char_count = app.input.chars().count();
 
     match key.code {
@@ -47,6 +148,14 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
         }
         _ => {}
     }
+
+    // 补全激活时，input 或光标可能已变化，刷新候选
+    if app.completion_active {
+        super::completion::rebuild_candidates(app);
+        if app.completion_candidates.is_empty() {
+            super::completion::close_completion(app);
+        }
+    }
 }
 
 /// 确认删除按键处理
@@ -54,13 +163,14 @@ pub fn handle_confirm_delete(app: &mut NotebookApp, key: KeyEvent) {
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
             if let Some(idx) = app.selected_real_index() {
-                let name = &app.notes[idx].path;
-                let path = note_file_path(name);
+                let name = app.notes[idx].path.clone();
+                let neighbor = app.find_neighbor_after_delete(&name);
+                let path = note_file_path(&name);
                 match fs::remove_file(&path) {
                     Ok(()) => {
                         cleanup_empty_dirs();
+                        app.reload_select_path(neighbor.as_deref());
                         app.message = Some(format!("已删除: {}", name));
-                        app.reload();
                     }
                     Err(e) => {
                         app.message = Some(format!("删除失败: {}", e));
@@ -214,15 +324,15 @@ fn enter_renaming(app: &mut NotebookApp) {
     if let Some(idx) = app.rename_index
         && idx < app.notes.len()
     {
-        let old_name = &app.notes[idx].path;
-        if old_name == &new_name {
+        let old_name = app.notes[idx].path.clone();
+        if old_name == new_name {
             app.message = Some("名称未变化".to_string());
             app.mode = AppMode::Normal;
             app.input.clear();
             app.rename_index = None;
             return;
         }
-        let old_path = note_file_path(old_name);
+        let old_path = note_file_path(&old_name);
         let new_path = note_file_path(&new_name);
         if new_path.exists() {
             // 不退出 Renaming 模式：把错误信息写到状态栏，让用户继续修改输入。
@@ -235,17 +345,22 @@ fn enter_renaming(app: &mut NotebookApp) {
         match fs::rename(&old_path, &new_path) {
             Ok(()) => {
                 cleanup_empty_dirs();
+                app.reload_select_path(Some(&new_name));
                 app.message = Some(format!("已重命名: {} → {}", old_name, new_name));
-                app.reload();
+                app.mode = AppMode::Normal;
+                app.input.clear();
+                app.rename_index = None;
             }
             Err(e) => {
+                // 与 mv 一致：失败时停留在 Renaming 模式让用户继续修改
                 app.message = Some(format!("重命名失败: {}", e));
             }
         }
+    } else {
+        app.mode = AppMode::Normal;
+        app.input.clear();
+        app.rename_index = None;
     }
-    app.mode = AppMode::Normal;
-    app.input.clear();
-    app.rename_index = None;
 }
 
 /// 新建目录 Enter 处理
@@ -280,12 +395,17 @@ fn enter_mkdir(app: &mut NotebookApp) {
 }
 
 /// 移动笔记 Enter 处理
+///
+/// 语义：
+/// - 输入末尾为 `/` 时（如 `ideas/`），表示「移到该目录下，保留原文件名」
+/// - 否则按完整目标路径处理（可改文件名）
+///
+/// 错误处理：与 Renaming 一致，不退出 Mv 模式，仅把错误写到 `message` 让用户继续修改。
+/// 仅成功时才退回 Normal。
 fn enter_mv(app: &mut NotebookApp) {
-    let target = app.input.trim().to_string();
-    if target.is_empty() {
-        app.message = Some("目标路径为空，已取消".to_string());
-        app.mode = AppMode::Normal;
-        app.input.clear();
+    let target_raw = app.input.trim().to_string();
+    if target_raw.is_empty() {
+        app.message = Some("目标路径为空".to_string());
         return;
     }
     let current_name = app.selected_name().unwrap_or_default();
@@ -295,8 +415,22 @@ fn enter_mv(app: &mut NotebookApp) {
         app.input.clear();
         return;
     }
+
+    // 末尾 `/` → 移到目录下，保留原文件名
+    let final_target = if target_raw.ends_with('/') {
+        let basename = current_name.rsplit('/').next().unwrap_or(&current_name);
+        format!("{}{}", target_raw, basename)
+    } else {
+        target_raw.clone()
+    };
+
+    if final_target == current_name {
+        app.message = Some("目标与源相同".to_string());
+        return;
+    }
+
     let old_path = note_file_path(&current_name);
-    let new_path = note_file_path(&target);
+    let new_path = note_file_path(&final_target);
     if !old_path.exists() {
         app.message = Some(format!("源笔记不存在: {}", current_name));
         app.mode = AppMode::Normal;
@@ -304,9 +438,7 @@ fn enter_mv(app: &mut NotebookApp) {
         return;
     }
     if new_path.exists() {
-        app.message = Some(format!("目标笔记已存在: {}", target));
-        app.mode = AppMode::Normal;
-        app.input.clear();
+        app.message = Some(format!("目标笔记已存在: {}", final_target));
         return;
     }
     if let Some(parent) = new_path.parent() {
@@ -315,15 +447,15 @@ fn enter_mv(app: &mut NotebookApp) {
     match fs::rename(&old_path, &new_path) {
         Ok(()) => {
             cleanup_empty_dirs();
-            app.message = Some(format!("已移动: {} → {}", current_name, target));
-            app.reload();
+            app.message = Some(format!("已移动: {} → {}", current_name, final_target));
+            app.reload_select_path(Some(&final_target));
+            app.mode = AppMode::Normal;
+            app.input.clear();
         }
         Err(e) => {
             app.message = Some(format!("移动失败: {}", e));
         }
     }
-    app.mode = AppMode::Normal;
-    app.input.clear();
 }
 
 /// 搜索 Enter 处理
@@ -356,16 +488,13 @@ fn enter_search(app: &mut NotebookApp) {
 /// 执行命令面板选中的动作
 fn execute_cmd_popup_action(app: &mut NotebookApp) {
     let items = app.filtered_cmd_items();
-    let Some(&(_orig_idx, cmd_key, _label)) = items.get(app.cmd_popup_selected) else {
+    let Some(&(_orig_idx, cmd_key, _label, _hotkey)) = items.get(app.cmd_popup_selected) else {
         return;
     };
 
     match cmd_key {
         "new" => {
-            app.mode = AppMode::Adding;
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.message = None;
+            enter_adding_mode(app);
         }
         "search" => {
             app.mode = AppMode::Search;
@@ -375,11 +504,7 @@ fn execute_cmd_popup_action(app: &mut NotebookApp) {
         }
         "rename" => {
             if let Some(idx) = app.selected_real_index() {
-                app.input = app.notes[idx].path.clone();
-                app.cursor_pos = app.input.chars().count();
-                app.rename_index = Some(idx);
-                app.mode = AppMode::Renaming;
-                app.message = None;
+                enter_renaming_mode(app, idx);
             } else {
                 app.mode = AppMode::Normal;
                 app.message = Some("没有选中的笔记".to_string());

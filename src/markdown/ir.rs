@@ -50,8 +50,16 @@ pub enum BlockKind {
     Paragraph(Vec<Inline>),
     /// 标题（level: 1-6）
     Heading { level: u8, content: Vec<Inline> },
-    /// 围栏代码块
-    CodeBlock { lang: String, code: String },
+    /// 代码块（fenced 或 indented）
+    ///
+    /// `fenced`：true 表示围栏代码块（``` 包裹），false 表示缩进代码块（4 空格）。
+    /// 渲染时只对 fenced 画框，indented 退化为普通段落，避免在源码切片渲染场景下
+    /// 把列表项缩进续行误画成代码块。
+    CodeBlock {
+        lang: String,
+        code: String,
+        fenced: bool,
+    },
     /// 表格
     Table(TableData),
     /// 列表

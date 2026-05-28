@@ -1,3 +1,4 @@
+use super::app::input::{enter_adding_mode, enter_renaming_mode};
 use super::app::{
     AppMode, FlatEntryKind, Focus, NotebookApp, edit_note_with_editor, handle_command_popup_mode,
     handle_confirm_delete, handle_input_mode, handle_ratio_input_mode, load_notes, note_file_path,
@@ -437,19 +438,12 @@ fn handle_tree_focus_key(app: &mut NotebookApp, key: crossterm::event::KeyEvent)
         }
         // a 新建笔记
         KeyCode::Char('a') => {
-            app.mode = AppMode::Adding;
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.message = None;
+            enter_adding_mode(app);
         }
         // r 重命名选中文件
         KeyCode::Char('r') => {
             if let Some(idx) = app.selected_real_index() {
-                app.input = app.notes[idx].path.clone();
-                app.cursor_pos = app.input.chars().count();
-                app.rename_index = Some(idx);
-                app.mode = AppMode::Renaming;
-                app.message = None;
+                enter_renaming_mode(app, idx);
             } else {
                 app.message = Some("没有选中的笔记".to_string());
             }
