@@ -1,4 +1,4 @@
-use crate::util::text::{char_width, display_width};
+use crate::util::text::{chars_with_display_width, display_width};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
@@ -30,7 +30,7 @@ pub(crate) fn wrap_spans_with_prefix(
 
     for span in spans {
         let style = span.style;
-        for ch in span.content.chars() {
+        for (ch, ch_width) in chars_with_display_width(&span.content) {
             if ch == '\n' {
                 flush_text_buffer(&mut current_line, &mut current_text, &mut current_style);
                 lines.push(Line::from(std::mem::take(&mut current_line)));
@@ -41,7 +41,6 @@ pub(crate) fn wrap_spans_with_prefix(
                 continue;
             }
 
-            let ch_width = char_width(ch);
             if current_width + ch_width > max_width && current_width > current_prefix_width {
                 flush_text_buffer(&mut current_line, &mut current_text, &mut current_style);
                 lines.push(Line::from(std::mem::take(&mut current_line)));

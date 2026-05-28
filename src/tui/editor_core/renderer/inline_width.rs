@@ -55,11 +55,17 @@ pub fn compute_visible_widths(line: &str) -> Vec<u8> {
         return Vec::new();
     }
 
-    // 默认按源码 char_width
-    let mut widths: Vec<u8> = src_chars
-        .iter()
-        .map(|c| char_width(*c).min(u8::MAX as usize) as u8)
-        .collect();
+    // 默认按源码 char_width，处理 emoji 表现序列（base + U+FE0F → base 宽度提升为 2）
+    let mut widths: Vec<u8> = Vec::with_capacity(n);
+    for (i, c) in src_chars.iter().enumerate() {
+        let w = char_width(*c);
+        // 基础字符宽度为 1 且下一个字符是 U+FE0F → emoji 表现样式，占 2 列
+        if w == 1 && i + 1 < n && src_chars[i + 1] == '\u{FE0F}' {
+            widths.push(2);
+        } else {
+            widths.push(w.min(u8::MAX as usize) as u8);
+        }
+    }
 
     let inlines = parse_inline_text(line);
     if inlines.is_empty() {

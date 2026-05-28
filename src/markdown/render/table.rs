@@ -1,6 +1,6 @@
 use crate::markdown::ir::{Inline, TableData};
 use crate::markdown::theme::MdStyle;
-use crate::util::text::{char_width, display_width};
+use crate::util::text::{chars_with_display_width, display_width};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -142,13 +142,19 @@ pub fn render_table(
                 // 单元格内容截断逻辑
                 let mut actual_w: usize = cell_spans
                     .iter()
-                    .map(|s| s.content.chars().map(char_width).sum::<usize>())
+                    .map(|s| {
+                        chars_with_display_width(&s.content)
+                            .map(|(_, w)| w)
+                            .sum::<usize>()
+                    })
                     .sum();
                 if actual_w > *cw {
                     let mut truncated = Vec::new();
                     let mut w = 0;
                     for span in cell_spans {
-                        let span_w: usize = span.content.chars().map(char_width).sum();
+                        let span_w: usize = chars_with_display_width(&span.content)
+                            .map(|(_, w)| w)
+                            .sum();
                         if w + span_w <= *cw {
                             w += span_w;
                             truncated.push(span);
@@ -156,8 +162,7 @@ pub fn render_table(
                             let remain = *cw - w;
                             let mut buf = String::new();
                             let mut bw = 0;
-                            for ch in span.content.chars() {
-                                let chw = char_width(ch);
+                            for (ch, chw) in chars_with_display_width(&span.content) {
                                 if bw + chw > remain {
                                     break;
                                 }
@@ -274,7 +279,7 @@ pub fn wrap_cell_inlines(
             cur_line.push(Span::styled(std::mem::take(&mut cur_buf), cur_style));
         }
         cur_style = style;
-        for ch in text.chars() {
+        for (ch, cw) in chars_with_display_width(&text) {
             if ch == '\n' {
                 if !cur_buf.is_empty() {
                     cur_line.push(Span::styled(std::mem::take(&mut cur_buf), cur_style));
@@ -283,7 +288,6 @@ pub fn wrap_cell_inlines(
                 cur_w = 0;
                 continue;
             }
-            let cw = char_width(ch);
             if cur_w + cw > max_width && cur_w > 0 {
                 if !cur_buf.is_empty() {
                     cur_line.push(Span::styled(std::mem::take(&mut cur_buf), cur_style));
@@ -372,12 +376,10 @@ fn inline_to_cell_pieces_recursive(
 pub fn measure_cell_wrap_lines(inlines: &[Inline], max_width: usize) -> usize {
     let max_width = max_width.max(2);
 
-    fn collect_text(inline: &Inline, out: &mut Vec<char>) {
+    fn collect_text(inline: &Inline, out: &mut String) {
         match inline {
             Inline::Text(s) | Inline::Code(s) => {
-                for ch in s.chars() {
-                    out.push(ch);
-                }
+                out.push_str(s);
             }
             Inline::Strong(children)
             | Inline::Emphasis(children)
@@ -396,17 +398,17 @@ pub fn measure_cell_wrap_lines(inlines: &[Inline], max_width: usize) -> usize {
         }
     }
 
-    let mut chars: Vec<char> = Vec::new();
+    let mut text = String::new();
     for inline in inlines {
-        collect_text(inline, &mut chars);
+        collect_text(inline, &mut text);
     }
 
     let mut lines: usize = 0;
     let mut cur_w: usize = 0;
     let mut cur_has_content: bool = false;
 
-    for ch in &chars {
-        if *ch == '\n' {
+    for (ch, cw) in chars_with_display_width(&text) {
+        if ch == '\n' {
             // wrap_cell_inlines 中 '\n' 始终把当前行 push 入 lines（即便为空），
             // 这里复刻同样行为。
             lines += 1;
@@ -414,7 +416,6 @@ pub fn measure_cell_wrap_lines(inlines: &[Inline], max_width: usize) -> usize {
             cur_has_content = false;
             continue;
         }
-        let cw = char_width(*ch);
         if cur_w + cw > max_width && cur_w > 0 {
             lines += 1;
             cur_w = 0;

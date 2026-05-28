@@ -244,12 +244,31 @@ pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
 
 /// 计算字符串的显示宽度（使用 unicode-width crate，比手动范围匹配更准确）
 /// 约定：tab 视为 4 列，其他控制字符视为 0 列，与终端归一化策略保持一致
+///
+/// 特别处理 emoji 表现序列：当字符后跟 U+FE0F (Variation Selector-16) 时，
+/// 该字符以 emoji 样式渲染，在终端中占 2 列（而非 unicode-width 返回的 1 列）。
+/// 例如 "⚠️" (U+26A0 + U+FE0F) 实际占 2 列，但逐码点计算只得 1 列。
 pub fn display_width(s: &str) -> usize {
-    s.chars().map(char_width).sum()
+    let mut chars = s.chars().peekable();
+    let mut total = 0usize;
+    while let Some(c) = chars.next() {
+        let w = char_width(c);
+        // 基础字符宽度为 1 且紧跟 U+FE0F → emoji 表现样式，占 2 列
+        if w == 1 && chars.peek() == Some(&'\u{FE0F}') {
+            chars.next(); // 消费 U+FE0F
+            total += 2;
+        } else {
+            total += w;
+        }
+    }
+    total
 }
 
 /// 计算单个字符的显示宽度（使用 unicode-width crate）
 /// 约定：tab 视为 4 列，其他控制字符视为 0 列，与终端归一化策略保持一致
+///
+/// 注意：此函数无法感知 emoji 表现序列（如 U+26A0 + U+FE0F），
+/// 若需处理 emoji 序列请使用 `chars_with_display_width` 或 `display_width`。
 pub fn char_width(c: char) -> usize {
     if c == '\t' {
         return TAB_REPLACEMENT.len();
@@ -259,6 +278,54 @@ pub fn char_width(c: char) -> usize {
     }
     use unicode_width::UnicodeWidthChar;
     UnicodeWidthChar::width(c).unwrap_or(0)
+}
+
+/// 带宽度的字符迭代器，正确处理 emoji 表现序列（base + U+FE0F）。
+///
+/// 返回 `(字符, 显示宽度)` 的迭代结果，其中 U+FE0F 本身产出 `(FE0F, 0)`，
+/// 但它前一个字符的宽度会被提升为 2（emoji 表现样式）。
+///
+/// 典型用法：
+/// ```ignore
+/// for (ch, w) in chars_with_display_width(text) {
+///     cur_w += w;
+///     if cur_w > max_width { break; }
+///     buf.push(ch);
+/// }
+/// ```
+pub fn chars_with_display_width(s: &str) -> CharsWithWidth<'_> {
+    CharsWithWidth {
+        chars: s.chars().peekable(),
+        pending_fe0f: false,
+    }
+}
+
+/// `chars_with_display_width` 的迭代器
+pub struct CharsWithWidth<'a> {
+    chars: std::iter::Peekable<std::str::Chars<'a>>,
+    pending_fe0f: bool,
+}
+
+impl<'a> Iterator for CharsWithWidth<'a> {
+    type Item = (char, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // 先输出被延迟的 U+FE0F（宽度 0），同时消费迭代器中的实际字符
+        if self.pending_fe0f {
+            self.pending_fe0f = false;
+            self.chars.next(); // 消费迭代器中的 U+FE0F，避免重复产出
+            return Some(('\u{FE0F}', 0));
+        }
+        let c = self.chars.next()?;
+        let w = char_width(c);
+        // 基础字符宽度为 1 且紧跟 U+FE0F → emoji 表现样式，基础字符占 2 列
+        if w == 1 && self.chars.peek() == Some(&'\u{FE0F}') {
+            self.pending_fe0f = true;
+            Some((c, 2))
+        } else {
+            Some((c, w))
+        }
+    }
 }
 
 /// 剥离 ANSI 转义序列（颜色、粗体等控制码），返回纯文本
@@ -367,5 +434,39 @@ mod tests {
     fn wrap_text_strips_ansi_sequences_instead_of_leaking_fragments() {
         let wrapped = wrap_text("x\x1b[31mred\x1b[0my", 80);
         assert_eq!(wrapped, vec!["xredy".to_string()]);
+    }
+}
+
+#[cfg(test)]
+mod emoji_width_tests {
+    use super::*;
+
+    #[test]
+    fn test_emoji_presentation_sequence() {
+        // ⚠️ = U+26A0 + U+FE0F, emoji presentation → 2 columns
+        assert_eq!(display_width("⚠️"), 2);
+        // Bare ⚠ without VS16 → 1 column
+        assert_eq!(display_width("⚠"), 1);
+    }
+
+    #[test]
+    fn test_chars_with_display_width_emoji() {
+        let pairs: Vec<(char, usize)> = chars_with_display_width("⚠️").collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].0, '⚠');
+        assert_eq!(pairs[0].1, 2); // base char promoted to 2
+        assert_eq!(pairs[1].0, '\u{FE0F}');
+        assert_eq!(pairs[1].1, 0); // VS16 = 0
+    }
+
+    #[test]
+    fn test_cjk_unaffected() {
+        assert_eq!(display_width("你好"), 4); // still 2 per CJK char
+    }
+
+    #[test]
+    fn test_mixed_emoji_and_cjk() {
+        // ⚠️(2) + 警(2) + 告(2) = 6
+        assert_eq!(display_width("⚠️警告"), 6);
     }
 }
