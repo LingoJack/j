@@ -3,19 +3,44 @@
 $VAR 或 ${VAR} 展开环境变量，例如：! echo $HOME
 Tab 键自动补全命令、别名和文件路径
 help 查看所有可用命令与用法
-chat 进入 AI 对话模式（TUI）
-chat -c 继续上一次对话
-chat --session <名称> 指定会话名
-report 写当日日报，reportctl sync 同步到远端
-todo 进入 TUI 待办管理
-set <别名> <路径> 设置别名（路径/URL/脚本均可）
-rm <别名> 删除别名；rename <别名> <新名> 重命名
-list 查看所有别名，list <分区> 查看指定分区
-search <行数|all> <关键词> [-f] 搜索日报，-f 模糊匹配
+help <主题> 查看指定主题的帮助，例如 help 对话、help 别名
+
+=== AI 对话 ===
+chat 或 ai 进入 AI 对话模式（TUI）
+chat -c 继续上一次对话，chat --session <名称> 指定会话
+ai "问题" 快速单次提问，例如 ai "Python 怎么读取 JSON"
+@file: 让 AI 读取文件，例如 @file:src/main.rs 请分析这个文件
+对话中按 / 打开斜杠命令菜单（/copy, /model, /theme, /archive 等）
+Ctrl+Y 复制最后一条 AI 回复，Ctrl+E 打开配置，Ctrl+B 浏览历史消息
+
+=== 别名系统 ===
+set <别名> <路径> 设置别名（应用/URL/文件/脚本均可）
+rm <别名> 删除别名；rename <旧名> <新名> 重命名
+list 查看所有别名，list all/browser/editor 查看指定分类
+tag <别名> browser 标记为浏览器，tag <别名> editor 标记为编辑器
+j chrome github 用浏览器别名打开网址别名，j vscode ./src 用编辑器打开目录
+
+=== 日报与待办 ===
+report "内容" 写日报，report 打开编辑器写长内容
+check 查看最近日报，check open 用编辑器打开全文
+search 10 关键词 搜索最近 10 条日报，-f 模糊匹配
+reportctl new 开始新一周，reportctl push/pull 同步到远端
+todo 进入待办管理 TUI，todo add <内容> 快速添加待办
+待办界面按空格完成时可选择是否写入日报
+
+=== 笔记本 ===
+md 或 notebook 打开笔记本，md <文件> 打开或新建笔记
+md list 列出所有笔记，md search <关键词> 搜索笔记内容
+md mkdir <目录> 创建分类目录，md mv <笔记> <目录> 移动笔记
+
+=== 脚本与工具 ===
+script <名字> 保存脚本（打开编辑器），script <名字> <内容> 直接保存
+脚本中可用 $J_<别名大写> 引用别名路径，例如 echo $J_CHROME
+脚本名 -w 在新终端窗口执行
+time countdown 25m 倒计时，支持 s/m/h 单位或纯数字（默认分钟）
+
+=== 其他 ===
 config <分区> <字段> <值> 修改配置
 log mode verbose 开启详细日志，concise 恢复简洁
-time countdown <时长> 倒计时，例如 time countdown 25m
-script <名字> <内容> 保存可执行脚本
-md <文件> 渲染 markdown
 update --check 检查新版本
 Ctrl+Q 中断当前输入，Ctrl+D 退出 j
