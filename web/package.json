@@ -14,12 +14,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@milkdown/kit": "^7.21.1",
+    "@milkdown/plugin-prism": "^7.21.1",
+    "@milkdown/react": "^7.21.1",
     "@tailwindcss/vite": "^4.2.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",
     "react-syntax-highlighter": "^16.1.1",
+    "refractor": "^5.0.0",
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {

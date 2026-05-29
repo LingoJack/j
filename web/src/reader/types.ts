@@ -92,11 +92,9 @@ export interface Tab {
   filename: string
   kind: DocKind
   source: string
-  /** markdown 才有；首次打开 = 后端预渲染，之后 = /api/parse 实时结果 */
+  /** markdown 才有；首次打开 = 后端预渲染，之后 = /api/parse 实时结果（仅供 TOC 用） */
   doc: ParsedDocument | null
   dirty: boolean
   saving: 'idle' | 'saving' | 'error'
   error?: string
-  /** 当前光标所在 IR block 的索引；null = 全渲染态（Typora 风所见即所得） */
-  editingBlockIdx?: number | null
 }

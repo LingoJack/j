@@ -1,40 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Block, ParsedDocument } from './types'
-import { extractText } from './MarkdownIR'
-
-export interface HeadingItem {
-  id: string
-  level: number
-  text: string
-}
-
-/** 从 ParsedDocument 提取标题列表（生成的 id 与 MarkdownIR 完全一致） */
-export function extractHeadings(doc: ParsedDocument): HeadingItem[] {
-  const headings: HeadingItem[] = []
-  const idCounter = new Map<string, number>()
-
-  function walk(blocks: Block[]) {
-    for (const block of blocks) {
-      if (block.kind.type === 'heading') {
-        const { level, content } = block.kind.value
-        const text = extractText(content)
-        const slug = text
-          .toLowerCase()
-          .replace(/[^\w\u4e00-\u9fff]+/g, '-')
-          .replace(/^-|-$/g, '')
-        const count = idCounter.get(slug) ?? 0
-        idCounter.set(slug, count + 1)
-        const id = count === 0 ? slug : `${slug}-${count}`
-        headings.push({ id, level, text })
-      } else if (block.kind.type === 'block_quote') {
-        walk(block.kind.value)
-      }
-    }
-  }
-
-  walk(doc.blocks)
-  return headings
-}
+import type { HeadingItem } from './toc'
 
 interface Props {
   headings: HeadingItem[]

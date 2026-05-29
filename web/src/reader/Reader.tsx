@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileTree } from './FileTree'
 import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
-import { MarkdownLiveEditor } from './MarkdownLiveEditor'
+import { MilkdownEditor } from './milkdown/MilkdownEditor'
 import { PlainTextEditor } from './PlainTextEditor'
-import { TableOfContents, extractHeadings } from './TableOfContents'
+import { TableOfContents } from './TableOfContents'
+import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { MarkdownBaseDirContext } from './MarkdownIR'
 import type {
@@ -265,18 +266,15 @@ export function Reader() {
         <div className="flex-1 overflow-hidden">
           {activeTab ? (
             activeTab.kind === 'markdown' ? (
-              <MarkdownLiveEditor
+              <MilkdownEditor
                 key={activeTab.path}
                 tab={activeTab}
+                baseDir={baseDir}
                 onChange={(source: string) =>
                   updateTab(activeTab.path, { source, dirty: true })
                 }
                 onParsed={(doc: ParsedDocument) => updateTab(activeTab.path, { doc })}
                 onSave={() => saveTab(activeTab.path)}
-                editingBlockIdx={activeTab.editingBlockIdx ?? null}
-                setEditingBlockIdx={(idx: number | null) =>
-                  updateTab(activeTab.path, { editingBlockIdx: idx })
-                }
               />
             ) : (
               <PlainTextEditor

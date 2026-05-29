@@ -14,6 +14,15 @@ export default defineConfig({
   // Reader SPA 不需要 docs 站的 public 资源（favicon、sitemap、pics 等），
   // 显式禁用 public 目录拷贝，保持产物精简。
   publicDir: false,
+  resolve: {
+    alias: [
+      // 关键：把裸 `refractor` 包重定向到 `refractor/core`（empty kernel），
+      // 避免 @milkdown/plugin-prism 的 `import { refractor } from "refractor"`
+      // 把 ~280 种语言全打进 bundle。子路径 `refractor/<lang>` 不受影响
+      // —— 用精确正则只匹配裸名，子路径仍走 package exports。
+      { find: /^refractor$/, replacement: 'refractor/core' },
+    ],
+  },
   build: {
     outDir: '../assets/reader_web',
     emptyOutDir: true,
@@ -27,8 +36,13 @@ export default defineConfig({
           ) {
             return 'react-vendor'
           }
-          if (id.includes('node_modules/react-syntax-highlighter/')) {
-            return 'syntax-highlight'
+          // Milkdown / ProseMirror / refractor 整体走单独 chunk（便于浏览器缓存）
+          if (
+            id.includes('node_modules/@milkdown/') ||
+            id.includes('node_modules/prosemirror-') ||
+            id.includes('node_modules/refractor/')
+          ) {
+            return 'milkdown-vendor'
           }
         },
       },
