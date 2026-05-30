@@ -56,6 +56,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 let input = line.trim();
 
                 if input.is_empty() {
+                    println!();
                     continue;
                 }
 
