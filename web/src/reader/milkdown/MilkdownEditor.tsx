@@ -50,6 +50,10 @@ import {
   seeyueHeadingIdSync,
 } from './headingId'
 import { seeyueImageResolver } from './imageResolver'
+import {
+  htmlInlineView,
+  seeyueBaseDirCtx,
+} from './html'
 import type { ParsedDocument, Tab } from '../types'
 
 /** 一次性把要支持的语言注册到 refractor 核心实例上（模块级、所有 editor 共享） */
@@ -120,6 +124,7 @@ function MilkdownInner({ tab, baseDir, onChange, onParsed }: Omit<Props, 'onSave
       .config((ctx) => {
         ctx.set(rootCtx, root)
         ctx.set(defaultValueCtx, initialSourceRef.current)
+        ctx.set(seeyueBaseDirCtx.key, baseDirRef.current)
         ctx.get(listenerCtx).markdownUpdated((_ctx, md, prev) => {
           if (md !== prev) onChangeRef.current(md)
         })
@@ -132,8 +137,14 @@ function MilkdownInner({ tab, baseDir, onChange, onParsed }: Omit<Props, 'onSave
           },
         }))
       })
+      // baseDir ctx 必须在使用它的 plugin 之前 use
+      .use(seeyueBaseDirCtx)
       .use(commonmark)
       .use(gfm)
+      // htmlInlineView 装在 commonmark 之后 —— 替换默认 html schema 的
+      // NodeView，让 inline html 通过 innerHTML 真渲染（块级 HTML 内容
+      // 也走这条路径，NodeView 内会按 value 选择 div/span 包装）
+      .use(htmlInlineView)
       .use(listener)
       .use(history)
       .use(cursor)

@@ -146,7 +146,10 @@
       "Bash(tar -xzf milkdown-preset-commonmark-7.21.1.tgz package/src/plugin/sync-heading-id-plugin.ts package/src/node/heading.ts package/src/node/image.ts package/src/index.ts)",
       "Bash(mkdir -p react-pkg)",
       "Bash(tar -xzf milkdown-react-7.21.1.tgz -C react-pkg --strip-components=1)",
-      "Bash(awk 'NR>=21 && NR<=24 { for\\(i=1;i<=length\\($0\\);i++\\) printf \"%d \", $i; print \"\" }' /Users/jacklingo/dev_custom/jcli/web/src/reader/TableOfContents.tsx)"
+      "Bash(awk 'NR>=21 && NR<=24 { for\\(i=1;i<=length\\($0\\);i++\\) printf \"%d \", $i; print \"\" }' /Users/jacklingo/dev_custom/jcli/web/src/reader/TableOfContents.tsx)",
+      "Bash(xargs basename -a)",
+      "Bash(awk '/imageSchema = \\\\$nodeSchema/,/^};/' /Users/jacklingo/dev_custom/jcli/web/node_modules/@milkdown/preset-commonmark/lib/index.js)",
+      "Bash(awk '/htmlSchema = \\\\$nodeSchema/,/^var |^function |^withMeta/' /Users/jacklingo/dev_custom/jcli/web/node_modules/@milkdown/preset-commonmark/lib/index.js)"
     ]
   },
   "language": "zh-CN",

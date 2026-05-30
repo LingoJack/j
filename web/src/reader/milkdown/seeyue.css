@@ -254,6 +254,76 @@
   display: inline-block;
 }
 
+/* —— 原生 HTML 渲染 ——
+   schema 仍是 inline atom（被 remarkHtmlTransformer 包进 paragraph），
+   NodeView 根据 value 选择 div/span 包装：
+   - 块级（table/details/...）→ data-type="html-block"，display:block 容器
+   - 行内（br/sub/sup/...）  → data-type="html-inline"，inline 容器
+   contentEditable=false：用户点击可选中整块、Backspace 删除，但不能直接
+   在内部用键盘改字（保持原始 HTML 完整性，这也是 Typora 的处理方式）。
+*/
+.milkdown .ProseMirror .seeyue-html-block {
+  display: block;
+  margin: 1rem 0;
+}
+.milkdown .ProseMirror .seeyue-html-block:hover {
+  outline: 1px dashed var(--color-seeyue-border-strong);
+  outline-offset: 2px;
+}
+.milkdown .ProseMirror .seeyue-html-block.ProseMirror-selectednode {
+  outline: 2px solid var(--color-seeyue-accent);
+  outline-offset: 2px;
+}
+.milkdown .ProseMirror .seeyue-html-inline {
+  display: inline;
+}
+.milkdown .ProseMirror .seeyue-html-inline.ProseMirror-selectednode {
+  outline: 1px solid var(--color-seeyue-accent);
+  outline-offset: 1px;
+}
+
+/* HTML 容器内部表格 / 链接 / 图片继承 prose 配色 */
+.milkdown .ProseMirror .seeyue-html-block table {
+  border-collapse: collapse;
+  border: 1px solid var(--color-seeyue-border);
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  width: 100%;
+}
+.milkdown .ProseMirror .seeyue-html-block th,
+.milkdown .ProseMirror .seeyue-html-block td {
+  border: 1px solid var(--color-seeyue-border);
+  padding: 0.5rem 0.85rem;
+  vertical-align: top;
+}
+.milkdown .ProseMirror .seeyue-html-block th {
+  background: var(--color-seeyue-panel);
+  color: var(--color-seeyue-fg-strong);
+  text-align: left;
+}
+.milkdown .ProseMirror .seeyue-html-block details {
+  margin: 0.5rem 0;
+}
+.milkdown .ProseMirror .seeyue-html-block summary {
+  cursor: pointer;
+  padding: 0.25rem 0;
+  font-weight: 600;
+  color: var(--color-seeyue-fg-strong);
+}
+.milkdown .ProseMirror .seeyue-html-block summary:hover {
+  color: var(--color-seeyue-accent);
+}
+.milkdown .ProseMirror .seeyue-html-block a {
+  color: var(--color-seeyue-accent);
+  text-decoration: underline;
+}
+.milkdown .ProseMirror .seeyue-html-block img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--color-seeyue-border);
+}
+
 /* —— Prism token 色（基于 oneDark / 与原阅读端 react-syntax-highlighter 接近） —— */
 .milkdown .ProseMirror pre code .token.comment,
 .milkdown .ProseMirror pre code .token.prolog,
