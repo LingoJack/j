@@ -305,15 +305,19 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             target: rest.get(1).cloned(),
         })
     } else if is(cmd::READ) {
-        // 解析 read 子命令的 flags：--port <N> / --no-open
+        // 解析 read 子命令的 flags：--port <N> / --no-open / --tab
         let mut file_path: Option<String> = None;
         let mut port: Option<u16> = None;
         let mut no_open = false;
+        let mut tab = false;
         let mut i = 0;
         while i < rest.len() {
             let arg = rest[i].as_str();
             if arg == "--no-open" {
                 no_open = true;
+                i += 1;
+            } else if arg == "--tab" {
+                tab = true;
                 i += 1;
             } else if arg == "--port" {
                 if let Some(v) = rest.get(i + 1) {
@@ -347,13 +351,14 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             }
         }
         let Some(path) = file_path else {
-            crate::usage!("read <file_path> [--port <N>] [--no-open]");
+            crate::usage!("read <file_path> [--port <N>] [--no-open] [--tab]");
             return ParseResult::Handled;
         };
         ParseResult::Matched(SubCmd::Read {
             file_path: path,
             port,
             no_open,
+            tab,
         })
     } else {
         ParseResult::NotFound

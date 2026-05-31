@@ -1,48 +1,43 @@
-import { Save } from './Icon'
-import type { Tab } from './types'
+import { useEffect, useRef } from 'react'
 
 interface Props {
-  tab: Tab
-  onChange: (source: string) => void
-  onSave: () => void | Promise<void>
+  /** 文件路径，外层 Reader 用 key={path} 触发整体 remount */
+  path: string
+  /** 仅 mount 时被读 —— 之后 textarea 自管理 */
+  initialSource: string
+  /** 高频回调，外层只写 ref，不会 re-render */
+  onChange: (path: string, source: string) => void
 }
 
-export function PlainTextEditor({ tab, onChange, onSave }: Props) {
+/**
+ * 极简纯文本编辑器：一个 uncontrolled `<textarea>`，无任何顶栏。
+ *
+ * - 顶栏（保存按钮、未保存徽章、面包屑）都已经在 EditorBar，重复不美观，去掉。
+ * - 改成 uncontrolled (defaultValue) 后，输入流不再每次按键回经 React 树，
+ *   彻底避免 Reader/TabBar 等的连带 re-render —— 大文件下表现明显平滑。
+ */
+export function PlainTextEditor({ path, initialSource, onChange }: Props) {
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+
+  // 让 onChange 闭包始终拿最新引用
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useEffect(() => {
+    ref.current?.focus()
+  }, [])
+
   return (
-    <div className="h-full flex flex-col bg-seeyue-bg">
-      <div className="flex items-center justify-between h-8 px-3 border-b border-seeyue-border text-[11px] text-seeyue-fg-dim uppercase tracking-wider">
-        <span>纯文本</span>
-        <span className="flex items-center gap-2">
-          {tab.dirty && (
-            <span className="status-pill" data-tone="warn"
-                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999 }}>
-              ● 未保存
-            </span>
-          )}
-          {tab.saving === 'saving' && (
-            <span className="text-seeyue-accent">保存中…</span>
-          )}
-          {tab.saving === 'error' && (
-            <span className="text-seeyue-danger" title={tab.error}>
-              保存失败
-            </span>
-          )}
-          <button
-            onClick={() => void onSave()}
-            className="seeyue-icon-btn"
-            title="Cmd+S 保存"
-          >
-            <Save size={14} />
-          </button>
-        </span>
-      </div>
-      <textarea
-        className="seeyue-textarea flex-1 px-5 py-4 overflow-y-auto"
-        spellCheck={false}
-        autoFocus
-        value={tab.source}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </div>
+    <textarea
+      ref={ref}
+      key={path}
+      className="seeyue-textarea w-full h-full px-6 py-5 overflow-y-auto"
+      spellCheck={false}
+      defaultValue={initialSource}
+      onInput={(e) => {
+        const v = (e.target as HTMLTextAreaElement).value
+        onChangeRef.current(path, v)
+      }}
+    />
   )
 }

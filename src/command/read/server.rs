@@ -42,7 +42,9 @@ pub fn serve_blocking(
     root_dir: PathBuf,
     port: Option<u16>,
 ) -> Result<(), String> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    // 多线程 runtime —— 避免 CPU-bound 路由（`/api/parse` 解析大 markdown）阻塞
+    // 整个事件循环。worker_threads 留 tokio 自己挑（默认 = 物理核数）。
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| format!("创建 tokio 运行时失败：{e}"))?;
@@ -138,20 +140,26 @@ struct FileQuery {
 }
 
 async fn api_file(Query(q): Query<FileQuery>) -> Result<Json<RenderedDoc>, ApiError> {
+    // 整个流程是 CPU + 磁盘 IO bound（read + parse_markdown）—— 丢去 blocking
+    // 线程池，避免阻塞 tokio worker
     let path = canonicalize(&q.path)?;
-    let metadata = std::fs::metadata(&path)
-        .map_err(|e| ApiError::bad_request(format!("无法读取文件：{e}")))?;
-    if !metadata.is_file() {
-        return Err(ApiError::bad_request("不是一个普通文件"));
-    }
-    if metadata.len() > MAX_FILE_SIZE {
-        return Err(ApiError::bad_request(format!(
-            "文件过大（{} 字节，超过 {} 字节上限）",
-            metadata.len(),
-            MAX_FILE_SIZE
-        )));
-    }
-    let doc = render_file(&path).map_err(ApiError::bad_request)?;
+    let doc = tokio::task::spawn_blocking(move || -> Result<RenderedDoc, ApiError> {
+        let metadata = std::fs::metadata(&path)
+            .map_err(|e| ApiError::bad_request(format!("无法读取文件：{e}")))?;
+        if !metadata.is_file() {
+            return Err(ApiError::bad_request("不是一个普通文件"));
+        }
+        if metadata.len() > MAX_FILE_SIZE {
+            return Err(ApiError::bad_request(format!(
+                "文件过大（{} 字节，超过 {} 字节上限）",
+                metadata.len(),
+                MAX_FILE_SIZE
+            )));
+        }
+        render_file(&path).map_err(ApiError::bad_request)
+    })
+    .await
+    .map_err(|e| ApiError::internal(format!("blocking 任务 join 失败：{e}")))??;
     Ok(Json(doc))
 }
 
@@ -250,8 +258,15 @@ struct ParseReq {
 }
 
 async fn api_parse(Json(req): Json<ParseReq>) -> Json<serde_json::Value> {
-    let doc = crate::markdown::parser::parse_markdown(&req.source, 120);
-    Json(serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null))
+    // parse_markdown 是 CPU-bound 的同步函数；多线程 runtime + spawn_blocking
+    // 双管齐下，确保不会阻塞其它请求（list / file / save / asset）。
+    let value = tokio::task::spawn_blocking(move || {
+        let doc = crate::markdown::parser::parse_markdown(&req.source, 120);
+        serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null)
+    })
+    .await
+    .unwrap_or(serde_json::Value::Null);
+    Json(value)
 }
 
 // ---------------------------------------------------------------------------

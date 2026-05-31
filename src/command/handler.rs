@@ -165,8 +165,8 @@ command_handlers! {
     },
 
     // ========== 文件预览（Web UI） ==========
-    ReadCmd { file_path: String, port: Option<u16>, no_open: bool } => |self, config| {
-        crate::command::read::handle_read(&self.file_path, self.port, self.no_open, config);
+    ReadCmd { file_path: String, port: Option<u16>, no_open: bool, tab: bool } => |self, config| {
+        crate::command::read::handle_read(&self.file_path, self.port, self.no_open, self.tab, config);
     },
 }
 
@@ -256,10 +256,12 @@ impl SubCmd {
                 file_path,
                 port,
                 no_open,
+                tab,
             } => Box::new(ReadCmd {
                 file_path,
                 port,
                 no_open,
+                tab,
             }),
         }
     }

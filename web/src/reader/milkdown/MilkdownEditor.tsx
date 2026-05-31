@@ -3,9 +3,10 @@
  *
  * - 单一 contenteditable（ProseMirror）编辑面，光标可在段落、列表、表格、
  *   代码块之间自由移动 —— Typora 体验的本质。
- * - 监听 markdown 变化 → `onChange(source)`；外层 Reader 据此打 dirty。
- * - 仍保留 150ms debounce 调用 `/api/parse` → `onParsed(doc)`，给右栏 TOC 用。
- * - 切 tab 由 Reader.tsx 通过 `key={tab.path}` 触发整体 unmount/remount，
+ * - 监听 markdown 变化 → `onChange(path, source)`；外层 Reader 据此打 dirty。
+ * - 内部维护一份 latestSourceRef，配合 150ms debounce 触发 /api/parse 给
+ *   右栏 TOC 喂数据 —— 这套不再依赖 React state，避免按键级 re-render。
+ * - 切 tab 由 Reader.tsx 通过 `key={path}` 触发整体 unmount/remount，
  *   useEditor 的 destroy hook 会在 unmount 时清掉 ProseMirror 实例。
  */
 
@@ -19,7 +20,11 @@ import { cursor } from '@milkdown/kit/plugin/cursor'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { indent } from '@milkdown/kit/plugin/indent'
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react'
-import { prism, prismConfig } from '@milkdown/plugin-prism'
+// 关键性能修复：用自研带缓存的 prism 插件替代 @milkdown/plugin-prism。
+// 上游插件每次按键都会把整个文档的所有代码块重新跑 refractor.highlight，
+// 大文档下卡顿明显。我们的版本按 (lang, text) 缓存高亮结果。
+import { seeyuePrismBundle as prism, prismConfig } from './prismCached'
+import { perfProbe } from './perfProbe'
 import { refractor } from 'refractor'   // 经 vite alias 后实际是 refractor/core（空内核）
 import bash from 'refractor/bash'
 import shell from 'refractor/shell-session'
@@ -54,7 +59,7 @@ import {
   htmlInlineView,
   seeyueBaseDirCtx,
 } from './html'
-import type { ParsedDocument, Tab } from '../types'
+import type { ParsedDocument } from '../types'
 
 /** 一次性把要支持的语言注册到 refractor 核心实例上（模块级、所有 editor 共享） */
 let _languagesRegistered = false
@@ -95,29 +100,71 @@ function ensureLanguages() {
 }
 
 interface Props {
-  tab: Tab
+  path: string
   baseDir: string | null
-  onChange: (source: string) => void
-  onParsed: (doc: ParsedDocument) => void
+  initialSource: string
+  onChange: (path: string, source: string) => void
+  onParsed: (path: string, doc: ParsedDocument) => void
   onSave: () => void | Promise<void>
 }
 
-/** debounce 时间：source 变化后多久 POST /api/parse（仅供 TOC 使用） */
-const PARSE_DEBOUNCE_MS = 150
+/**
+ * debounce 时间：source 变化后多久 POST /api/parse（仅供 TOC 使用）。
+ *
+ * TOC 不需要按键级实时，500ms 几乎察觉不到延迟，但能把 parse 频率降下来 ——
+ * 服务端 parse_markdown 是 CPU-bound，对大文件可能耗 100~800ms，频繁调会
+ * 阻塞 worker。配合下方 in-flight + pending 节流，永远只有一个 parse 在飞。
+ */
+const PARSE_DEBOUNCE_MS = 500
 
-function MilkdownInner({ tab, baseDir, onChange, onParsed }: Omit<Props, 'onSave'>) {
+function MilkdownInner({
+  path,
+  baseDir,
+  initialSource,
+  onChange,
+  onParsed,
+}: Omit<Props, 'onSave'>) {
   ensureLanguages()
 
-  // 用 ref 桥接：使 markdownUpdated 闭包始终拿到最新 onChange，避免 useEditor
-  // 因为 deps=[] 而吃到 stale closure
+  // —— 桥接最新闭包，避免 useEditor (deps=[]) 吃 stale ——
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const onParsedRef = useRef(onParsed)
+  onParsedRef.current = onParsed
+  const pathRef = useRef(path)
+  pathRef.current = path
 
-  // initialSource 只在 mount 时被读，之后的 tab.source 由 ProseMirror 自己保管
-  // —— 切 tab 通过外层 key={tab.path} 整体重挂载来重新读 initial
-  const initialSourceRef = useRef(tab.source)
+  // initialSource 只在 mount 时被读
+  const initialSourceRef = useRef(initialSource)
   const baseDirRef = useRef(baseDir)
   baseDirRef.current = baseDir
+
+  // —— 内部 debounce 维护 /api/parse —— 不再走 React state
+  // 这样按键级 onChange 只走 ref/timer，不触发任何 re-render
+  const latestSourceRef = useRef(initialSource)
+  const parseTimerRef = useRef<number | null>(null)
+  // in-flight 节流：parse 期间不允许另一个并发，结束后看是否有 pending
+  const parseInFlightRef = useRef(false)
+  const parsePendingRef = useRef(false)
+
+  const triggerParse = () => {
+    if (parseInFlightRef.current) {
+      parsePendingRef.current = true
+      return
+    }
+    parseInFlightRef.current = true
+    parsePendingRef.current = false
+    void runParse(latestSourceRef.current, pathRef.current, onParsedRef).finally(
+      () => {
+        parseInFlightRef.current = false
+        if (parsePendingRef.current) {
+          parsePendingRef.current = false
+          // 立刻发起下一次（已经至少 PARSE_DEBOUNCE_MS 又积累了变更）
+          triggerParse()
+        }
+      },
+    )
+  }
 
   useEditor((root) =>
     Editor.make()
@@ -126,7 +173,16 @@ function MilkdownInner({ tab, baseDir, onChange, onParsed }: Omit<Props, 'onSave
         ctx.set(defaultValueCtx, initialSourceRef.current)
         ctx.set(seeyueBaseDirCtx.key, baseDirRef.current)
         ctx.get(listenerCtx).markdownUpdated((_ctx, md, prev) => {
-          if (md !== prev) onChangeRef.current(md)
+          if (md === prev) return
+          latestSourceRef.current = md
+          onChangeRef.current(pathRef.current, md)
+          // 重新 debounce 一次 /api/parse
+          if (parseTimerRef.current != null) {
+            window.clearTimeout(parseTimerRef.current)
+          }
+          parseTimerRef.current = window.setTimeout(() => {
+            triggerParse()
+          }, PARSE_DEBOUNCE_MS)
         })
         seeyueHeadingIdConfig(ctx)
         ctx.update(prismConfig.key, (prev) => ({
@@ -151,45 +207,61 @@ function MilkdownInner({ tab, baseDir, onChange, onParsed }: Omit<Props, 'onSave
       .use(clipboard)
       .use(indent)
       .use(prism)
+      .use(perfProbe)
       .use(seeyueHeadingIdSync)
       .use(seeyueImageResolver(baseDirRef.current)),
   )
 
-  // —— /api/parse debounce —— 仅给 TOC 用，编辑面本身不依赖
+  // —— mount 后立刻 parse 一次 —— 切 tab 时也会跑（Milkdown 整体 remount）
+  // —— unmount 时清掉 pending timer
   useEffect(() => {
-    let cancelled = false
-    const t = window.setTimeout(async () => {
-      try {
-        const res = await fetch('./api/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: tab.source }),
-        })
-        if (!res.ok) return
-        const doc = (await res.json()) as ParsedDocument
-        if (!cancelled) onParsed(doc)
-      } catch {
-        /* 静默 */
-      }
-    }, PARSE_DEBOUNCE_MS)
     return () => {
-      cancelled = true
-      window.clearTimeout(t)
+      if (parseTimerRef.current != null) {
+        window.clearTimeout(parseTimerRef.current)
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab.source])
+  }, [])
 
   return <Milkdown />
+}
+
+async function runParse(
+  source: string,
+  path: string,
+  onParsedRef: React.RefObject<
+    (path: string, doc: ParsedDocument) => void
+  >,
+) {
+  try {
+    const res = await fetch('./api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source }),
+    })
+    if (!res.ok) return
+    const doc = (await res.json()) as ParsedDocument
+    onParsedRef.current?.(path, doc)
+  } catch {
+    /* 静默 */
+  }
 }
 
 export function MilkdownEditor(props: Props) {
   return (
     <div className="h-full overflow-y-auto bg-seeyue-bg">
-      <div className="seeyue-prose max-w-3xl mx-auto px-8 py-8">
+      {/* 行宽：跟 Typora 一样按视口百分比走，不再钉死 max-w-3xl。
+          原来 max-w-3xl ≈ 768px，2k 行的 markdown 几乎每个段落都要换 2 行，
+          ProseMirror DOM 节点数量翻倍 → 输入和滚动都慢一截。
+          现在 min(75vw, 1100px)，桌面常见 1440~2560px 屏上行宽更接近 Typora。 */}
+      <div
+        className="seeyue-prose mx-auto px-8 py-8"
+        style={{ width: 'min(75vw, 1100px)', maxWidth: '100%' }}
+      >
         <MilkdownProvider>
           <MilkdownInner
-            tab={props.tab}
+            path={props.path}
             baseDir={props.baseDir}
+            initialSource={props.initialSource}
             onChange={props.onChange}
             onParsed={props.onParsed}
           />

@@ -288,5 +288,9 @@ pub enum SubCmd {
         /// 不自动打开浏览器，只输出访问 URL
         #[arg(long)]
         no_open: bool,
+        /// 用普通浏览器标签页而不是 Chrome app 模式打开
+        /// （app 模式：⌘W 等快捷键归网页所有；标签页模式：⌘W 会被浏览器吞掉）
+        #[arg(long)]
+        tab: bool,
     },
 }

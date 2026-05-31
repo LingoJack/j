@@ -15,13 +15,15 @@
  * 1. `seeyueHeadingIdConfig` —— 在 Editor.config 中替换 commonmark 自带
  *    `headingIdGenerator` 的实现，让 toDOM 首次渲染拿到的 id 就是 seeyue slug
  *    （未去重，单纯 slug）。
- * 2. `seeyueHeadingIdSync` —— $prose plugin，每次 doc 变更时遍历所有
- *    heading，按出现顺序去重（foo, foo-1, foo-2 ...），通过
- *    setNodeMarkup + addToHistory:false 写到 attrs.id 上。
+ * 2. `seeyueHeadingIdSync` —— $prose plugin，通过 `state.appendTransaction`
+ *    在每个 transaction 提交前补一个修正性 transaction，把所有 heading 的
+ *    `attrs.id` 改成"按出现顺序去重"的形式。
  *
- * commonmark 自带的 syncHeadingIdPlugin 也会跑，但我们这只在最后写入
- * 我们的规则（按 view.update 顺序，自定义 plugin 在 use 顺序更靠后即可
- * 后写胜出）。
+ * 历史教训：曾经把这事放在 `view.update` 里，自己 `view.dispatch(tr)`。
+ * 当 transaction 来源是别的插件触发的 attr 变更时，新的 dispatch 会再次
+ * 触发 view.update → dispatch，无限递归 → "Maximum call stack size exceeded"。
+ * appendTransaction 是 ProseMirror 给修正性 transaction 设计的钩子，运行时
+ * 保证不会循环（追加 tr 的迭代有上限）。
  */
 
 import { headingIdGenerator } from '@milkdown/kit/preset/commonmark'
@@ -29,7 +31,6 @@ import { $prose } from '@milkdown/kit/utils'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import type { Ctx } from '@milkdown/ctx'
 import type { Node as ProseNode } from '@milkdown/kit/prose/model'
-import type { EditorView } from '@milkdown/kit/prose/view'
 import { slugify } from '../slug'
 
 /** 在 Editor.config 时调用：覆写 commonmark 默认 generator */
@@ -40,48 +41,38 @@ export function seeyueHeadingIdConfig(ctx: Ctx): void {
 const SEEYUE_HEADING_ID_KEY = new PluginKey('SEEYUE_HEADING_ID_SYNC')
 
 /**
- * 自定义 $prose plugin —— 与 commonmark 自带 syncHeadingIdPlugin 同形态，
- * 但用 `foo`, `foo-1`, `foo-2` 风格的 dedupe（与服务端 slug 规则一致）。
+ * appendTransaction 钩子：
+ * - 第一遍（doc 真变了）：算 expected id，发现不匹配 → 返回 setNodeMarkup tr。
+ * - 第二遍（这是我们自己的 setNodeMarkup 之后被 ProseMirror 喊回来）：
+ *   doc 已经达到目标态 → expected id 全部匹配 → 返回 null，链路终止。
  *
- * 后注册（`.use(seeyueHeadingIdSync)` 放在 `.use(commonmark)` 之后）即可
- * 让我们的 setNodeMarkup 后写胜出。
+ * 这个"自己看自己一次回收"的模式，正是 PM appendTransaction 的标准用法。
  */
 export const seeyueHeadingIdSync = $prose(() => {
-  const refresh = (view: EditorView) => {
-    if (view.composing) return
-    const counts: Record<string, number> = {}
-    let tr = view.state.tr.setMeta('addToHistory', false)
-    let changed = false
-    view.state.doc.descendants((node, pos) => {
-      if (node.type.name !== 'heading') return
-      const base = slugify(node.textContent)
-      if (!base) return
-      const n = (counts[base] = (counts[base] ?? 0) + 1)
-      const id = n === 1 ? base : `${base}-${n - 1}`
-      if (node.attrs.id !== id) {
-        tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, id })
-        changed = true
-      }
-    })
-    if (changed) view.dispatch(tr)
-  }
-
   return new Plugin({
     key: SEEYUE_HEADING_ID_KEY,
-    view: (view) => {
-      // 初次挂载也跑一次，让 mounted 后立刻就有正确 id
-      queueMicrotask(() => {
-        try {
-          refresh(view)
-        } catch {
-          /* view 已 destroy 等竞态，忽略 */
+    appendTransaction: (transactions, _oldState, newState) => {
+      // 只在 doc 真变化时跑（attr-only 变更时 docChanged 也是 true，但代价小）
+      const anyDocChange = transactions.some((t) => t.docChanged)
+      if (!anyDocChange) return null
+
+      const counts: Record<string, number> = {}
+      let tr = newState.tr.setMeta('addToHistory', false)
+      let changed = false
+
+      newState.doc.descendants((node, pos) => {
+        if (node.type.name !== 'heading') return
+        const base = slugify(node.textContent)
+        if (!base) return
+        const n = (counts[base] = (counts[base] ?? 0) + 1)
+        const id = n === 1 ? base : `${base}-${n - 1}`
+        if (node.attrs.id !== id) {
+          tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, id })
+          changed = true
         }
       })
-      return {
-        update: (next, prev) => {
-          if (!next.state.doc.eq(prev.doc)) refresh(next)
-        },
-      }
+
+      return changed ? tr : null
     },
   })
 })

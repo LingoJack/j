@@ -86,14 +86,19 @@ export interface InitialResp {
   root_dir: string
 }
 
-// 编辑器内部使用的 Tab 状态
+// 编辑器内部使用的 Tab 状态。
+// **不要**把 `source` / `doc` 放进来。
+// 输入文字会以高频率（每个按键）变化，如果走 setState，整个 Reader / TabBar /
+// FileTree 都会跟着 re-render，大文件下会很卡。
+// 改放在 Reader.tsx 的 useRef 桶里：
+//   sourcesRef.current[path]  →  最新 markdown / plain text 内容
+//   docsRef.current[path]     →  最近一次 /api/parse 的 IR（仅 TOC 使用）
+// 只有 dirty / saving / error 这种 UI 必须感知的字段保留在 state 里。
 export interface Tab {
   path: string
   filename: string
   kind: DocKind
-  source: string
-  /** markdown 才有；首次打开 = 后端预渲染，之后 = /api/parse 实时结果（仅供 TOC 用） */
-  doc: ParsedDocument | null
+  /** 是否有未保存改动 */
   dirty: boolean
   saving: 'idle' | 'saving' | 'error'
   error?: string

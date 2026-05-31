@@ -26,14 +26,20 @@ pub(crate) const MAX_ASSET_SIZE: u64 = 20 * 1024 * 1024;
 pub(crate) const MAX_DIR_ENTRIES: usize = 2000;
 
 /// `j read <file>` 命令入口。
-pub fn handle_read(file_path: &str, port: Option<u16>, no_open: bool, _config: &mut YamlConfig) {
-    if let Err(msg) = run(file_path, port, no_open) {
+pub fn handle_read(
+    file_path: &str,
+    port: Option<u16>,
+    no_open: bool,
+    tab: bool,
+    _config: &mut YamlConfig,
+) {
+    if let Err(msg) = run(file_path, port, no_open, tab) {
         eprintln!("❌ {msg}");
         std::process::exit(1);
     }
 }
 
-fn run(file_path: &str, port: Option<u16>, no_open: bool) -> Result<(), String> {
+fn run(file_path: &str, port: Option<u16>, no_open: bool, tab: bool) -> Result<(), String> {
     let expanded = expand_tilde(file_path);
     let path = Path::new(&expanded);
 
@@ -72,7 +78,7 @@ fn run(file_path: &str, port: Option<u16>, no_open: bool) -> Result<(), String> 
     let url = format!("http://127.0.0.1:{actual_port}/");
 
     if !no_open {
-        match open_in_browser(&url) {
+        match open_in_browser(&url, tab) {
             Ok(()) => {}
             Err(e) => eprintln!("⚠️  自动打开浏览器失败（{e}），请手动访问 {url}"),
         }
@@ -97,7 +103,91 @@ fn probe_free_port() -> Result<u16, String> {
 }
 
 /// 跨平台打开 URL。
-fn open_in_browser(url: &str) -> Result<(), String> {
+///
+/// 默认（`tab = false`）尝试用 **Chrome app 模式**（`--app=URL`）打开 ——
+/// 这种窗口没有标签栏，整个窗口只承载一个网页，所以 `⌘W` / `⌘T` 等
+/// 快捷键会被网页接收（`preventDefault` 才有意义）。普通标签页里 `⌘W`
+/// 会被 Chrome 自身吞掉关掉标签，根本传不到 JS。
+///
+/// 失败（找不到 Chrome / Edge）回退到系统默认浏览器（普通标签页）。
+/// 用户也可以显式 `j read --tab <file>` 走标签页模式。
+fn open_in_browser(url: &str, tab: bool) -> Result<(), String> {
+    if !tab {
+        if let Ok(()) = try_open_app_mode(url) {
+            return Ok(());
+        }
+    }
+    open_default(url)
+}
+
+/// 尝试用 Chrome / Edge / Chromium 的 `--app=URL` 模式打开。
+/// 失败返回 Err，调用方负责回退。
+fn try_open_app_mode(url: &str) -> Result<(), String> {
+    let arg_app = format!("--app={url}");
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS：用 `open -na <App> --args --app=URL`
+        // -n: 新进程；-a: 指定 app；--args 之后的参数透传给 app。
+        for app_name in [
+            "Google Chrome",
+            "Microsoft Edge",
+            "Chromium",
+            "Brave Browser",
+        ] {
+            let status = Command::new("open")
+                .args(["-na", app_name, "--args", &arg_app])
+                .status();
+            match status {
+                Ok(s) if s.success() => return Ok(()),
+                _ => continue,
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows：直接 `chrome --app=URL`，依赖 PATH 或常见安装路径
+        for exe in [
+            "chrome.exe",
+            "msedge.exe",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ] {
+            let status = Command::new(exe).arg(&arg_app).status();
+            if let Ok(s) = status
+                && s.success()
+            {
+                return Ok(());
+            }
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        // Linux：尝试常见的 chrome / chromium 二进制名
+        for exe in [
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "microsoft-edge",
+            "brave-browser",
+        ] {
+            let status = Command::new(exe).arg(&arg_app).status();
+            if let Ok(s) = status
+                && s.success()
+            {
+                return Ok(());
+            }
+        }
+    }
+
+    Err("未找到可用的 Chromium 系浏览器".to_string())
+}
+
+/// 普通标签页：调系统默认浏览器。
+fn open_default(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let result = Command::new("open").arg(url).status();
 

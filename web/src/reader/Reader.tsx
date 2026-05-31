@@ -46,6 +46,15 @@ export function Reader() {
   const [tocCollapsed, setTocCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('jreader.tocCollapsed') === '1'
   })
+  /** 监听 doc 更新（每次 /api/parse 完成就 +1）—— 给 TOC 触发重算 */
+  const [docVersion, setDocVersion] = useState(0)
+
+  // —— 高频内容用 ref 而不是 state，避免按键触发整树 re-render ——
+  /** 每个 tab 的最新文本内容；按 path 索引 */
+  const sourcesRef = useRef<Record<string, string>>({})
+  /** 每个 markdown tab 的最新 IR；按 path 索引 */
+  const docsRef = useRef<Record<string, ParsedDocument>>({})
+
   const toggleToc = useCallback(() => {
     setTocCollapsed((prev) => {
       const next = !prev
@@ -81,6 +90,7 @@ export function Reader() {
         })) as RenderedDoc
         if (cancelled) return
 
+        ingestDoc(doc, sourcesRef, docsRef)
         setTabs([docToTab(doc)])
         setActiveTabPath(doc.path)
         setLoadState({ kind: 'ready' })
@@ -108,29 +118,40 @@ export function Reader() {
   // —— 标题栏 + beforeunload 同步 ——
   useDirtyTitle(activeTab, anyDirty)
 
-  // —— Cmd+S：交给 active tab ——
-  const activeTabRef = useRef<Tab | null>(null)
-  activeTabRef.current = activeTab
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const isSave =
-        (e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')
-      if (!isSave) return
-      e.preventDefault()
-      const t = activeTabRef.current
-      if (t) void saveTab(t.path)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // —— Tab 操作 ——
   const updateTab = useCallback((path: string, patch: Partial<Tab>) => {
     setTabs((prev) =>
       prev.map((t) => (t.path === path ? { ...t, ...patch } : t)),
     )
   }, [])
+
+  /**
+   * 编辑器报告 source 变化。这是高频回调（按键级别）。
+   * 只把内容写进 ref；只有第一次 dirty 翻转时才碰 setState。
+   */
+  const handleSourceChange = useCallback(
+    (path: string, source: string) => {
+      sourcesRef.current[path] = source
+      setTabs((prev) => {
+        const t = prev.find((x) => x.path === path)
+        if (!t || t.dirty) return prev // 已经 dirty，不再 setState
+        return prev.map((x) => (x.path === path ? { ...x, dirty: true } : x))
+      })
+    },
+    [],
+  )
+
+  /**
+   * MilkdownEditor 内部 debounce 调 /api/parse 后回调，更新 IR。
+   * 同样写 ref，再 bump docVersion 触发 TOC 重算（TOC 依赖 path + version）。
+   */
+  const handleDocParsed = useCallback(
+    (path: string, doc: ParsedDocument) => {
+      docsRef.current[path] = doc
+      setDocVersion((v) => v + 1)
+    },
+    [],
+  )
 
   const openFile = useCallback(
     async (path: string) => {
@@ -159,6 +180,7 @@ export function Reader() {
               })
           return r.json()
         })) as RenderedDoc
+        ingestDoc(doc, sourcesRef, docsRef)
         setTabs((prev) => [...prev, docToTab(doc)])
         setActiveTabPath(doc.path)
       } catch (e) {
@@ -195,6 +217,9 @@ export function Reader() {
         }
         return next
       })
+      // 清掉 ref 桶里的内容，不让已关 tab 占内存
+      delete sourcesRef.current[path]
+      delete docsRef.current[path]
     },
     [activeTabPath],
   )
@@ -203,12 +228,13 @@ export function Reader() {
     async (path: string) => {
       const t = tabs.find((x) => x.path === path)
       if (!t) return
+      const source = sourcesRef.current[path] ?? ''
       updateTab(path, { saving: 'saving', error: undefined })
       try {
         const res = await fetch('./api/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: t.path, source: t.source }),
+          body: JSON.stringify({ path: t.path, source }),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -224,23 +250,83 @@ export function Reader() {
     [tabs, updateTab],
   )
 
-  const copyPath = useCallback(
-    async (path: string) => {
-      try {
-        await navigator.clipboard.writeText(path)
-        setToast({ message: '已复制路径', kind: 'success' })
-      } catch (e) {
-        setToast({ message: `复制失败：${String(e)}`, kind: 'error' })
-      }
+  const copyPath = useCallback(async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(path)
+      setToast({ message: '已复制路径', kind: 'success' })
+    } catch (e) {
+      setToast({ message: `复制失败：${String(e)}`, kind: 'error' })
+    }
+  }, [])
+
+  /** 切到相对当前 active 的下一个/上一个 tab；环形 */
+  const cycleTab = useCallback(
+    (delta: 1 | -1) => {
+      setTabs((prev) => {
+        if (prev.length === 0) return prev
+        const idx = prev.findIndex((t) => t.path === activeTabPath)
+        const baseIdx = idx < 0 ? 0 : idx
+        const next = (baseIdx + delta + prev.length) % prev.length
+        setActiveTabPath(prev[next].path)
+        return prev
+      })
     },
-    [],
+    [activeTabPath],
   )
 
+  // —— 全局快捷键：(⌘|⌃) S / W / ⇧← / ⇧→ ——
+  // 同时接受 metaKey（macOS ⌘）与 ctrlKey（macOS ⌃ 或 Win/Linux Ctrl）。
+  // 这是因为普通 Chrome 标签页里 ⌘W 会被浏览器吞掉关掉标签，根本传不到 JS；
+  // 此时用户可以退而用 ⌃W 关闭当前 reader tab。
+  // app 模式（`j read` 默认走 Chrome --app=URL）无标签栏，⌘W 才能被网页接收。
+  // 用 ref 保存最新引用，避免每次 tabs 变化都重绑 listener
+  const handlersRef = useRef({
+    saveTab,
+    requestCloseTab,
+    cycleTab,
+    activeTabPath,
+  })
+  handlersRef.current = { saveTab, requestCloseTab, cycleTab, activeTabPath }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      const k = e.key.toLowerCase()
+
+      // ⌘S 保存
+      if (!e.shiftKey && k === 's') {
+        e.preventDefault()
+        const p = handlersRef.current.activeTabPath
+        if (p) void handlersRef.current.saveTab(p)
+        return
+      }
+      // ⌘W 关 tab
+      if (!e.shiftKey && k === 'w') {
+        e.preventDefault()
+        const p = handlersRef.current.activeTabPath
+        if (p) handlersRef.current.requestCloseTab(p)
+        return
+      }
+      // ⌘⇧← / ⌘⇧→ 切 tab
+      if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault()
+        handlersRef.current.cycleTab(e.key === 'ArrowLeft' ? -1 : 1)
+        return
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // —— TOC ——
+  // docsRef 是 ref（变化不触发渲染），所以 deps 用 path + docVersion
   const headings = useMemo(() => {
-    if (!activeTab || activeTab.kind !== 'markdown' || !activeTab.doc) return []
-    return extractHeadings(activeTab.doc as ParsedDocument)
-  }, [activeTab])
+    if (!activeTab || activeTab.kind !== 'markdown') return []
+    const doc = docsRef.current[activeTab.path]
+    if (!doc) return []
+    return extractHeadings(doc)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab?.path, docVersion])
 
   // —— Loading / Error 屏 ——
   if (loadState.kind === 'loading') {
@@ -301,24 +387,19 @@ export function Reader() {
               activeTab.kind === 'markdown' ? (
                 <MilkdownEditor
                   key={activeTab.path}
-                  tab={activeTab}
+                  path={activeTab.path}
                   baseDir={baseDir}
-                  onChange={(source: string) =>
-                    updateTab(activeTab.path, { source, dirty: true })
-                  }
-                  onParsed={(doc: ParsedDocument) =>
-                    updateTab(activeTab.path, { doc })
-                  }
+                  initialSource={sourcesRef.current[activeTab.path] ?? ''}
+                  onChange={handleSourceChange}
+                  onParsed={handleDocParsed}
                   onSave={() => saveTab(activeTab.path)}
                 />
               ) : (
                 <PlainTextEditor
                   key={activeTab.path}
-                  tab={activeTab}
-                  onChange={(source) =>
-                    updateTab(activeTab.path, { source, dirty: true })
-                  }
-                  onSave={() => saveTab(activeTab.path)}
+                  path={activeTab.path}
+                  initialSource={sourcesRef.current[activeTab.path] ?? ''}
+                  onChange={handleSourceChange}
                 />
               )
             ) : (
@@ -383,13 +464,23 @@ function docToTab(doc: RenderedDoc): Tab {
       doc.kind === 'markdown' || doc.kind === 'plain_text'
         ? doc.kind
         : 'plain_text',
-    source: doc.source,
-    doc:
-      doc.kind === 'markdown' && doc.payload
-        ? (doc.payload as ParsedDocument)
-        : null,
     dirty: false,
     saving: 'idle',
+  }
+}
+
+/**
+ * 把一份 RenderedDoc 拆进 sources / docs 两个 ref 桶。
+ * 与 docToTab 配套使用。
+ */
+function ingestDoc(
+  doc: RenderedDoc,
+  sourcesRef: React.RefObject<Record<string, string>>,
+  docsRef: React.RefObject<Record<string, ParsedDocument>>,
+) {
+  sourcesRef.current![doc.path] = doc.source
+  if (doc.kind === 'markdown' && doc.payload) {
+    docsRef.current![doc.path] = doc.payload as ParsedDocument
   }
 }
 
@@ -473,8 +564,20 @@ function EmptyState() {
           <span>保存当前文件</span>
         </div>
         <div className="row">
-          <kbd>Click</kbd>
-          <span>左侧目录的 dotfile 按钮可显示隐藏文件</span>
+          <kbd>⌘</kbd>
+          <kbd>W</kbd>
+          <span>/</span>
+          <kbd>⌃</kbd>
+          <kbd>W</kbd>
+          <span>关闭当前 Tab</span>
+        </div>
+        <div className="row">
+          <kbd>⌘</kbd>
+          <kbd>⇧</kbd>
+          <kbd>←</kbd>
+          <span>/</span>
+          <kbd>→</kbd>
+          <span>切换前后 Tab</span>
         </div>
       </div>
     </div>
