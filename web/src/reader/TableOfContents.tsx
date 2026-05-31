@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ChevronsLeft, ChevronsRight, ListTree } from './Icon'
 import type { HeadingItem } from './toc'
 
 interface Props {
@@ -7,7 +8,11 @@ interface Props {
   onToggleCollapsed: () => void
 }
 
-export function TableOfContents({ headings, collapsed, onToggleCollapsed }: Props) {
+export function TableOfContents({
+  headings,
+  collapsed,
+  onToggleCollapsed,
+}: Props) {
   const [activeId, setActiveId] = useState<string>('')
 
   useEffect(() => {
@@ -32,26 +37,35 @@ export function TableOfContents({ headings, collapsed, onToggleCollapsed }: Prop
   if (collapsed) {
     return (
       <button
+        type="button"
         onClick={onToggleCollapsed}
-        className="h-full w-full flex items-start justify-center pt-4 text-seeyue-fg-dim hover:text-seeyue-fg transition-colors"
+        className="seeyue-toc-rail"
         title="展开目录"
       >
-        <span className="text-xs">«</span>
+        <ChevronsLeft size={16} />
       </button>
     )
   }
 
   if (headings.length === 0) {
     return (
-      <div className="px-4 py-4 text-seeyue-fg-dim text-xs flex items-start justify-between">
-        <span>无标题</span>
-        <button
-          onClick={onToggleCollapsed}
-          className="text-seeyue-fg-dim hover:text-seeyue-fg transition-colors"
-          title="收起目录"
-        >
-          »
-        </button>
+      <div className="seeyue-toc-shell">
+        <div className="head">
+          <span className="title flex items-center gap-1.5">
+            <ListTree size={14} /> Contents
+          </span>
+          <button
+            type="button"
+            className="seeyue-icon-btn"
+            onClick={onToggleCollapsed}
+            title="收起目录"
+          >
+            <ChevronsRight size={14} />
+          </button>
+        </div>
+        <div className="px-4 pt-6 text-xs text-seeyue-fg-dim italic">
+          暂无标题
+        </div>
       </div>
     )
   }
@@ -59,20 +73,21 @@ export function TableOfContents({ headings, collapsed, onToggleCollapsed }: Prop
   const minLevel = Math.min(...headings.map((h) => h.level))
 
   return (
-    <nav className="text-xs px-3 py-4">
-      <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-seeyue-fg-dim uppercase tracking-wider text-[10px] font-medium">
-          目录
+    <nav className="seeyue-toc-shell">
+      <div className="head">
+        <span className="title flex items-center gap-1.5">
+          <ListTree size={14} /> Contents
         </span>
         <button
+          type="button"
+          className="seeyue-icon-btn"
           onClick={onToggleCollapsed}
-          className="text-seeyue-fg-dim hover:text-seeyue-fg transition-colors text-xs"
           title="收起目录"
         >
-          »
+          <ChevronsRight size={14} />
         </button>
       </div>
-      <ul className="space-y-1 border-l border-seeyue-border">
+      <ul className="seeyue-toc-list">
         {headings.map((h) => {
           const indent = h.level - minLevel
           const isActive = h.id === activeId
@@ -86,23 +101,12 @@ export function TableOfContents({ headings, collapsed, onToggleCollapsed }: Prop
                     .getElementById(h.id)
                     ?.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className={`block truncate transition-colors ${
-                  isActive
-                    ? 'text-seeyue-fg-strong font-medium'
-                    : 'text-seeyue-fg-muted hover:text-seeyue-fg'
-                }`}
+                className="row"
+                data-active={isActive ? 'true' : undefined}
                 style={{ paddingLeft: `${indent * 12 + 10}px` }}
                 title={h.text}
               >
-                <span
-                  className={`inline-block border-l-2 -ml-px pl-2 py-0.5 transition-colors ${
-                    isActive
-                      ? 'border-seeyue-accent'
-                      : 'border-transparent'
-                  }`}
-                >
-                  {h.text}
-                </span>
+                {h.text}
               </a>
             </li>
           )

@@ -1,3 +1,4 @@
+import { Save } from './Icon'
 import type { Tab } from './types'
 
 interface Props {
@@ -12,7 +13,12 @@ export function PlainTextEditor({ tab, onChange, onSave }: Props) {
       <div className="flex items-center justify-between h-8 px-3 border-b border-seeyue-border text-[11px] text-seeyue-fg-dim uppercase tracking-wider">
         <span>纯文本</span>
         <span className="flex items-center gap-2">
-          {tab.dirty && <span className="text-seeyue-warn text-xs">● 未保存</span>}
+          {tab.dirty && (
+            <span className="status-pill" data-tone="warn"
+                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999 }}>
+              ● 未保存
+            </span>
+          )}
           {tab.saving === 'saving' && (
             <span className="text-seeyue-accent">保存中…</span>
           )}
@@ -23,10 +29,10 @@ export function PlainTextEditor({ tab, onChange, onSave }: Props) {
           )}
           <button
             onClick={() => void onSave()}
-            className="px-1.5 py-0.5 rounded text-[10px] hover:text-seeyue-accent transition-colors"
+            className="seeyue-icon-btn"
             title="Cmd+S 保存"
           >
-            ⌘S
+            <Save size={14} />
           </button>
         </span>
       </div>

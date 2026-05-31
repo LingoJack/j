@@ -8,6 +8,12 @@ import { TableOfContents } from './TableOfContents'
 import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { MarkdownBaseDirContext } from './MarkdownIR'
+import {
+  BookOpen,
+  Copy,
+  Save,
+  Sparkles,
+} from './Icon'
 import type {
   InitialResp,
   ParsedDocument,
@@ -32,7 +38,10 @@ export function Reader() {
   /** 关闭 dirty Tab 时弹出三选项确认 */
   const [closing, setClosing] = useState<{ path: string } | null>(null)
   /** 错误 / 成功提示（替代 alert） */
-  const [toast, setToast] = useState<{ message: string; kind: 'error' | 'success' | 'info' } | null>(null)
+  const [toast, setToast] = useState<{
+    message: string
+    kind: 'error' | 'success' | 'info'
+  } | null>(null)
   /** TOC 折叠态，持久化到 localStorage */
   const [tocCollapsed, setTocCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('jreader.tocCollapsed') === '1'
@@ -131,7 +140,10 @@ export function Reader() {
         return
       }
       if (tabs.length >= MAX_TABS) {
-        setToast({ message: `已打开 ${MAX_TABS} 个 Tab，关闭一些再试`, kind: 'info' })
+        setToast({
+          message: `已打开 ${MAX_TABS} 个 Tab，关闭一些再试`,
+          kind: 'info',
+        })
         return
       }
       try {
@@ -203,12 +215,25 @@ export function Reader() {
           throw new Error(body.error ?? `HTTP ${res.status}`)
         }
         updateTab(path, { saving: 'idle', dirty: false, error: undefined })
+        setToast({ message: '已保存', kind: 'success' })
       } catch (e) {
         updateTab(path, { saving: 'error', error: String(e) })
         setToast({ message: `保存失败：${String(e)}`, kind: 'error' })
       }
     },
     [tabs, updateTab],
+  )
+
+  const copyPath = useCallback(
+    async (path: string) => {
+      try {
+        await navigator.clipboard.writeText(path)
+        setToast({ message: '已复制路径', kind: 'success' })
+      } catch (e) {
+        setToast({ message: `复制失败：${String(e)}`, kind: 'error' })
+      }
+    },
+    [],
   )
 
   // —— TOC ——
@@ -220,7 +245,8 @@ export function Reader() {
   // —— Loading / Error 屏 ——
   if (loadState.kind === 'loading') {
     return (
-      <div className="h-full flex items-center justify-center text-seeyue-fg-muted text-sm">
+      <div className="h-full flex items-center justify-center text-seeyue-fg-muted text-sm gap-2">
+        <span className="inline-block w-2 h-2 rounded-full bg-seeyue-accent animate-pulse" />
         加载中…
       </div>
     )
@@ -235,128 +261,231 @@ export function Reader() {
 
   return (
     <MarkdownBaseDirContext.Provider value={baseDir}>
-    <div
-      className="h-full grid bg-seeyue-bg text-seeyue-fg"
-      style={{
-        gridTemplateColumns: tocCollapsed
-          ? '260px 1fr 24px'
-          : '260px 1fr 240px',
-      }}
-    >
-      {/* 左：文件树 */}
-      <aside className="border-r border-seeyue-border bg-seeyue-sidebar overflow-hidden">
-        <FileTree
-          root={treeRoot}
-          onChangeRoot={setTreeRoot}
-          showHidden={showHidden}
-          onToggleHidden={() => setShowHidden((v) => !v)}
-          activePath={activeTabPath}
-          onOpen={openFile}
-        />
-      </aside>
+      <div
+        className="h-full grid bg-seeyue-bg text-seeyue-fg"
+        style={{
+          gridTemplateColumns: tocCollapsed
+            ? '270px 1fr 28px'
+            : '270px 1fr 240px',
+        }}
+      >
+        {/* 左：文件树 */}
+        <aside className="border-r border-seeyue-border overflow-hidden">
+          <FileTree
+            root={treeRoot}
+            onChangeRoot={setTreeRoot}
+            showHidden={showHidden}
+            onToggleHidden={() => setShowHidden((v) => !v)}
+            activePath={activeTabPath}
+            onOpen={openFile}
+          />
+        </aside>
 
-      {/* 中：Tab 条 + 编辑区 */}
-      <main className="flex flex-col overflow-hidden">
-        <TabBar
-          tabs={tabs}
-          activePath={activeTabPath}
-          onActivate={setActiveTabPath}
-          onClose={requestCloseTab}
-        />
-        <div className="flex-1 overflow-hidden">
-          {activeTab ? (
-            activeTab.kind === 'markdown' ? (
-              <MilkdownEditor
-                key={activeTab.path}
-                tab={activeTab}
-                baseDir={baseDir}
-                onChange={(source: string) =>
-                  updateTab(activeTab.path, { source, dirty: true })
-                }
-                onParsed={(doc: ParsedDocument) => updateTab(activeTab.path, { doc })}
-                onSave={() => saveTab(activeTab.path)}
-              />
-            ) : (
-              <PlainTextEditor
-                key={activeTab.path}
-                tab={activeTab}
-                onChange={(source) =>
-                  updateTab(activeTab.path, { source, dirty: true })
-                }
-                onSave={() => saveTab(activeTab.path)}
-              />
-            )
-          ) : (
-            <div className="h-full flex items-center justify-center text-seeyue-fg-dim text-sm">
-              没有打开的文件，左侧选一个吧
-            </div>
+        {/* 中：Tab 条 + 编辑器顶栏 + 编辑区 */}
+        <main className="flex flex-col overflow-hidden">
+          <TabBar
+            tabs={tabs}
+            activePath={activeTabPath}
+            onActivate={setActiveTabPath}
+            onClose={requestCloseTab}
+          />
+          {activeTab && (
+            <EditorBar
+              tab={activeTab}
+              onSave={() => saveTab(activeTab.path)}
+              onCopyPath={() => copyPath(activeTab.path)}
+            />
           )}
-        </div>
-      </main>
+          <div className="flex-1 overflow-hidden">
+            {activeTab ? (
+              activeTab.kind === 'markdown' ? (
+                <MilkdownEditor
+                  key={activeTab.path}
+                  tab={activeTab}
+                  baseDir={baseDir}
+                  onChange={(source: string) =>
+                    updateTab(activeTab.path, { source, dirty: true })
+                  }
+                  onParsed={(doc: ParsedDocument) =>
+                    updateTab(activeTab.path, { doc })
+                  }
+                  onSave={() => saveTab(activeTab.path)}
+                />
+              ) : (
+                <PlainTextEditor
+                  key={activeTab.path}
+                  tab={activeTab}
+                  onChange={(source) =>
+                    updateTab(activeTab.path, { source, dirty: true })
+                  }
+                  onSave={() => saveTab(activeTab.path)}
+                />
+              )
+            ) : (
+              <EmptyState />
+            )}
+          </div>
+        </main>
 
-      {/* 右：TOC */}
-      <aside className="border-l border-seeyue-border bg-seeyue-sidebar overflow-y-auto">
-        <TableOfContents
-          headings={headings}
-          collapsed={tocCollapsed}
-          onToggleCollapsed={toggleToc}
-        />
-      </aside>
+        {/* 右：TOC */}
+        <aside className="border-l border-seeyue-border overflow-hidden">
+          <TableOfContents
+            headings={headings}
+            collapsed={tocCollapsed}
+            onToggleCollapsed={toggleToc}
+          />
+        </aside>
 
-      {/* 关闭确认 */}
-      {closing && (
-        <CloseConfirmDialog
-          filename={tabs.find((t) => t.path === closing.path)?.filename ?? ''}
-          onSave={async () => {
-            await saveTab(closing.path)
-            // 仅在确实已保存时才关
-            const latest = activeTabRef.current // 仅作占位，真正要看 tabs
-            void latest
-            setClosing(null)
-            // 用 setState 闭包内最新 tabs 判断
-            setTabs((prev) => {
-              const t = prev.find((x) => x.path === closing.path)
-              if (t && !t.dirty) {
-                queueMicrotask(() => forceCloseTab(closing.path))
-              }
-              return prev
-            })
-          }}
-          onDiscard={() => {
-            forceCloseTab(closing.path)
-            setClosing(null)
-          }}
-          onCancel={() => setClosing(null)}
-        />
-      )}
+        {/* 关闭确认 */}
+        {closing && (
+          <CloseConfirmDialog
+            filename={tabs.find((t) => t.path === closing.path)?.filename ?? ''}
+            onSave={async () => {
+              await saveTab(closing.path)
+              setClosing(null)
+              setTabs((prev) => {
+                const t = prev.find((x) => x.path === closing.path)
+                if (t && !t.dirty) {
+                  queueMicrotask(() => forceCloseTab(closing.path))
+                }
+                return prev
+              })
+            }}
+            onDiscard={() => {
+              forceCloseTab(closing.path)
+              setClosing(null)
+            }}
+            onCancel={() => setClosing(null)}
+          />
+        )}
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          kind={toast.kind}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
+        {toast && (
+          <Toast
+            message={toast.message}
+            kind={toast.kind}
+            onClose={() => setToast(null)}
+          />
+        )}
+      </div>
     </MarkdownBaseDirContext.Provider>
   )
 }
 
 // ---------------------------------------------------------------------------
-// helpers
+// helpers / sub-components
 // ---------------------------------------------------------------------------
 
 function docToTab(doc: RenderedDoc): Tab {
   return {
     path: doc.path,
     filename: doc.filename,
-    kind: doc.kind === 'markdown' || doc.kind === 'plain_text' ? doc.kind : 'plain_text',
+    kind:
+      doc.kind === 'markdown' || doc.kind === 'plain_text'
+        ? doc.kind
+        : 'plain_text',
     source: doc.source,
     doc:
-      doc.kind === 'markdown' && doc.payload ? (doc.payload as ParsedDocument) : null,
+      doc.kind === 'markdown' && doc.payload
+        ? (doc.payload as ParsedDocument)
+        : null,
     dirty: false,
     saving: 'idle',
   }
+}
+
+/**
+ * 编辑器顶栏：面包屑 + 状态徽章 + 保存 / 复制路径快捷按钮。
+ *
+ * 这块取代了「中央区只有 Tab 条」的潦草感，给用户：
+ * - 当前文件的路径上下文
+ * - 一眼可见的 dirty / saving 状态
+ * - 不必去 menu bar 找的常用操作
+ */
+function EditorBar({
+  tab,
+  onSave,
+  onCopyPath,
+}: {
+  tab: Tab
+  onSave: () => void
+  onCopyPath: () => void
+}) {
+  const segs = breadcrumb(tab.path)
+  return (
+    <div className="seeyue-editor-bar">
+      <div className="breadcrumb" title={tab.path}>
+        {segs.map((s, i) => (
+          <span
+            key={i}
+            className={`crumb ${i === segs.length - 1 ? 'crumb-leaf' : ''}`}
+          >
+            {i > 0 && <span className="crumb-sep"> / </span>}
+            {s}
+          </span>
+        ))}
+      </div>
+      {tab.dirty && (
+        <span className="status-pill" data-tone="warn">
+          ● 未保存
+        </span>
+      )}
+      {tab.saving === 'saving' && (
+        <span className="status-pill" data-tone="accent">
+          保存中…
+        </span>
+      )}
+      {tab.saving === 'error' && (
+        <span className="status-pill" data-tone="danger" title={tab.error}>
+          保存失败
+        </span>
+      )}
+      <button className="seeyue-icon-btn" onClick={onCopyPath} title="复制路径">
+        <Copy size={14} />
+      </button>
+      <button
+        className="seeyue-icon-btn"
+        onClick={onSave}
+        title="保存（⌘S）"
+      >
+        <Save size={14} />
+      </button>
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="seeyue-empty">
+      <span className="glyph">
+        <BookOpen size={36} />
+      </span>
+      <div className="title flex items-center gap-1.5">
+        <Sparkles size={14} className="opacity-70" />
+        从左侧选一个文件开始阅读
+      </div>
+      <div className="subtitle">
+        也可以直接在终端运行 <code>j read &lt;file&gt;</code> 打开指定文件。
+      </div>
+      <div className="shortcuts">
+        <div className="row">
+          <kbd>⌘</kbd>
+          <kbd>S</kbd>
+          <span>保存当前文件</span>
+        </div>
+        <div className="row">
+          <kbd>Click</kbd>
+          <span>左侧目录的 dotfile 按钮可显示隐藏文件</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function breadcrumb(p: string): string[] {
+  if (!p) return ['(empty)']
+  const parts = p.split('/').filter(Boolean)
+  if (parts.length <= 4) return parts
+  return ['…', ...parts.slice(-3)]
 }
 
 /** 同步 document.title 与 beforeunload 拦截。 */

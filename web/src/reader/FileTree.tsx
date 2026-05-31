@@ -1,5 +1,23 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DirEntry, ListResp } from './types'
+import {
+  ChevronDown,
+  ChevronRight,
+  EyeOff,
+  Eye,
+  FileCode,
+  FileGeneric,
+  FileImage,
+  FileMd,
+  FileText,
+  FolderClosed,
+  FolderOpen,
+  FolderRoot,
+  Files,
+  Search,
+  pickFileIconKind,
+} from './Icon'
+import { PromptDialog } from './PromptDialog'
 
 interface Props {
   root: string
@@ -19,11 +37,21 @@ interface NodeState {
   error: string | null
 }
 
+/**
+ * Typora 风文件树。
+ *
+ * - 顶部：头部 tab（文件 / 大纲——大纲走右侧栏，这里只是装饰提示），路径面包屑
+ * - 中部：搜索框 + 隐藏文件切换按钮
+ * - 主体：层级文件树，文件夹折叠/展开有 caret + folder icon 双重提示，
+ *   active 文件用主色块 + 末尾 endLine 装饰
+ */
 export function FileTree(props: Props) {
   const { root, onChangeRoot, showHidden, onToggleHidden, activePath, onOpen } =
     props
   // 以路径为 key 存储每个已访问目录的状态
   const [nodes, setNodes] = useState<Record<string, NodeState>>({})
+  const [filter, setFilter] = useState('')
+  const [pickingRoot, setPickingRoot] = useState(false)
 
   const loadDir = useCallback(
     async (dir: string) => {
@@ -82,7 +110,15 @@ export function FileTree(props: Props) {
     // 子目录在用户重新展开时按需加载
     setNodes((prev) => {
       // 仅保留 root，其他清掉
-      return { [root]: prev[root] ?? { loading: true, expanded: true, entries: null, truncated: false, error: null } }
+      return {
+        [root]: prev[root] ?? {
+          loading: true,
+          expanded: true,
+          entries: null,
+          truncated: false,
+          error: null,
+        },
+      }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, showHidden])
@@ -102,37 +138,83 @@ export function FileTree(props: Props) {
     [nodes, loadDir],
   )
 
-  const handlePickRoot = () => {
-    const next = window.prompt('切换文件树根目录（输入绝对路径）：', root)
-    if (!next || next === root) return
-    onChangeRoot(next.trim())
-  }
+  // 路径面包屑分段
+  const crumbs = useMemo(() => splitPath(root), [root])
+  const filterLower = filter.trim().toLowerCase()
 
   return (
-    <div className="h-full flex flex-col text-[13px] text-seeyue-fg">
-      {/* 顶部工具栏 */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-seeyue-border">
+    <div className="h-full flex flex-col text-[13px] text-seeyue-fg seeyue-sidebar-shell">
+      {/* —— 顶部："文件" 标题 + 视图切换 —— */}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border">
+        <button className="seeyue-tab" data-active="true">
+          <Files size={14} />
+          <span>文件</span>
+        </button>
+        <div className="flex-1" />
         <button
-          onClick={handlePickRoot}
-          className="text-seeyue-fg-muted hover:text-seeyue-fg-strong text-xs truncate flex-1 text-left"
-          title={root}
+          className="seeyue-icon-btn"
+          onClick={() => setPickingRoot(true)}
+          title="切换根目录"
         >
-          {pathTail(root)}
+          <FolderRoot size={15} />
         </button>
         <button
+          className="seeyue-icon-btn"
           onClick={onToggleHidden}
-          className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
-            showHidden
-              ? 'text-seeyue-accent bg-seeyue-accent-soft'
-              : 'text-seeyue-fg-dim hover:text-seeyue-fg-muted'
-          }`}
-          title="切换显示隐藏文件（dotfile）"
+          data-active={showHidden ? 'true' : undefined}
+          title={showHidden ? '隐藏 dotfile' : '显示 dotfile'}
         >
-          .*
+          {showHidden ? <Eye size={15} /> : <EyeOff size={15} />}
         </button>
       </div>
-      {/* 树体 */}
-      <div className="flex-1 overflow-y-auto py-1">
+
+      {/* —— 路径面包屑 —— */}
+      <div
+        className="px-3 pt-2 pb-1.5 text-[11px] text-seeyue-fg-dim flex items-center gap-1 truncate"
+        title={root}
+      >
+        {crumbs.map((seg, i) => (
+          <span key={i} className="flex items-center gap-1 truncate">
+            {i > 0 && <span className="opacity-50">/</span>}
+            <span
+              className={
+                i === crumbs.length - 1
+                  ? 'text-seeyue-fg-strong truncate font-medium'
+                  : 'truncate'
+              }
+            >
+              {seg}
+            </span>
+          </span>
+        ))}
+      </div>
+
+      {/* —— 搜索框 —— */}
+      <div className="px-3 pt-2 pb-2">
+        <div className="seeyue-search-box">
+          <Search size={13} />
+          <input
+            type="text"
+            value={filter}
+            placeholder="过滤当前目录"
+            onChange={(e) => setFilter(e.target.value)}
+            spellCheck={false}
+          />
+          {filter && (
+            <button
+              className="seeyue-icon-btn"
+              style={{ width: 18, height: 18 }}
+              onClick={() => setFilter('')}
+              title="清除"
+            >
+              <span style={{ fontSize: 11 }}>×</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* —— 树体 —— */}
+      <div className="flex-1 overflow-y-auto pl-3 pr-2 pb-3">
         <DirNode
           path={root}
           depth={0}
@@ -140,8 +222,23 @@ export function FileTree(props: Props) {
           onToggle={toggleDir}
           onOpen={onOpen}
           activePath={activePath}
+          filter={filterLower}
         />
       </div>
+
+      {pickingRoot && (
+        <PromptDialog
+          title="切换文件树根目录"
+          description="输入要展示的绝对路径："
+          initialValue={root}
+          placeholder="/Users/.../docs"
+          onCancel={() => setPickingRoot(false)}
+          onConfirm={(next) => {
+            setPickingRoot(false)
+            if (next && next !== root) onChangeRoot(next)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -153,6 +250,7 @@ interface DirNodeProps {
   onToggle: (path: string) => void
   onOpen: (path: string) => void
   activePath: string | null
+  filter: string
 }
 
 function DirNode({
@@ -162,30 +260,42 @@ function DirNode({
   onToggle,
   onOpen,
   activePath,
+  filter,
 }: DirNodeProps) {
   const state = nodes[path]
+  const indent = (lvl: number) => 8 + lvl * 14
+
+  // 在 early-return 之前调用 hooks，避免 react-hooks/rules-of-hooks 违例
+  const entries = state?.entries
+  const filtered = useMemo(() => {
+    if (!entries) return null
+    if (!filter) return entries
+    return entries.filter((e) => e.name.toLowerCase().includes(filter))
+  }, [entries, filter])
+
   if (!state) return null
 
   return (
-    <div>
+    <div className={depth > 0 ? 'seeyue-tree-branch' : undefined}>
       {state.loading && !state.entries && (
         <div
-          className="px-3 py-1 text-seeyue-fg-dim text-xs"
-          style={{ paddingLeft: 12 + depth * 14 }}
+          className="py-1 text-seeyue-fg-dim text-xs flex items-center gap-1"
+          style={{ paddingLeft: indent(depth) }}
         >
-          加载中…
+          <span className="inline-block w-2 h-2 rounded-full bg-seeyue-fg-dim animate-pulse" />
+          <span>加载中…</span>
         </div>
       )}
       {state.error && (
         <div
-          className="px-3 py-1 text-seeyue-danger text-xs whitespace-pre-wrap"
-          style={{ paddingLeft: 12 + depth * 14 }}
+          className="py-1 text-seeyue-danger text-xs whitespace-pre-wrap"
+          style={{ paddingLeft: indent(depth) }}
         >
           {state.error}
         </div>
       )}
       {state.expanded &&
-        state.entries?.map((entry) => (
+        filtered?.map((entry) => (
           <EntryRow
             key={entry.path}
             entry={entry}
@@ -194,12 +304,21 @@ function DirNode({
             onToggle={onToggle}
             onOpen={onOpen}
             activePath={activePath}
+            filter={filter}
           />
         ))}
+      {state.expanded && filter && filtered && filtered.length === 0 && (
+        <div
+          className="py-1 text-seeyue-fg-dim text-xs italic"
+          style={{ paddingLeft: indent(depth + 1) }}
+        >
+          无匹配项
+        </div>
+      )}
       {state.truncated && (
         <div
-          className="px-3 py-1 text-seeyue-fg-dim text-xs italic"
-          style={{ paddingLeft: 12 + (depth + 1) * 14 }}
+          className="py-1 text-seeyue-fg-dim text-xs italic"
+          style={{ paddingLeft: indent(depth + 1) }}
         >
           目录过大，仅显示前 2000 项
         </div>
@@ -215,6 +334,7 @@ function EntryRow({
   onToggle,
   onOpen,
   activePath,
+  filter,
 }: {
   entry: DirEntry
   depth: number
@@ -222,28 +342,47 @@ function EntryRow({
   onToggle: (path: string) => void
   onOpen: (path: string) => void
   activePath: string | null
+  filter: string
 }) {
   const sub = nodes[entry.path]
   const isActive = !entry.is_dir && entry.path === activePath
+  const indent = 4 + depth * 14
   return (
     <>
       <button
+        type="button"
         onClick={() => (entry.is_dir ? onToggle(entry.path) : onOpen(entry.path))}
-        className={`w-full text-left flex items-center gap-1 py-0.5 pr-2 transition-colors ${
-          isActive
-            ? 'bg-seeyue-accent-soft text-seeyue-fg-strong'
-            : 'text-seeyue-fg hover:bg-seeyue-panel'
-        }`}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        className="seeyue-tree-row"
+        data-active={isActive ? 'true' : undefined}
+        style={{ paddingLeft: indent }}
         title={entry.path}
       >
-        <span className="w-3 text-seeyue-fg-dim text-[10px]">
-          {entry.is_dir ? (sub?.expanded ? '▾' : '▸') : ''}
+        <span className="seeyue-tree-caret">
+          {entry.is_dir ? (
+            sub?.expanded ? (
+              <ChevronDown size={12} />
+            ) : (
+              <ChevronRight size={12} />
+            )
+          ) : null}
         </span>
-        <span className="w-4 text-seeyue-fg-dim text-[11px]">
-          {entry.is_dir ? '📁' : <FileIcon name={entry.name} />}
+        <span
+          className="seeyue-tree-icon"
+          data-kind={
+            entry.is_dir
+              ? sub?.expanded
+                ? 'folder-open'
+                : 'folder'
+              : pickFileIconKind(entry.name)
+          }
+        >
+          <FileGlyph
+            name={entry.name}
+            isDir={entry.is_dir}
+            expanded={!!sub?.expanded}
+          />
         </span>
-        <span className="truncate text-[13px]">{entry.name}</span>
+        <span className="seeyue-tree-label">{entry.name}</span>
       </button>
       {entry.is_dir && sub?.expanded && (
         <DirNode
@@ -253,25 +392,44 @@ function EntryRow({
           onToggle={onToggle}
           onOpen={onOpen}
           activePath={activePath}
+          filter={filter}
         />
       )}
     </>
   )
 }
 
-/** 把绝对路径裁成「.../parent/name」 */
-function pathTail(p: string): string {
-  if (!p) return ''
-  const parts = p.split('/').filter(Boolean)
-  if (parts.length <= 2) return p
-  return '…/' + parts.slice(-2).join('/')
+function FileGlyph({
+  name,
+  isDir,
+  expanded,
+}: {
+  name: string
+  isDir: boolean
+  expanded: boolean
+}) {
+  if (isDir) {
+    return expanded ? <FolderOpen size={15} /> : <FolderClosed size={15} />
+  }
+  const kind = pickFileIconKind(name)
+  switch (kind) {
+    case 'markdown':
+      return <FileMd size={15} />
+    case 'text':
+      return <FileText size={15} />
+    case 'code':
+      return <FileCode size={15} />
+    case 'image':
+      return <FileImage size={15} />
+    default:
+      return <FileGeneric size={15} />
+  }
 }
 
-/** 文件图标：.md / .markdown 显示「M↓」蓝徽章；其它扩展用 📄 */
-function FileIcon({ name }: { name: string }) {
-  const lower = name.toLowerCase()
-  if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
-    return <span className="seeyue-md-badge">M↓</span>
-  }
-  return <span>📄</span>
+function splitPath(p: string): string[] {
+  if (!p) return ['(empty)']
+  const parts = p.split('/').filter(Boolean)
+  if (parts.length === 0) return ['/']
+  if (parts.length <= 4) return parts
+  return ['…', ...parts.slice(-3)]
 }
