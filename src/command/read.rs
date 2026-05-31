@@ -14,7 +14,7 @@ mod server;
 
 use crate::config::YamlConfig;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// 单文件大小上限：5 MiB。`/api/file` 与 `/api/save` 共用。
 pub(crate) const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
@@ -26,20 +26,30 @@ pub(crate) const MAX_ASSET_SIZE: u64 = 20 * 1024 * 1024;
 pub(crate) const MAX_DIR_ENTRIES: usize = 2000;
 
 /// `j read <file>` 命令入口。
+#[allow(clippy::too_many_arguments)]
 pub fn handle_read(
     file_path: &str,
     port: Option<u16>,
     no_open: bool,
     tab: bool,
+    foreground: bool,
+    daemon_child: bool,
     _config: &mut YamlConfig,
 ) {
-    if let Err(msg) = run(file_path, port, no_open, tab) {
+    if let Err(msg) = run(file_path, port, no_open, tab, foreground, daemon_child) {
         eprintln!("❌ {msg}");
         std::process::exit(1);
     }
 }
 
-fn run(file_path: &str, port: Option<u16>, no_open: bool, tab: bool) -> Result<(), String> {
+fn run(
+    file_path: &str,
+    port: Option<u16>,
+    no_open: bool,
+    tab: bool,
+    foreground: bool,
+    daemon_child: bool,
+) -> Result<(), String> {
     let expanded = expand_tilde(file_path);
     let path = Path::new(&expanded);
 
@@ -70,6 +80,14 @@ fn run(file_path: &str, port: Option<u16>, no_open: bool, tab: bool) -> Result<(
         return Err(format!("\"{file_path}\" 不是普通文件或目录"));
     };
 
+    // —— daemon-child 分支 ——
+    // 子进程：直接跑 server，不打开浏览器（父进程已经打开过了），也不打印
+    // 启动 banner（输出已重定向，没人看）。心跳超时 / 浏览器关闭后自然退。
+    if daemon_child {
+        let bind_port = port.ok_or_else(|| "daemon-child 必须显式指定 --port".to_string())?;
+        return server::serve_blocking(initial_path, root_dir, Some(bind_port));
+    }
+
     // 2. 抢先分配端口（若未指定）—— 用于在 server 启动前就打开浏览器
     let actual_port = match port {
         Some(p) => p,
@@ -86,8 +104,75 @@ fn run(file_path: &str, port: Option<u16>, no_open: bool, tab: bool) -> Result<(
         println!("📖 已禁用自动打开浏览器，请手动访问：{url}");
     }
 
-    // 3. 启动 server，阻塞至 Ctrl-C / 浏览器关闭
-    server::serve_blocking(initial_path, root_dir, Some(actual_port))
+    // 3. 启动 server
+    if foreground {
+        // —— 前台 ——
+        println!("📖 reader 已启动（前台）：{url}");
+        println!("   关闭浏览器页面或按 Ctrl+C 停止");
+        return server::serve_blocking(initial_path, root_dir, Some(actual_port));
+    }
+
+    // —— 默认：daemon 模式 ——
+    spawn_daemon_child(file_path, actual_port)?;
+    println!("📖 reader 已启动：{url}");
+    println!("   关闭浏览器页面会自动停止后台 server（也可通过心跳超时自动退）");
+    Ok(())
+}
+
+/// spawn 一个后台子进程接管 server。
+///
+/// 用 `current_exe` 调起自己，带 `--__daemon-child` 隐藏 flag，stdin/stdout/
+/// stderr 全部丢 /dev/null（或 NUL on Windows），让父进程立刻 return；子进程
+/// 独立存活直到浏览器关掉/心跳超时。
+fn spawn_daemon_child(file_path: &str, port: u16) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("无法定位当前可执行文件路径：{e}"))?;
+
+    let mut cmd = Command::new(exe);
+    cmd.arg("read")
+        .arg(file_path)
+        .arg("--port")
+        .arg(port.to_string())
+        .arg("--no-open")
+        .arg("--__daemon-child");
+
+    // 父子彻底解耦 stdio：子进程不再持有 tty，不会跟 rustyline REPL 抢 stdin
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    // Unix：另起 session，让 SIGHUP（终端关闭）不影响子进程
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // setsid() in pre_exec：子进程脱离父进程的会话/进程组
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setsid() < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
+    // Windows：CREATE_NEW_PROCESS_GROUP + DETACHED_PROCESS
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+        const DETACHED_PROCESS: u32 = 0x00000008;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+    }
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("无法启动 reader 后台进程：{e}"))?;
+
+    println!("   (后台 PID = {})", child.id());
+    // 故意不 .wait() —— 我们就要它在背后跑。显式 forget 让 Child 不被 drop
+    // 时尝试 reap（spawn 出去的 detached 进程交给系统接管）。
+    std::mem::forget(child);
+    Ok(())
 }
 
 /// 探测一个可用端口：绑定 `127.0.0.1:0`，立刻释放，返回端口号。

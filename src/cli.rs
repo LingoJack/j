@@ -292,5 +292,11 @@ pub enum SubCmd {
         /// （app 模式：⌘W 等快捷键归网页所有；标签页模式：⌘W 会被浏览器吞掉）
         #[arg(long)]
         tab: bool,
+        /// 前台运行（默认会 daemonize 后立刻返回 prompt）
+        #[arg(long)]
+        foreground: bool,
+        /// 内部使用：标记当前进程是 daemonize 后的 server 子进程
+        #[arg(long = "__daemon-child", hide = true)]
+        daemon_child: bool,
     },
 }

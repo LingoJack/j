@@ -1,3 +1,41 @@
+# v12.10.92
+
+
+### 新功能
+
+- **Web Reader 多文件 Tab 编辑器**: `j read` 命令重构为 Typora 风格三栏 UI（左：文件树 / 中：Milkdown WYSIWYG 编辑+预览 / 右：大纲），支持多 Tab、文件树浏览、目录入口、保存（原子写入）
+- **Notebook 路径补全**: 笔记本新建/重命名/移动/新建目录模式按 `Tab` 弹出路径补全弹窗，支持前缀过滤和候选选择
+- **Notebook 操作后选中保持**: 删除、重命名、移动笔记后自动选中相邻条目，不再跳回列表顶部
+- **Reader 后台 daemon 模式**: 默认以后台进程运行，不再占用终端；通过心跳机制（前端 5s 一次）检测浏览器关闭后自动退出
+- **Reader 心跳超时**: 服务端 30s 无心跳自动 shutdown，作为 `beforeunload` / `sendBeacon` 的兜底
+- **Chrome app 模式**: `j read` 默认尝试 Chrome `--app=URL` 模式打开，`⌘W` 等快捷键归网页所有；`--tab` 切回普通标签页
+- **Reader 图片支持**: Markdown 中的图片（含相对路径）通过 `/api/asset` 代理正确渲染
+- **Markdown IR 图片节点**: 解析器新增 `Inline::Image` 类型，终端渲染为 `[图片: alt](url)` 占位文本
+- **帮助提示重构**: `tips.txt` 全面更新，按模块分类并补充 chat/notebook/todo/script 等功能说明
+- **Reader SVG 图标系统**: 新增统一的 SVG icon 组件库（文件类型图标、操作图标等），替代外部 icon 依赖
+
+### 改进
+
+- **Reader 编辑器性能优化**: 用自研 LRU 缓存 Prism 高亮插件替代上游 `@milkdown/plugin-prism`，按代码块缓存高亮结果，大文档编辑流畅度显著提升
+- **Reader UI 重构为 Nord 暗色主题**: 全新的 CSS 设计系统（`--color-seeyue-*`），包含文件树、Tab 条、TOC、Toast、模态框等组件
+- **Reader `--foreground` 选项**: 新增 `--fg` / `--foreground` 参数，允许前台运行 server（调试用）
+- **Notebook 命令面板增强**: 命令项显示快捷键，搜索支持按快捷键过滤
+- **Notebook 移动操作改进**: 末尾 `/` 表示移入目录并保留原文件名；操作失败时停留在编辑模式让用户继续修改
+- **Notebook 删除改进**: 删除后自动选中同目录相邻笔记
+- **日报 `check` 块感知截取**: `read_last_n_lines_block_aware` 避免截断代码块/表格/列表等 Markdown 结构
+- **交互模式空输入**: 空行时输出换行，避免提示符粘行
+- **Tips 轮转**: 使用原子计数器轮转选取 tips，替代时间戳随机，确保每条 tip 依次出现
+- **Chat 标题栏精简**: 移除顶部多余分割线，节省垂直空间
+- **缩进代码块降级**: 4 空格缩进代码块退化为普通段落渲染，避免列表续行被误画框
+
+### Bug 修复
+
+- **Emoji 表现序列宽度**: 修复 `⚠️`（U+26A0 + U+FE0F）等 emoji 表现序列在表格/折行/编辑器中显示宽度计算错误的问题，新增 `chars_with_display_width` 迭代器统一处理
+- **代码块右内边距缺失**: 修复编辑器代码块内容盖过右侧 `│` 边框的问题，围栏宽度常量从 4 修正为 6
+- **代码块右内边距对齐**: 修复 Insert 模式下代码块右边框列跳动的视觉不一致
+- **Milkdown headingId 无限递归**: 修复 `view.update` 中 dispatch 导致的 "Maximum call stack size exceeded" 崩溃，改用 ProseMirror `appendTransaction` 钩子
+- **`open.sh` 参数引号**: 修复 shell 脚本中路径含空格时无法正确打开的问题
+
 # v12.10.91
 
 ### 新功能

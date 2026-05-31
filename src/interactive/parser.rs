@@ -305,11 +305,14 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             target: rest.get(1).cloned(),
         })
     } else if is(cmd::READ) {
-        // 解析 read 子命令的 flags：--port <N> / --no-open / --tab
+        // 解析 read 子命令的 flags：--port <N> / --no-open / --tab / --foreground
+        // （内部 --__daemon-child 通过 spawn 的 std::process::Command 传，REPL
+        // 用户写不到这里，无需在 parser 暴露）
         let mut file_path: Option<String> = None;
         let mut port: Option<u16> = None;
         let mut no_open = false;
         let mut tab = false;
+        let mut foreground = false;
         let mut i = 0;
         while i < rest.len() {
             let arg = rest[i].as_str();
@@ -318,6 +321,9 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                 i += 1;
             } else if arg == "--tab" {
                 tab = true;
+                i += 1;
+            } else if arg == "--foreground" || arg == "--fg" {
+                foreground = true;
                 i += 1;
             } else if arg == "--port" {
                 if let Some(v) = rest.get(i + 1) {
@@ -351,7 +357,7 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             }
         }
         let Some(path) = file_path else {
-            crate::usage!("read <file_path> [--port <N>] [--no-open] [--tab]");
+            crate::usage!("read <file_path> [--port <N>] [--no-open] [--tab] [--foreground]");
             return ParseResult::Handled;
         };
         ParseResult::Matched(SubCmd::Read {
@@ -359,6 +365,8 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             port,
             no_open,
             tab,
+            foreground,
+            daemon_child: false,
         })
     } else {
         ParseResult::NotFound

@@ -17,11 +17,19 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
 use super::embed::ReaderAssets;
 use super::renderer::{RenderedDoc, render_file};
 use super::{MAX_ASSET_SIZE, MAX_DIR_ENTRIES, MAX_FILE_SIZE};
+
+/// 心跳超时：前端断联超过这个时长，server 自动 shutdown。
+/// 前端每 5 秒发一次，给宽 6 倍裕度。
+const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(30);
+/// watcher 检查心跳的频率
+const HEARTBEAT_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 
 /// 服务端共享状态。
 #[derive(Clone)]
@@ -30,8 +38,22 @@ struct AppState {
     initial_path: Arc<Option<PathBuf>>,
     /// 启动时左侧文件树的根目录（initial_path 的父目录或目录入口本身）
     root_dir: Arc<PathBuf>,
-    /// shutdown 信号（前端在全部 tab 干净后通过 `/api/shutdown` 触发）
+    /// shutdown 信号（前端在全部 tab 干净后通过 `/api/shutdown` 触发；
+    /// 心跳超时也会触发它）
     shutdown: Arc<Notify>,
+    /// 最近一次收到心跳（或任何 API 请求）的 monotonic 毫秒数。
+    /// 用 process-relative 的 `Instant::elapsed()` 表示，AtomicU64 存毫秒。
+    last_heartbeat_ms: Arc<AtomicU64>,
+    /// server 启动时刻（用于心跳的相对时间基准）
+    start: Arc<Instant>,
+}
+
+impl AppState {
+    /// 在收到任何活跃信号（heartbeat / 实际 API 请求）时调用。
+    fn touch(&self) {
+        let elapsed_ms = self.start.elapsed().as_millis() as u64;
+        self.last_heartbeat_ms.store(elapsed_ms, Ordering::Relaxed);
+    }
 }
 
 /// 启动 server 并阻塞当前线程，直到 server 退出。
@@ -60,11 +82,52 @@ pub fn serve_blocking(
             .map_err(|e| format!("获取监听地址失败：{e}"))?;
 
         let shutdown = Arc::new(Notify::new());
+        let start = Arc::new(Instant::now());
+        let last_heartbeat_ms = Arc::new(AtomicU64::new(0));
         let state = AppState {
             initial_path: Arc::new(initial_path),
             root_dir: Arc::new(root_dir),
             shutdown: shutdown.clone(),
+            last_heartbeat_ms: last_heartbeat_ms.clone(),
+            start: start.clone(),
         };
+
+        // 心跳 watcher：定期检查上次心跳；超过 HEARTBEAT_TIMEOUT 即 shutdown。
+        // 这是浏览器关窗口时 beforeunload / sendBeacon 偶尔不触发的兜底。
+        {
+            let shutdown = shutdown.clone();
+            let last = last_heartbeat_ms.clone();
+            let start = start.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(HEARTBEAT_CHECK_INTERVAL);
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    interval.tick().await;
+                    let now_ms = start.elapsed().as_millis() as u64;
+                    let last_ms = last.load(Ordering::Relaxed);
+                    // last_ms == 0 时还没有任何心跳到达 —— 服务刚启动给宽限期
+                    if last_ms == 0 {
+                        // 给 60 秒宽限：浏览器还没打开 / 还没注入 heartbeat
+                        if now_ms > 60_000 {
+                            eprintln!("📖 reader: 60s 内未收到任何心跳，自动退出");
+                            shutdown.notify_one();
+                            return;
+                        }
+                        continue;
+                    }
+                    let stale_ms = now_ms.saturating_sub(last_ms);
+                    if stale_ms > HEARTBEAT_TIMEOUT.as_millis() as u64 {
+                        eprintln!(
+                            "📖 reader: 心跳超时（{}s 未收到），自动退出",
+                            stale_ms / 1000
+                        );
+                        shutdown.notify_one();
+                        return;
+                    }
+                }
+            });
+        }
+
         let app = Router::new()
             .route("/api/initial", get(api_initial))
             .route("/api/file", get(api_file))
@@ -72,6 +135,7 @@ pub fn serve_blocking(
             .route("/api/parse", post(api_parse))
             .route("/api/save", post(api_save))
             .route("/api/asset", get(api_asset))
+            .route("/api/heartbeat", post(api_heartbeat))
             .route("/api/shutdown", post(api_shutdown))
             .route("/", get(index_handler))
             .fallback(static_handler)
@@ -79,7 +143,7 @@ pub fn serve_blocking(
 
         let url = format!("http://{}/", local_addr);
         println!("📖 reader 已启动：{url}");
-        println!("   按 Enter 键停止，或关闭浏览器页面自动停止");
+        println!("   关闭浏览器页面或按 Ctrl+C 停止");
 
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal(shutdown))
@@ -90,22 +154,15 @@ pub fn serve_blocking(
 }
 
 async fn shutdown_signal(shutdown: Arc<Notify>) {
-    use tokio::io::{AsyncBufReadExt, BufReader};
-
-    let stdin_line = async {
-        let mut reader = BufReader::new(tokio::io::stdin());
-        let mut buf = String::new();
-        let _ = reader.read_line(&mut buf).await;
-    };
-
-    tokio::select! {
-        _ = stdin_line => {
-            println!("📖 reader 已关闭");
-        }
-        _ = shutdown.notified() => {
-            println!("📖 reader 已关闭（页面已关闭）");
-        }
-    }
+    // 历史教训：以前这里同时监听 stdin "按 Enter 停止"。但 `tokio::io::stdin()`
+    // 在内部用 blocking 线程持有真实 stdin，select! 赢的另一分支无法 cancel
+    // 这个 syscall —— 进程虽然 graceful shutdown 了，stdin 还被孤儿线程占着，
+    // 控制权返回 j 交互式 REPL（rustyline）后用户必须再敲一次 Enter 才能恢复
+    // 输入。因此**不再读 stdin**：浏览器关窗 / ⌘W / 心跳超时都能触发 notify。
+    // 终端里直接跑 `j read` 想中断的话，Ctrl+C 仍然有效（tokio runtime 接到
+    // SIGINT 会立刻退）。
+    shutdown.notified().await;
+    println!("📖 reader 已关闭");
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +418,15 @@ async fn api_asset(Query(q): Query<AssetQuery>) -> Result<Response, ApiError> {
 
 async fn api_shutdown(State(state): State<AppState>) -> &'static str {
     state.shutdown.notify_one();
+    "ok"
+}
+
+// ---------------------------------------------------------------------------
+// /api/heartbeat — 前端 5s 一次心跳；超时 30s 自动 shutdown
+// ---------------------------------------------------------------------------
+
+async fn api_heartbeat(State(state): State<AppState>) -> &'static str {
+    state.touch();
     "ok"
 }
 

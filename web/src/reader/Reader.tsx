@@ -103,6 +103,26 @@ export function Reader() {
     }
   }, [])
 
+  // —— 心跳：每 5 秒发一次，让服务端确认页面还活着 ——
+  // 浏览器窗口异常关闭（电源、强制退出、app 模式 ⌘W 偶发）时
+  // beforeunload / sendBeacon 不一定会触发；服务端心跳超时（30s 没收到
+  // 就自动 shutdown）是兜底。
+  useEffect(() => {
+    let cancelled = false
+    const tick = () => {
+      if (cancelled) return
+      void fetch('./api/heartbeat', { method: 'POST', keepalive: true }).catch(
+        () => {},
+      )
+    }
+    tick() // 启动时先打一次，避免 60s 宽限期被白白消耗
+    const id = window.setInterval(tick, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [])
+
   const activeTab = useMemo(
     () => tabs.find((t) => t.path === activeTabPath) ?? null,
     [tabs, activeTabPath],
@@ -259,6 +279,35 @@ export function Reader() {
     }
   }, [])
 
+  /**
+   * 关掉整个 reader：通知服务端 shutdown + 关闭浏览器窗口。
+   *
+   * - app 模式（`j read` 默认）：window.close() 真的会关掉那个窗口
+   * - 普通标签页：window.close() 只对脚本打开的窗口生效，所以兜底
+   *   呈现一个 "已断开" 占位页 —— 服务端那边已经收到 shutdown 信号、
+   *   cli 也会退出，用户手动关标签即可
+   */
+  const quitReader = useCallback(() => {
+    // 用 keepalive 而非 sendBeacon，让服务端有更高概率收到（sendBeacon
+    // 在某些 Chrome 版本里在 window.close 之前已经被 cancel）
+    try {
+      void fetch('./api/shutdown', { method: 'POST', keepalive: true })
+    } catch {
+      /* 忽略 */
+    }
+    // 给请求几十毫秒发出去再关窗口
+    window.setTimeout(() => {
+      window.close()
+      // window.close() 在用户直接打开的标签里被忽略 —— 兜底改个占位
+      document.title = 'reader 已退出'
+      const root = document.getElementById('reader-root')
+      if (root) {
+        root.innerHTML =
+          '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#88c0d0;font-family:system-ui;font-size:14px;">📖 reader 已退出，可以关闭此页面</div>'
+      }
+    }, 80)
+  }, [])
+
   /** 切到相对当前 active 的下一个/上一个 tab；环形 */
   const cycleTab = useCallback(
     (delta: 1 | -1) => {
@@ -285,8 +334,15 @@ export function Reader() {
     requestCloseTab,
     cycleTab,
     activeTabPath,
+    quitReader,
   })
-  handlersRef.current = { saveTab, requestCloseTab, cycleTab, activeTabPath }
+  handlersRef.current = {
+    saveTab,
+    requestCloseTab,
+    cycleTab,
+    activeTabPath,
+    quitReader,
+  }
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey
@@ -300,11 +356,15 @@ export function Reader() {
         if (p) void handlersRef.current.saveTab(p)
         return
       }
-      // ⌘W 关 tab
+      // ⌘W 关 tab；没有 tab 时关掉整个 reader
       if (!e.shiftKey && k === 'w') {
         e.preventDefault()
         const p = handlersRef.current.activeTabPath
-        if (p) handlersRef.current.requestCloseTab(p)
+        if (p) {
+          handlersRef.current.requestCloseTab(p)
+        } else {
+          handlersRef.current.quitReader()
+        }
         return
       }
       // ⌘⇧← / ⌘⇧→ 切 tab
@@ -569,7 +629,7 @@ function EmptyState() {
           <span>/</span>
           <kbd>⌃</kbd>
           <kbd>W</kbd>
-          <span>关闭当前 Tab</span>
+          <span>关闭当前 Tab；空时退出 reader</span>
         </div>
         <div className="row">
           <kbd>⌘</kbd>
@@ -607,10 +667,33 @@ function useDirtyTitle(activeTab: Tab | null, anyDirty: boolean) {
         // Chrome 仍要求 returnValue 设值
         e.returnValue = ''
       } else {
-        navigator.sendBeacon('./api/shutdown')
+        // sendBeacon 在某些 Chrome 版本（特别是 app 模式关窗口时）会被
+        // cancel；用 keepalive fetch 替代，配合服务端心跳超时双保险。
+        try {
+          void fetch('./api/shutdown', {
+            method: 'POST',
+            keepalive: true,
+          })
+        } catch {
+          /* 忽略 */
+        }
+        // 兜底：旧浏览器不支持 keepalive 时退化到 sendBeacon
+        if (typeof navigator.sendBeacon === 'function') {
+          navigator.sendBeacon('./api/shutdown')
+        }
       }
     }
     window.addEventListener('beforeunload', handler)
+    // pagehide 在 bfcache 关页时仍会 fire，比 beforeunload 更可靠
+    window.addEventListener('pagehide', () => {
+      if (!anyDirty) {
+        try {
+          navigator.sendBeacon?.('./api/shutdown')
+        } catch {
+          /* 忽略 */
+        }
+      }
+    })
     return () => window.removeEventListener('beforeunload', handler)
   }, [anyDirty])
 }
