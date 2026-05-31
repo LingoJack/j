@@ -4,7 +4,7 @@ use crate::tui::components::{
     draw_command_popup as render_command_popup, draw_confirm_dialog, draw_status_input,
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
@@ -300,14 +300,23 @@ fn render_editor(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
     if let Some(ref mut editor) = app.editor {
         editor.render(f, area);
     } else {
-        // 无内容时显示提示（与开启编辑器时保持一致：编辑区不画边框）
-        let block = Block::default();
+        // 无内容时居中显示提示。
+        // - 水平：Paragraph 自带 `alignment(Center)`
+        // - 垂直：用 Layout 把 area 切成「上空白 / 一行文字 / 下空白」
+        let v_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),    // 上方留白
+                Constraint::Length(1), // 提示行
+                Constraint::Min(0),    // 下方留白
+            ])
+            .split(area);
         let content = Paragraph::new(Line::from(Span::styled(
-            "  选择笔记以编辑内容",
+            "选择笔记以编辑内容",
             Style::default().fg(Color::DarkGray),
         )))
-        .block(block);
-        f.render_widget(content, area);
+        .alignment(Alignment::Center);
+        f.render_widget(content, v_chunks[1]);
     }
 }
 
