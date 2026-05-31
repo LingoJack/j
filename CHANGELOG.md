@@ -1,3 +1,23 @@
+# v12.10.91
+
+
+### 新功能
+
+- **Milkdown 编辑器**: Reader 的 Markdown 编辑器从自研 block 拼接方案迁移到基于 Milkdown（ProseMirror）的所见即所得编辑器，实现光标在段落、列表、表格、代码块之间自由移动的 Typora 级体验
+- **HTML 原生渲染**: Markdown 中的原生 HTML 标签（`<table>`、`<details>`、`<img>` 等）现可真正渲染为 DOM 元素，而非纯文本显示
+- **图片相对路径解析**: 新增 ProseMirror Decoration 层图片路径代理，将相对路径图片自动解析为可加载的 API 地址，同时保留源文件中的原始路径不被改写
+
+### 改进
+
+- **代码高亮**: 代码块语法高亮迁移到 refractor（基于 Prism），支持 23 种语言按需注册，避免全量 bundle 膨胀
+- **Heading ID 去重**: 统一 slug 生成与去重规则为单一来源（`slug.ts`），确保 TOC 点击跳转与服务端 IR 的 heading id 完全一致
+- **构建优化**: Vite 配置新增 `refractor` → `refractor/core` 别名避免全量语言打包；Milkdown/ProseMirror/refractor 独立为 vendor chunk 提升缓存命中率
+
+### Bug 修复
+
+- **交互模式空行显示**: 修复交互模式下输入空行时无换行输出的问题
+</result
+
 # v12.10.90
 
 
