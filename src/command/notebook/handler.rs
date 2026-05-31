@@ -4,7 +4,7 @@ use super::app::{
     handle_confirm_delete, handle_input_mode, handle_ratio_input_mode, load_notes, note_file_path,
     notebook_dir,
 };
-use super::ui::draw_ui;
+use super::ui::{self, draw_ui};
 use crate::command::chat::storage::load_agent_config;
 use crate::constants::{notebook_action, shell};
 use crate::theme::Theme;
@@ -635,7 +635,7 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                 Event::Mouse(mouse) => {
                     let frame_area = terminal.get_frame().area();
                     let layout = compute_mouse_layout(frame_area, &app);
-                    let editor_area = layout.preview_area.unwrap_or_default();
+                    let editor_area = layout.editor.unwrap_or_default();
                     handle_mouse_event(&mut app, mouse, &layout, editor_area);
 
                     // 消费后续鼠标事件
@@ -669,23 +669,15 @@ fn run_notebook_tui_internal() -> io::Result<()> {
 
 // ========== 鼠标事件处理 ==========
 
-/// 鼠标事件处理时需要的布局信息
-struct MouseLayoutInfo {
-    /// 主区域
-    main_area: Rect,
-    /// 笔记列表区域（仅在 Normal 模式有效）
-    list_area: Option<Rect>,
-    /// 预览/编辑区域（仅在 Normal 模式有效）
-    preview_area: Option<Rect>,
-    /// 分割线 x 坐标（列表区和预览区的交界列）
-    divider_x: Option<u16>,
-}
+// 鼠标事件复用 ui::NotebookLayout —— 单一布局事实来源，避免 UI 与命中检测
+// 因 layout 算法各自硬编码而漂移（典型病：改了顶栏高度，UI 先生效，鼠标
+// 还在用旧偏移）。
 
 /// 处理鼠标事件
 fn handle_mouse_event(
     app: &mut NotebookApp,
     mouse: MouseEvent,
-    layout: &MouseLayoutInfo,
+    layout: &ui::NotebookLayout,
     editor_area: Rect,
 ) {
     if app.mode != AppMode::Normal {
@@ -742,15 +734,15 @@ fn handle_left_click(
     app: &mut NotebookApp,
     col: u16,
     row: u16,
-    layout: &MouseLayoutInfo,
+    layout: &ui::NotebookLayout,
     editor_area: Rect,
 ) {
     // 检测是否点击分割线（优先级最高）
     if let Some(divider_x) = layout.divider_x
         && col >= divider_x.saturating_sub(2)
         && col <= divider_x + 2
-        && row >= layout.main_area.y
-        && row < layout.main_area.y + layout.main_area.height
+        && row >= layout.main.y
+        && row < layout.main.y + layout.main.height
     {
         app.is_dragging_panel = true;
         return;
@@ -772,7 +764,7 @@ fn handle_left_click(
     }
 
     // 点击列表区：选择笔记，并设置焦点
-    if let Some(list_area) = layout.list_area
+    if let Some(list_area) = layout.list
         && rect_contains(list_area, col, row)
     {
         app.focus = Focus::Tree;
@@ -813,17 +805,17 @@ fn handle_left_click(
 }
 
 /// 处理鼠标拖拽（调整面板比例）
-fn handle_drag(app: &mut NotebookApp, col: u16, layout: &MouseLayoutInfo) {
+fn handle_drag(app: &mut NotebookApp, col: u16, layout: &ui::NotebookLayout) {
     if !app.is_dragging_panel {
         return;
     }
 
-    let frame_width = layout.main_area.width;
+    let frame_width = layout.main.width;
     if frame_width == 0 {
         return;
     }
 
-    let relative_x = col.saturating_sub(layout.main_area.x);
+    let relative_x = col.saturating_sub(layout.main.x);
     let new_ratio = (relative_x as u32 * 100 / frame_width as u32) as u16;
     app.panel_ratio = new_ratio.clamp(15, 60);
 }
@@ -841,12 +833,12 @@ fn handle_scroll(
     app: &mut NotebookApp,
     col: u16,
     row: u16,
-    layout: &MouseLayoutInfo,
+    layout: &ui::NotebookLayout,
     kind: MouseEventKind,
     _editor_area: Rect,
 ) {
     // 编辑区滚轮：移动光标
-    if let Some(preview_area) = layout.preview_area
+    if let Some(preview_area) = layout.editor
         && rect_contains(preview_area, col, row)
         && let Some(ref mut editor) = app.editor
     {
@@ -868,7 +860,7 @@ fn handle_scroll(
     }
 
     // 列表区滚轮：切换选择项
-    if let Some(list_area) = layout.list_area
+    if let Some(list_area) = layout.list
         && rect_contains(list_area, col, row)
     {
         auto_save_if_dirty(app);
@@ -880,44 +872,7 @@ fn handle_scroll(
     }
 }
 
-/// 计算鼠标事件处理所需的布局信息
-fn compute_mouse_layout(frame_area: Rect, app: &NotebookApp) -> MouseLayoutInfo {
-    // 主区域：标题栏之后、状态栏之前
-    let main_area = Rect {
-        x: frame_area.x,
-        y: frame_area.y + 3,
-        width: frame_area.width,
-        height: frame_area.height.saturating_sub(7),
-    };
-
-    // Normal/CommandPopup 模式下计算列表/预览区域
-    let (list_area, preview_area, divider_x) =
-        if matches!(app.mode, AppMode::Normal | AppMode::CommandPopup) {
-            let list_width = frame_area.width * app.panel_ratio / 100;
-            let preview_width = frame_area.width.saturating_sub(list_width);
-            (
-                Some(Rect {
-                    x: frame_area.x,
-                    y: main_area.y,
-                    width: list_width,
-                    height: main_area.height,
-                }),
-                Some(Rect {
-                    x: frame_area.x + list_width,
-                    y: main_area.y,
-                    width: preview_width,
-                    height: main_area.height,
-                }),
-                Some(frame_area.x + list_width),
-            )
-        } else {
-            (None, None, None)
-        };
-
-    MouseLayoutInfo {
-        main_area,
-        list_area,
-        preview_area,
-        divider_x,
-    }
+/// 鼠标处理用的布局：直接复用 [`ui::compute_layout`]，确保与 `draw_ui` 一致。
+fn compute_mouse_layout(frame_area: Rect, app: &NotebookApp) -> ui::NotebookLayout {
+    ui::compute_layout(frame_area, app)
 }

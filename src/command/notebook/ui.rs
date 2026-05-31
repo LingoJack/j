@@ -10,30 +10,90 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
 };
 
-/// 绘制 TUI 界面
-pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
-    let size = f.area();
+/// notebook 顶层布局结果。
+///
+/// 这是 UI 与鼠标处理共享的"事实来源"：`draw_ui` 只通过 [`compute_layout`]
+/// 拿到这些 Rect 用于渲染；`handler::compute_mouse_layout` 也调用
+/// [`compute_layout`]，把同一份 Rect 用于命中检测。
+///
+/// 任何对顶栏 / 帮助栏高度、左右分栏比例的改动都应当只改 [`compute_layout`]
+/// 一处，UI 与鼠标自动同步。
+#[derive(Debug, Clone, Copy)]
+pub struct NotebookLayout {
+    /// 顶部栏（Normal/Adding/Renaming = 标题；其它模式 = 状态/输入栏）
+    pub top: Rect,
+    /// 主区域（左侧列表 + 右侧编辑器）
+    pub main: Rect,
+    /// 底部帮助栏（固定 1 行）
+    pub footer: Rect,
+    /// 左侧列表区。仅 Normal/CommandPopup 模式下渲染，其它模式为 None
+    /// （因为顶部输入条会"挤掉"两栏视觉，鼠标也不需要点列表）。
+    pub list: Option<Rect>,
+    /// 右侧编辑器区。同上。
+    pub editor: Option<Rect>,
+    /// 列表 / 编辑器 之间分栏线的 X 坐标（用于鼠标拖拽调整比例）
+    pub divider_x: Option<u16>,
+}
 
-    let chunks = Layout::default()
+/// 把 frame_area + 当前 app 状态计算成 [`NotebookLayout`]。
+///
+/// **唯一**的布局源头：`draw_ui` 与鼠标处理都基于它。修改顶栏 / 帮助栏 /
+/// 分栏几何只需在这里改一处。
+pub fn compute_layout(frame_area: Rect, app: &NotebookApp) -> NotebookLayout {
+    // 顶栏高度按 mode 浮动：
+    // - Normal/Adding/Renaming：标题栏 = 一行文字 + 一行底分隔线 = 2 行
+    // - 其它模式（Mkdir/Mv/Search/RatioInput/CommandPopup/ConfirmDelete）：
+    //   走 status_input 组件，组件自带边框，需要 3 行
+    let top_height: u16 = if matches!(
+        app.mode,
+        AppMode::Normal | AppMode::Adding | AppMode::Renaming
+    ) {
+        2
+    } else {
+        3
+    };
+
+    let v = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            // 顶部栏：Normal/Adding/Renaming 一行文字 + 一行底分隔线 = 2 行。
-            // 其它模式（Mkdir/Mv/Search/RatioInput/CommandPopup/ConfirmDelete）走
-            // status_input 组件，组件自己带边框，需要更高的高度（3 行）。
-            Constraint::Length(
-                if matches!(
-                    app.mode,
-                    AppMode::Normal | AppMode::Adding | AppMode::Renaming
-                ) {
-                    2
-                } else {
-                    3
-                },
-            ),
-            Constraint::Min(5),    // 主区域
-            Constraint::Length(1), // 帮助栏
+            Constraint::Length(top_height),
+            Constraint::Min(5),
+            Constraint::Length(1),
         ])
-        .split(size);
+        .split(frame_area);
+    let top = v[0];
+    let main = v[1];
+    let footer = v[2];
+
+    // 仅 Normal / CommandPopup 显示双栏视图；其它模式整个主区域逻辑上还是一个
+    // 整体（输入条等弹窗在上方），鼠标也不会去打这两个区域。
+    let two_panel = matches!(app.mode, AppMode::Normal | AppMode::CommandPopup);
+    let (list, editor, divider_x) = if two_panel {
+        let h = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(app.panel_ratio),
+                Constraint::Percentage(100 - app.panel_ratio),
+            ])
+            .split(main);
+        (Some(h[0]), Some(h[1]), Some(h[1].x))
+    } else {
+        (None, None, None)
+    };
+
+    NotebookLayout {
+        top,
+        main,
+        footer,
+        list,
+        editor,
+        divider_x,
+    }
+}
+
+/// 绘制 TUI 界面
+pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
+    let layout = compute_layout(f.area(), app);
 
     // ========== 顶部栏（在 Normal 模式下是标题；其他模式用作状态/输入栏） ==========
     if matches!(
@@ -42,32 +102,43 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     ) {
         // Normal: 显示笔记本概览
         // Adding/Renaming: 输入框直接在列表内联渲染，顶部栏继续显示概览即可
-        render_title_bar(f, app, chunks[0]);
+        render_title_bar(f, app, layout.top);
     } else {
-        render_status_bar(f, app, chunks[0]);
+        render_status_bar(f, app, layout.top);
     }
 
     // ========== 主区域 ==========
     {
-        let main_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(app.panel_ratio),       // 笔记列表
-                Constraint::Percentage(100 - app.panel_ratio), // 编辑器区
-            ])
-            .split(chunks[1]);
+        // 双栏视图（list / editor）只在两栏模式存在；其它模式整个 main 给底层
+        // 渲染（list_area / editor_area 不参与命中），但仍然要把列表 + 编辑区
+        // 各自画出来 —— 用 fallback：未指定时用 panel_ratio 现算一下。
+        let (list_area, editor_area) = match (layout.list, layout.editor) {
+            (Some(l), Some(e)) => (l, e),
+            _ => {
+                // 单栏模式（Mkdir/Mv/Search/...）也仍渲染左右分栏，仅鼠标处理
+                // 不去命中它。这里复算一次，保持视觉一致。
+                let h = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Percentage(app.panel_ratio),
+                        Constraint::Percentage(100 - app.panel_ratio),
+                    ])
+                    .split(layout.main);
+                (h[0], h[1])
+            }
+        };
 
-        render_list(f, app, main_chunks[0]);
-        render_editor(f, app, main_chunks[1]);
+        render_list(f, app, list_area);
+        render_editor(f, app, editor_area);
 
         // 命令面板弹窗（浮动在主区域上方）
         if app.mode == AppMode::CommandPopup {
-            draw_command_popup(f, app, chunks[1]);
+            draw_command_popup(f, app, layout.main);
         }
 
         // 路径补全弹窗（与命令面板互斥）
         if app.completion_active && app.mode != AppMode::CommandPopup {
-            draw_completion_popup(f, app, chunks[1]);
+            draw_completion_popup(f, app, layout.main);
         }
     }
 
@@ -92,7 +163,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         help_text,
         Style::default().fg(Color::DarkGray),
     )));
-    f.render_widget(help_widget, chunks[2]);
+    f.render_widget(help_widget, layout.footer);
 }
 
 /// 渲染顶部标题栏（Normal/Adding/Renaming 模式下展示笔记本概览）
