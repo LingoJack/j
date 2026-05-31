@@ -13,6 +13,22 @@ use rustyline::Context;
 use rustyline::validate::Validator;
 use std::borrow::Cow;
 
+// ========== 自定义 Hint 类型 ==========
+
+/// 仅用于展示的提示文本，不可被按键自动补全到输入行
+pub struct DisplayOnlyHint(String);
+
+impl rustyline::hint::Hint for DisplayOnlyHint {
+    fn display(&self) -> &str {
+        &self.0
+    }
+
+    /// 返回 None，防止提示被自动补全（如右箭头接受 hint）
+    fn completion(&self) -> Option<&str> {
+        None
+    }
+}
+
 // ========== 补全器定义 ==========
 
 /// 自定义补全器：根据上下文提供命令、别名、分类等补全
@@ -479,7 +495,7 @@ impl Completer for CopilotCompleter {
 /// 空行时展示随机使用技巧，有输入时回退到历史提示
 pub struct CopilotHinter {
     history_hinter: HistoryHinter,
-    current_tip: String,
+    current_tip: DisplayOnlyHint,
 }
 
 impl Default for CopilotHinter {
@@ -493,24 +509,28 @@ impl CopilotHinter {
     pub fn new() -> Self {
         Self {
             history_hinter: HistoryHinter::new(),
-            current_tip: pick_random_tip(),
+            current_tip: DisplayOnlyHint(pick_random_tip()),
         }
     }
 
     /// 轮转到下一条随机技巧（每次 prompt 前调用）
     pub fn rotate_tip(&mut self) {
-        self.current_tip = pick_random_tip();
+        self.current_tip = DisplayOnlyHint(pick_random_tip());
     }
 }
 
 impl Hinter for CopilotHinter {
-    type Hint = String;
+    type Hint = DisplayOnlyHint;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<DisplayOnlyHint> {
         if line.is_empty() {
-            return Some(self.current_tip.clone());
+            // 克隆 tip 返回；completion() 返回 None，不会被自动补全
+            return Some(DisplayOnlyHint(self.current_tip.0.clone()));
         }
-        self.history_hinter.hint(line, pos, ctx)
+        // 历史提示使用 String hint，需要包装转换
+        self.history_hinter
+            .hint(line, pos, ctx)
+            .map(|s| DisplayOnlyHint(s))
     }
 }
 
@@ -573,9 +593,9 @@ impl Completer for CopilotHelper {
 }
 
 impl Hinter for CopilotHelper {
-    type Hint = String;
+    type Hint = DisplayOnlyHint;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<DisplayOnlyHint> {
         self.hinter.hint(line, pos, ctx)
     }
 }
