@@ -17,7 +17,19 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // 顶部栏（标题 / 状态合一）
+            // 顶部栏：Normal/Adding/Renaming 一行文字 + 一行底分隔线 = 2 行。
+            // 其它模式（Mkdir/Mv/Search/RatioInput/CommandPopup/ConfirmDelete）走
+            // status_input 组件，组件自己带边框，需要更高的高度（3 行）。
+            Constraint::Length(
+                if matches!(
+                    app.mode,
+                    AppMode::Normal | AppMode::Adding | AppMode::Renaming
+                ) {
+                    2
+                } else {
+                    3
+                },
+            ),
             Constraint::Min(5),    // 主区域
             Constraint::Length(1), // 帮助栏
         ])
@@ -116,10 +128,10 @@ fn render_title_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             .add_modifier(Modifier::BOLD),
     )]))
     .block(
+        // 顶部栏：一行文字 + 一条底分隔线，视觉上"贴在"内容圆角框之上。
         Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Cyan)),
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(Color::DarkGray)),
     );
     f.render_widget(title_block, area);
 }
