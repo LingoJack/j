@@ -56,6 +56,15 @@ export interface ParsedDocument {
 // `/api/file` 响应：单文件渲染产物
 export type DocKind = 'markdown' | 'plain_text' | 'image' | 'pptx' | 'docx' | 'xlsx'
 
+/**
+ * Tab 的实际"种类"。除了文件类（DocKind），还可以是来自 Toolbox 的内置工具。
+ * 工具 tab 不对应文件，没有 dirty / saving，路径用伪路径（`tool://<id>`）做唯一 key。
+ */
+export type TabKind = DocKind | 'tool'
+
+/** 内置工具 ID。新增工具时在这里加一个分支，并在 Toolbox / Reader 路由里加分发。 */
+export type ToolId = 'diff'
+
 export interface ImagePayload {
   mime: string
   size: number
@@ -100,10 +109,16 @@ export interface InitialResp {
 //   docsRef.current[path]     →  最近一次 /api/parse 的 IR（仅 TOC 使用）
 // 只有 dirty / saving / error 这种 UI 必须感知的字段保留在 state 里。
 export interface Tab {
+  /**
+   * 文件 tab：磁盘绝对路径。
+   * 工具 tab：伪路径，形如 `tool://diff`，用作唯一 key。
+   */
   path: string
   filename: string
-  kind: DocKind
-  /** 是否有未保存改动 */
+  kind: TabKind
+  /** 工具 tab 必填；文件 tab 留空 */
+  toolId?: ToolId
+  /** 是否有未保存改动（仅文件 tab 有意义） */
   dirty: boolean
   saving: 'idle' | 'saving' | 'error'
   error?: string

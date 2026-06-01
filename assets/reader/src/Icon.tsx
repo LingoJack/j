@@ -280,6 +280,15 @@ export function Pencil(props: IconBaseProps) {
   )
 }
 
+export function Power(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M12 2v10" />
+      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+    </svg>
+  )
+}
+
 export function BookOpen(props: IconBaseProps) {
   return (
     <svg {...svgProps(props)}>
@@ -301,6 +310,30 @@ export function Sparkles(props: IconBaseProps) {
       <path d="m6 18 1.8-1.8" />
       <path d="m16.2 7.8 1.8-1.8" />
       <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+/** 工具箱 / 扳手（活动栏 toolbox tab） */
+export function Wrench(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-7 7a3 3 0 1 1-4.2-4.2l7-7Z" />
+      <path d="M14.7 6.3 11 10l-2 2" />
+    </svg>
+  )
+}
+
+/** 文本 diff 工具图标：两个箭头互指，象征对比两个版本 */
+export function GitCompare(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <circle cx="6" cy="6" r="2.4" />
+      <circle cx="18" cy="18" r="2.4" />
+      <path d="M6 8.4V14a3 3 0 0 0 3 3h6" />
+      <path d="m13 14 2 3-2 3" />
+      <path d="M18 15.6V10a3 3 0 0 0-3-3H9" />
+      <path d="m11 10-2-3 2-3" />
     </svg>
   )
 }

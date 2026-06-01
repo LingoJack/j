@@ -1,16 +1,42 @@
-import { Close, FileMd, FileGeneric, FileText, FileCode, FileImage, pickFileIconKind } from './Icon'
-import type { Tab } from './types'
+import {
+  Close,
+  FileMd,
+  FileGeneric,
+  FileText,
+  FileCode,
+  FileImage,
+  GitCompare,
+  Power,
+  Wrench,
+  pickFileIconKind,
+} from './Icon'
+import type { Tab, ToolId } from './types'
 
 interface Props {
   tabs: Tab[]
   activePath: string | null
   onActivate: (path: string) => void
   onClose: (path: string) => void
+  /** 关闭整个 reader（会先弹确认弹窗） */
+  onQuit: () => void
 }
 
-export function TabBar({ tabs, activePath, onActivate, onClose }: Props) {
+export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props) {
   if (tabs.length === 0) {
-    return <div className="h-9 border-b border-seeyue-border bg-seeyue-sidebar-strong" />
+    // 空态依然给一条「关闭 reader」入口，免得只能在编辑器里才能找到
+    return (
+      <div className="seeyue-tabbar seeyue-tabbar-empty">
+        <span className="seeyue-tabbar-empty-hint">没有打开的文件</span>
+        <button
+          type="button"
+          className="seeyue-icon-btn seeyue-tabbar-quit"
+          onClick={onQuit}
+          title="关闭 reader"
+        >
+          <Power size={14} />
+        </button>
+      </div>
+    )
   }
   return (
     <div className="seeyue-tabbar">
@@ -37,7 +63,7 @@ export function TabBar({ tabs, activePath, onActivate, onClose }: Props) {
                   : 'var(--color-seeyue-fg-muted)',
               }}
             >
-              <TabIcon name={tab.filename} />
+              <TabIcon tab={tab} />
             </span>
             <span className="tab-name">{tab.filename}</span>
             <button
@@ -58,12 +84,23 @@ export function TabBar({ tabs, activePath, onActivate, onClose }: Props) {
           </div>
         )
       })}
+      <button
+        type="button"
+        className="seeyue-icon-btn seeyue-tabbar-quit"
+        onClick={onQuit}
+        title="关闭 reader"
+      >
+        <Power size={14} />
+      </button>
     </div>
   )
 }
 
-function TabIcon({ name }: { name: string }) {
-  switch (pickFileIconKind(name)) {
+function TabIcon({ tab }: { tab: Tab }) {
+  if (tab.kind === 'tool') {
+    return <ToolIcon toolId={tab.toolId ?? null} />
+  }
+  switch (pickFileIconKind(tab.filename)) {
     case 'markdown':
       return <FileMd size={13} />
     case 'text':
@@ -74,5 +111,14 @@ function TabIcon({ name }: { name: string }) {
       return <FileImage size={13} />
     default:
       return <FileGeneric size={13} />
+  }
+}
+
+function ToolIcon({ toolId }: { toolId: ToolId | null }) {
+  switch (toolId) {
+    case 'diff':
+      return <GitCompare size={13} />
+    default:
+      return <Wrench size={13} />
   }
 }

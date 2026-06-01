@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityBar, type ActivityKey } from './ActivityBar'
 import { FileTree } from './FileTree'
+import { Toolbox } from './Toolbox'
+import { DiffTool } from './DiffTool'
 import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
+import { QuitConfirmDialog } from './QuitConfirmDialog'
 import { MilkdownEditor } from './milkdown/MilkdownEditor'
 import { PlainTextEditor } from './PlainTextEditor'
 import { ImageViewer } from './ImageViewer'
@@ -9,6 +13,7 @@ import { TableOfContents } from './TableOfContents'
 import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { MarkdownBaseDirContext } from './MarkdownIR'
+import { preserveBlankLines } from './preserveBlanks'
 import {
   BookOpen,
   Copy,
@@ -21,6 +26,7 @@ import type {
   ParsedDocument,
   RenderedDoc,
   Tab,
+  ToolId,
 } from './types'
 
 type LoadState =
@@ -31,14 +37,33 @@ type LoadState =
 /** 同时打开新文件的并发上限（防误点把内存撑爆） */
 const MAX_TABS = 32
 
+/** 工具 tab 标签上显示的名字。新增工具时在这里加一项。 */
+const TOOL_TITLES: Record<ToolId, string> = {
+  diff: '文本 Diff',
+}
+
 export function Reader() {
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' })
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
   const [treeRoot, setTreeRoot] = useState<string>('')
   const [showHidden, setShowHidden] = useState(false)
+  /**
+   * 左侧"活动栏"当前选中的视图。文件 / 工具箱二选一。
+   * 持久化到 localStorage —— 用户上次留在工具箱，下次打开还是工具箱。
+   */
+  const [activeActivity, setActiveActivity] = useState<ActivityKey>(() => {
+    const v = localStorage.getItem('jreader.activity')
+    return v === 'toolbox' ? 'toolbox' : 'files'
+  })
   /** 关闭 dirty Tab 时弹出三选项确认 */
   const [closing, setClosing] = useState<{ path: string } | null>(null)
+  /**
+   * 关闭整个 reader 前的二次确认。痛点：dirty tab 弹窗里连按"不保存"，
+   * 最后一下落到空态再触发 ⌘W 时会直接 quitReader 关掉窗口，用户措手不及。
+   * 现在所有触发 quitReader 的入口（⌘W 空态 + 顶栏 Power 按钮）都先打开这个 modal。
+   */
+  const [quitting, setQuitting] = useState(false)
   /** 错误 / 成功提示（替代 alert） */
   const [toast, setToast] = useState<{
     message: string
@@ -54,6 +79,12 @@ export function Reader() {
   // —— 高频内容用 ref 而不是 state，避免按键触发整树 re-render ——
   /** 每个 tab 的最新文本内容；按 path 索引 */
   const sourcesRef = useRef<Record<string, string>>({})
+  /**
+   * 每个 tab "上次磁盘上看到的"原文；按 path 索引。
+   * 用于保存时和 Milkdown 序列化输出做"忠实重建"，把段间被 CommonMark
+   * canonical 形式压扁的多余空行还原回来。保存成功后会刷新为提交版本。
+   */
+  const originalSourcesRef = useRef<Record<string, string>>({})
   /** 每个 markdown tab 的最新 IR；按 path 索引 */
   const docsRef = useRef<Record<string, ParsedDocument>>({})
   /** 每个 image tab 的元信息（mime / size）；按 path 索引 */
@@ -65,6 +96,11 @@ export function Reader() {
       localStorage.setItem('jreader.tocCollapsed', next ? '1' : '0')
       return next
     })
+  }, [])
+
+  const selectActivity = useCallback((key: ActivityKey) => {
+    setActiveActivity(key)
+    localStorage.setItem('jreader.activity', key)
   }, [])
 
   // —— 初始化：拉 /api/initial → （如果有 initial_path）打开 initial tab ——
@@ -94,7 +130,7 @@ export function Reader() {
         })) as RenderedDoc
         if (cancelled) return
 
-        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
+        ingestDoc(doc, sourcesRef, originalSourcesRef, docsRef, imagesRef)
         setTabs([docToTab(doc)])
         setActiveTabPath(doc.path)
         setLoadState({ kind: 'ready' })
@@ -204,12 +240,45 @@ export function Reader() {
               })
           return r.json()
         })) as RenderedDoc
-        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
+        ingestDoc(doc, sourcesRef, originalSourcesRef, docsRef, imagesRef)
         setTabs((prev) => [...prev, docToTab(doc)])
         setActiveTabPath(doc.path)
       } catch (e) {
         setToast({ message: `打开失败：${String(e)}`, kind: 'error' })
       }
+    },
+    [tabs],
+  )
+
+  /**
+   * 打开一个内置工具作为 tab。每个工具同时只允许一个实例 —— 二次点击只是切回去。
+   * 工具 tab 的 path 用伪 URI（`tool://<id>`）作为唯一 key，跟磁盘文件路径
+   * 永远不会冲突。
+   */
+  const openTool = useCallback(
+    (toolId: ToolId) => {
+      const path = `tool://${toolId}`
+      if (tabs.some((t) => t.path === path)) {
+        setActiveTabPath(path)
+        return
+      }
+      if (tabs.length >= MAX_TABS) {
+        setToast({
+          message: `已打开 ${MAX_TABS} 个 Tab，关闭一些再试`,
+          kind: 'info',
+        })
+        return
+      }
+      const tab: Tab = {
+        path,
+        filename: TOOL_TITLES[toolId] ?? toolId,
+        kind: 'tool',
+        toolId,
+        dirty: false,
+        saving: 'idle',
+      }
+      setTabs((prev) => [...prev, tab])
+      setActiveTabPath(path)
     },
     [tabs],
   )
@@ -243,6 +312,7 @@ export function Reader() {
       })
       // 清掉 ref 桶里的内容，不让已关 tab 占内存
       delete sourcesRef.current[path]
+      delete originalSourcesRef.current[path]
       delete docsRef.current[path]
       delete imagesRef.current[path]
     },
@@ -254,8 +324,21 @@ export function Reader() {
       const t = tabs.find((x) => x.path === path)
       if (!t) return
       // 图片是只读视图：⌘S 直接 no-op，避免把空 source 覆盖回去毁掉文件
-      if (t.kind === 'image') return
-      const source = sourcesRef.current[path] ?? ''
+      // 工具 tab 没有"文件内容"概念，⌘S 同样直接忽略
+      if (t.kind === 'image' || t.kind === 'tool') return
+      let source = sourcesRef.current[path] ?? ''
+      // markdown 走"忠实重建"：CommonMark AST 不记块间空行数，Milkdown 会把
+      // 多余空行压成 1。和原文比一次，把没改过的位置的空行布局拿回来。
+      if (t.kind === 'markdown') {
+        const orig = originalSourcesRef.current[path]
+        if (typeof orig === 'string') {
+          try {
+            source = preserveBlankLines(orig, source)
+          } catch {
+            /* preserveBlankLines 不该 throw，但兜一手保险 */
+          }
+        }
+      }
       updateTab(path, { saving: 'saving', error: undefined })
       try {
         const res = await fetch('./api/save', {
@@ -267,6 +350,9 @@ export function Reader() {
           const body = await res.json().catch(() => ({}))
           throw new Error(body.error ?? `HTTP ${res.status}`)
         }
+        // 已成功落盘 —— 这份 source 成为新的 baseline，下次保存时再以它为参考
+        originalSourcesRef.current[path] = source
+        sourcesRef.current[path] = source
         updateTab(path, { saving: 'idle', dirty: false, error: undefined })
         setToast({ message: '已保存', kind: 'success' })
       } catch (e) {
@@ -330,25 +416,28 @@ export function Reader() {
     [activeTabPath],
   )
 
-  // —— 全局快捷键：(⌘|⌃) S / W / ⇧← / ⇧→ ——
+  // —— 全局快捷键：(⌘|⌃) S / W / ⇧← / ⇧→ / 1 / 2 ——
   // 同时接受 metaKey（macOS ⌘）与 ctrlKey（macOS ⌃ 或 Win/Linux Ctrl）。
   // 这是因为普通 Chrome 标签页里 ⌘W 会被浏览器吞掉关掉标签，根本传不到 JS；
   // 此时用户可以退而用 ⌃W 关闭当前 reader tab。
   // app 模式（`j read` 默认走 Chrome --app=URL）无标签栏，⌘W 才能被网页接收。
   // 用 ref 保存最新引用，避免每次 tabs 变化都重绑 listener
+  const requestQuit = useCallback(() => setQuitting(true), [])
   const handlersRef = useRef({
     saveTab,
     requestCloseTab,
     cycleTab,
     activeTabPath,
-    quitReader,
+    requestQuit,
+    selectActivity,
   })
   handlersRef.current = {
     saveTab,
     requestCloseTab,
     cycleTab,
     activeTabPath,
-    quitReader,
+    requestQuit,
+    selectActivity,
   }
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -363,14 +452,14 @@ export function Reader() {
         if (p) void handlersRef.current.saveTab(p)
         return
       }
-      // ⌘W 关 tab；没有 tab 时关掉整个 reader
+      // ⌘W 关 tab；没有 tab 时弹关闭确认（不直接关窗，防误触）
       if (!e.shiftKey && k === 'w') {
         e.preventDefault()
         const p = handlersRef.current.activeTabPath
         if (p) {
           handlersRef.current.requestCloseTab(p)
         } else {
-          handlersRef.current.quitReader()
+          handlersRef.current.requestQuit()
         }
         return
       }
@@ -378,6 +467,12 @@ export function Reader() {
       if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault()
         handlersRef.current.cycleTab(e.key === 'ArrowLeft' ? -1 : 1)
+        return
+      }
+      // ⌘1 / ⌘2 切活动栏（VSCode 习惯）
+      if (!e.shiftKey && (k === '1' || k === '2')) {
+        e.preventDefault()
+        handlersRef.current.selectActivity(k === '1' ? 'files' : 'toolbox')
         return
       }
     }
@@ -394,6 +489,12 @@ export function Reader() {
     return extractHeadings(doc)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.path, docVersion])
+
+  /** 当前激活 tab 是否是工具 tab —— 工具 tab 没有 TOC，把右栏整列收掉 */
+  const showToc = activeTab?.kind === 'markdown'
+
+  /** 当前活跃工具 id（用于 Toolbox 高亮选中态） */
+  const activeToolId = activeTab?.kind === 'tool' ? activeTab.toolId ?? null : null
 
   // —— Loading / Error 屏 ——
   if (loadState.kind === 'loading') {
@@ -417,21 +518,29 @@ export function Reader() {
       <div
         className="h-full grid bg-seeyue-bg text-seeyue-fg"
         style={{
-          gridTemplateColumns: tocCollapsed
-            ? '270px 1fr 28px'
-            : '270px 1fr 240px',
+          // 4 列：[44px 活动栏] [270px 侧栏面板] [1fr 主区] [TOC（仅 markdown 显示）]
+          gridTemplateColumns: showToc
+            ? `44px 270px 1fr ${tocCollapsed ? '28px' : '240px'}`
+            : '44px 270px 1fr',
         }}
       >
-        {/* 左：文件树 */}
+        {/* 最左：垂直活动栏 */}
+        <ActivityBar active={activeActivity} onSelect={selectActivity} />
+
+        {/* 左：侧栏（按 activeActivity 切换内容） */}
         <aside className="border-r border-seeyue-border overflow-hidden">
-          <FileTree
-            root={treeRoot}
-            onChangeRoot={setTreeRoot}
-            showHidden={showHidden}
-            onToggleHidden={() => setShowHidden((v) => !v)}
-            activePath={activeTabPath}
-            onOpen={openFile}
-          />
+          {activeActivity === 'files' ? (
+            <FileTree
+              root={treeRoot}
+              onChangeRoot={setTreeRoot}
+              showHidden={showHidden}
+              onToggleHidden={() => setShowHidden((v) => !v)}
+              activePath={activeTabPath}
+              onOpen={openFile}
+            />
+          ) : (
+            <Toolbox activeToolId={activeToolId} onOpen={openTool} />
+          )}
         </aside>
 
         {/* 中：Tab 条 + 编辑器顶栏 + 编辑区 */}
@@ -441,8 +550,9 @@ export function Reader() {
             activePath={activeTabPath}
             onActivate={setActiveTabPath}
             onClose={requestCloseTab}
+            onQuit={requestQuit}
           />
-          {activeTab && (
+          {activeTab && activeTab.kind !== 'tool' && (
             <EditorBar
               tab={activeTab}
               onSave={() => saveTab(activeTab.path)}
@@ -451,7 +561,9 @@ export function Reader() {
           )}
           <div className="flex-1 overflow-hidden">
             {activeTab ? (
-              activeTab.kind === 'markdown' ? (
+              activeTab.kind === 'tool' ? (
+                <ToolHost toolId={activeTab.toolId ?? null} />
+              ) : activeTab.kind === 'markdown' ? (
                 <MilkdownEditor
                   key={activeTab.path}
                   path={activeTab.path}
@@ -482,14 +594,16 @@ export function Reader() {
           </div>
         </main>
 
-        {/* 右：TOC */}
-        <aside className="border-l border-seeyue-border overflow-hidden">
-          <TableOfContents
-            headings={headings}
-            collapsed={tocCollapsed}
-            onToggleCollapsed={toggleToc}
-          />
-        </aside>
+        {/* 右：TOC（仅 markdown tab 显示） */}
+        {showToc && (
+          <aside className="border-l border-seeyue-border overflow-hidden">
+            <TableOfContents
+              headings={headings}
+              collapsed={tocCollapsed}
+              onToggleCollapsed={toggleToc}
+            />
+          </aside>
+        )}
 
         {/* 关闭确认 */}
         {closing && (
@@ -511,6 +625,17 @@ export function Reader() {
               setClosing(null)
             }}
             onCancel={() => setClosing(null)}
+          />
+        )}
+
+        {quitting && (
+          <QuitConfirmDialog
+            dirtyCount={tabs.filter((t) => t.dirty).length}
+            onConfirm={() => {
+              setQuitting(false)
+              quitReader()
+            }}
+            onCancel={() => setQuitting(false)}
           />
         )}
 
@@ -544,16 +669,39 @@ function docToTab(doc: RenderedDoc): Tab {
 }
 
 /**
+ * 工具 tab 渲染入口。按 toolId 分发到具体工具组件。
+ * 列出来 + 路由集中在这里，新增工具时只在这里加 case，Reader 主流程不动。
+ */
+function ToolHost({ toolId }: { toolId: ToolId | null }) {
+  switch (toolId) {
+    case 'diff':
+      return <DiffTool />
+    default:
+      return (
+        <div className="seeyue-empty">
+          <div className="title">未知工具</div>
+          <div className="subtitle">toolId = {String(toolId)}</div>
+        </div>
+      )
+  }
+}
+
+/**
  * 把一份 RenderedDoc 拆进 sources / docs / images 三个 ref 桶。
  * 与 docToTab 配套使用。
+ *
+ * sourcesRef：编辑器当前内容（会随按键更新）
+ * originalSourcesRef："上次磁盘上看到的"原文 baseline，给 preserveBlankLines 用
  */
 function ingestDoc(
   doc: RenderedDoc,
   sourcesRef: React.RefObject<Record<string, string>>,
+  originalSourcesRef: React.RefObject<Record<string, string>>,
   docsRef: React.RefObject<Record<string, ParsedDocument>>,
   imagesRef: React.RefObject<Record<string, ImagePayload>>,
 ) {
   sourcesRef.current![doc.path] = doc.source
+  originalSourcesRef.current![doc.path] = doc.source
   if (doc.kind === 'markdown' && doc.payload) {
     docsRef.current![doc.path] = doc.payload as ParsedDocument
   } else if (doc.kind === 'image' && doc.payload) {

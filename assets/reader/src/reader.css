@@ -432,6 +432,28 @@ textarea.seeyue-textarea {
   overflow-x: auto;
   overflow-y: hidden;
 }
+.seeyue-tabbar-empty {
+  align-items: center;
+  padding: 0 8px 0 14px;
+  gap: 8px;
+}
+.seeyue-tabbar-empty-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--color-seeyue-fg-dim);
+  letter-spacing: 0.02em;
+}
+/* quit 按钮固定在 tab 条尾部，hover 透出 danger 色暗示这是销毁性操作 */
+.seeyue-tabbar-quit {
+  margin-left: auto;
+  align-self: center;
+  margin-right: 6px;
+  flex: 0 0 auto;
+}
+.seeyue-tabbar-quit:hover {
+  color: var(--color-seeyue-danger);
+  background: rgba(191, 97, 106, 0.12);
+}
 .seeyue-tabbar::-webkit-scrollbar {
   height: 4px;
 }
@@ -958,4 +980,306 @@ textarea.seeyue-textarea {
 .seeyue-image-viewer .image-statusbar .mime {
   margin-left: auto;
   opacity: 0.8;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ActivityBar：最左侧 44px 垂直活动栏（仿 VSCode）
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.seeyue-activity-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: var(--color-seeyue-bg-deep);
+  border-right: 1px solid var(--color-seeyue-border);
+}
+
+.seeyue-activity-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--color-seeyue-fg-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.seeyue-activity-item:hover {
+  color: var(--color-seeyue-fg-strong);
+  background: var(--color-seeyue-elevated);
+}
+.seeyue-activity-item:focus-visible {
+  outline: 2px solid var(--color-seeyue-accent);
+  outline-offset: 2px;
+}
+.seeyue-activity-item[data-active='true'] {
+  color: var(--color-seeyue-fg-strong);
+}
+/* 选中态左侧高亮条（VSCode 风） */
+.seeyue-activity-item[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-seeyue-accent-strong);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Toolbox：工具列表行
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.seeyue-toolbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-seeyue-fg);
+  transition: background-color 0.15s ease;
+}
+.seeyue-toolbox-row:hover {
+  background: var(--color-seeyue-elevated);
+}
+.seeyue-toolbox-row[data-active='true'] {
+  background: var(--color-seeyue-accent-soft);
+  color: var(--color-seeyue-fg-strong);
+}
+.seeyue-toolbox-row[data-active='true'] .seeyue-toolbox-icon {
+  color: var(--color-seeyue-accent);
+}
+.seeyue-toolbox-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  color: var(--color-seeyue-fg-muted);
+  background: var(--color-seeyue-bg-deep);
+}
+.seeyue-toolbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.seeyue-toolbox-text .name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-seeyue-fg-strong);
+}
+.seeyue-toolbox-text .desc {
+  font-size: 11.5px;
+  color: var(--color-seeyue-fg-dim);
+  line-height: 1.5;
+  white-space: normal;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DiffTool：文本 diff 工具页
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.seeyue-diff-tool {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-seeyue-bg);
+}
+
+.seeyue-diff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--color-seeyue-border);
+  background: var(--color-seeyue-sidebar-strong);
+  font-size: 12px;
+}
+.seeyue-diff-toolbar .title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-seeyue-fg-strong);
+}
+.seeyue-diff-toolbar .stat {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-seeyue-elevated);
+  color: var(--color-seeyue-fg-muted);
+}
+.seeyue-diff-toolbar .stat[data-tone='add'] {
+  color: var(--color-seeyue-success);
+  background: rgba(163, 190, 140, 0.14);
+}
+.seeyue-diff-toolbar .stat[data-tone='del'] {
+  color: var(--color-seeyue-danger);
+  background: rgba(191, 97, 106, 0.16);
+}
+.seeyue-diff-toolbar .stat[data-tone='warn'] {
+  color: var(--color-seeyue-warn);
+  background: rgba(208, 135, 112, 0.18);
+}
+.seeyue-diff-toolbar .flex-1 {
+  flex: 1;
+}
+
+.seeyue-diff-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--color-seeyue-border);
+  border-bottom: 1px solid var(--color-seeyue-border);
+  /* 在 flex column 父级里给 inputs 一个固定基准 + 不收缩；result 区拿 flex:1
+     占剩余高度。比 % 更稳，textarea 在小窗口下也不会被挤没。 */
+  flex: 0 0 240px;
+  min-height: 180px;
+}
+.seeyue-diff-inputs .pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-seeyue-bg);
+  min-width: 0;
+}
+.seeyue-diff-inputs .pane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  color: var(--color-seeyue-fg-muted);
+  border-bottom: 1px solid var(--color-seeyue-border);
+  background: var(--color-seeyue-sidebar);
+}
+.seeyue-diff-inputs .pane-head .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.seeyue-diff-inputs .pane-head .dot[data-tone='add'] {
+  background: var(--color-seeyue-success);
+}
+.seeyue-diff-inputs .pane-head .dot[data-tone='del'] {
+  background: var(--color-seeyue-danger);
+}
+.seeyue-diff-inputs textarea {
+  flex: 1;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  /* 沿用 .seeyue-textarea 的 mono / 无边框样式；保留 resize: none */
+}
+
+.seeyue-diff-result {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.seeyue-diff-result .result-head {
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: var(--color-seeyue-fg-muted);
+  background: var(--color-seeyue-sidebar);
+  border-bottom: 1px solid var(--color-seeyue-border);
+  letter-spacing: 0.04em;
+}
+.seeyue-diff-result .result-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-seeyue-fg-dim);
+  font-size: 13px;
+}
+.seeyue-diff-result .result-empty.result-equal {
+  color: var(--color-seeyue-success);
+}
+.seeyue-diff-result .result-grid {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid rgba(76, 86, 106, 0.12);
+}
+.diff-row:hover {
+  background: rgba(94, 129, 172, 0.04);
+}
+.diff-row .cell {
+  display: grid;
+  grid-template-columns: 48px 14px 1fr;
+  align-items: start;
+  padding: 1px 0;
+  border-right: 1px solid var(--color-seeyue-border);
+  min-width: 0;
+}
+.diff-row .cell:last-child {
+  border-right: 0;
+}
+.diff-row .cell .lineno {
+  text-align: right;
+  padding: 0 8px;
+  color: var(--color-seeyue-fg-dim);
+  font-size: 11px;
+  user-select: none;
+}
+.diff-row .cell .marker {
+  text-align: center;
+  color: var(--color-seeyue-fg-dim);
+  user-select: none;
+}
+.diff-row .cell .text {
+  margin: 0;
+  padding: 0 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--color-seeyue-fg);
+  background: transparent;
+}
+/* 左侧仅出现 del / eq / pad；右侧仅出现 add / eq / pad */
+.diff-row .cell[data-op='del'] {
+  background: rgba(191, 97, 106, 0.14);
+}
+.diff-row .cell[data-op='del'] .marker {
+  color: var(--color-seeyue-danger);
+  font-weight: 600;
+}
+.diff-row .cell[data-op='add'] {
+  background: rgba(163, 190, 140, 0.14);
+}
+.diff-row .cell[data-op='add'] .marker {
+  color: var(--color-seeyue-success);
+  font-weight: 600;
+}
+.diff-row .cell[data-op='pad'] {
+  background: rgba(76, 86, 106, 0.18);
+}
+.diff-row .cell[data-op='pad'] .text {
+  color: var(--color-seeyue-fg-dim);
 }
