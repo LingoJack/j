@@ -64,8 +64,8 @@ pub fn serve_blocking(
     root_dir: PathBuf,
     port: Option<u16>,
 ) -> Result<(), String> {
-    // 多线程 runtime —— 避免 CPU-bound 路由（`/api/parse` 解析大 markdown）阻塞
-    // 整个事件循环。worker_threads 留 tokio 自己挑（默认 = 物理核数）。
+    // 多线程 runtime —— 让 file IO（read_to_string / canonicalize / 列目录）
+    // 不阻塞 server worker。worker_threads 留 tokio 自己挑（默认 = 物理核数）。
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -132,7 +132,6 @@ pub fn serve_blocking(
             .route("/api/initial", get(api_initial))
             .route("/api/file", get(api_file))
             .route("/api/list", get(api_list))
-            .route("/api/parse", post(api_parse))
             .route("/api/save", post(api_save))
             .route("/api/create", post(api_create))
             .route("/api/asset", get(api_asset))
@@ -311,27 +310,6 @@ async fn api_list(Query(q): Query<ListQuery>) -> Result<Json<ListResp>, ApiError
         entries: all,
         truncated,
     }))
-}
-
-// ---------------------------------------------------------------------------
-// /api/parse — 解析 Markdown 字符串为 IR（不写盘）
-// ---------------------------------------------------------------------------
-
-#[derive(Deserialize)]
-struct ParseReq {
-    source: String,
-}
-
-async fn api_parse(Json(req): Json<ParseReq>) -> Json<serde_json::Value> {
-    // parse_markdown 是 CPU-bound 的同步函数；多线程 runtime + spawn_blocking
-    // 双管齐下，确保不会阻塞其它请求（list / file / save / asset）。
-    let value = tokio::task::spawn_blocking(move || {
-        let doc = crate::markdown::parser::parse_markdown(&req.source, 120);
-        serde_json::to_value(&doc).unwrap_or(serde_json::Value::Null)
-    })
-    .await
-    .unwrap_or(serde_json::Value::Null);
-    Json(value)
 }
 
 // ---------------------------------------------------------------------------

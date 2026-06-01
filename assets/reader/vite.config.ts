@@ -16,8 +16,7 @@ export default defineConfig({
   resolve: {
     alias: [
       // 关键：把裸 `refractor` 包重定向到 `refractor/core`（empty kernel），
-      // 避免 @milkdown/plugin-prism 的 `import { refractor } from "refractor"`
-      // 把 ~280 种语言全打进 bundle。子路径 `refractor/<lang>` 不受影响
+      // 避免把 ~280 种语言全打进 bundle。子路径 `refractor/<lang>` 不受影响
       // —— 用精确正则只匹配裸名，子路径仍走 package exports。
       { find: /^refractor$/, replacement: 'refractor/core' },
     ],
@@ -35,13 +34,13 @@ export default defineConfig({
           ) {
             return 'react-vendor'
           }
-          // Milkdown / ProseMirror / refractor 整体走单独 chunk（便于浏览器缓存）
+          // CodeMirror 6 + refractor 整体走单独 chunk（便于浏览器缓存）
           if (
-            id.includes('node_modules/@milkdown/') ||
-            id.includes('node_modules/prosemirror-') ||
+            id.includes('node_modules/@codemirror/') ||
+            id.includes('node_modules/@lezer/') ||
             id.includes('node_modules/refractor/')
           ) {
-            return 'milkdown-vendor'
+            return 'editor-vendor'
           }
         },
       },

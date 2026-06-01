@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import './reader.css'
-import './milkdown/seeyue.css'
+import './cm6/cm6.css'
 import { Reader } from './Reader'
 
 // 注意：刻意不开 StrictMode。

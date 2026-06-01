@@ -7,7 +7,7 @@ import { JsonTool } from './JsonTool'
 import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
 import { QuitConfirmDialog } from './QuitConfirmDialog'
-import { MilkdownEditor } from './milkdown/MilkdownEditor'
+import { CodemirrorEditor } from './cm6/CodemirrorEditor'
 import { PlainTextEditor } from './PlainTextEditor'
 import { ImageViewer } from './ImageViewer'
 import { TableOfContents } from './TableOfContents'
@@ -15,7 +15,6 @@ import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { VerticalSplitter } from './Splitter'
 import { MarkdownBaseDirContext } from './MarkdownIR'
-import { preserveBlankLines } from './preserveBlanks'
 import {
   BookOpen,
   Copy,
@@ -102,12 +101,6 @@ export function Reader() {
   // —— 高频内容用 ref 而不是 state，避免按键触发整树 re-render ——
   /** 每个 tab 的最新文本内容；按 path 索引 */
   const sourcesRef = useRef<Record<string, string>>({})
-  /**
-   * 每个 tab "上次磁盘上看到的"原文；按 path 索引。
-   * 用于保存时和 Milkdown 序列化输出做"忠实重建"，把段间被 CommonMark
-   * canonical 形式压扁的多余空行还原回来。保存成功后会刷新为提交版本。
-   */
-  const originalSourcesRef = useRef<Record<string, string>>({})
   /** 每个 markdown tab 的最新 IR；按 path 索引 */
   const docsRef = useRef<Record<string, ParsedDocument>>({})
   /** 每个 image tab 的元信息（mime / size）；按 path 索引 */
@@ -153,7 +146,7 @@ export function Reader() {
         })) as RenderedDoc
         if (cancelled) return
 
-        ingestDoc(doc, sourcesRef, originalSourcesRef, docsRef, imagesRef)
+        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
         setTabs([docToTab(doc)])
         setActiveTabPath(doc.path)
         setLoadState({ kind: 'ready' })
@@ -263,7 +256,7 @@ export function Reader() {
               })
           return r.json()
         })) as RenderedDoc
-        ingestDoc(doc, sourcesRef, originalSourcesRef, docsRef, imagesRef)
+        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
         setTabs((prev) => [...prev, docToTab(doc)])
         setActiveTabPath(doc.path)
       } catch (e) {
@@ -335,7 +328,6 @@ export function Reader() {
       })
       // 清掉 ref 桶里的内容，不让已关 tab 占内存
       delete sourcesRef.current[path]
-      delete originalSourcesRef.current[path]
       delete docsRef.current[path]
       delete imagesRef.current[path]
     },
@@ -349,19 +341,8 @@ export function Reader() {
       // 图片是只读视图：⌘S 直接 no-op，避免把空 source 覆盖回去毁掉文件
       // 工具 tab 没有"文件内容"概念，⌘S 同样直接忽略
       if (t.kind === 'image' || t.kind === 'tool') return
-      let source = sourcesRef.current[path] ?? ''
-      // markdown 走"忠实重建"：CommonMark AST 不记块间空行数，Milkdown 会把
-      // 多余空行压成 1。和原文比一次，把没改过的位置的空行布局拿回来。
-      if (t.kind === 'markdown') {
-        const orig = originalSourcesRef.current[path]
-        if (typeof orig === 'string') {
-          try {
-            source = preserveBlankLines(orig, source)
-          } catch {
-            /* preserveBlankLines 不该 throw，但兜一手保险 */
-          }
-        }
-      }
+      // CM6 文档即源码本身，不再需要 preserveBlankLines 那一套"忠实重建"
+      const source = sourcesRef.current[path] ?? ''
       updateTab(path, { saving: 'saving', error: undefined })
       try {
         const res = await fetch('./api/save', {
@@ -373,8 +354,6 @@ export function Reader() {
           const body = await res.json().catch(() => ({}))
           throw new Error(body.error ?? `HTTP ${res.status}`)
         }
-        // 已成功落盘 —— 这份 source 成为新的 baseline，下次保存时再以它为参考
-        originalSourcesRef.current[path] = source
         sourcesRef.current[path] = source
         updateTab(path, { saving: 'idle', dirty: false, error: undefined })
         setToast({ message: '已保存', kind: 'success' })
@@ -617,7 +596,7 @@ export function Reader() {
               activeTab.kind === 'tool' ? (
                 <ToolHost toolId={activeTab.toolId ?? null} />
               ) : activeTab.kind === 'markdown' ? (
-                <MilkdownEditor
+                <CodemirrorEditor
                   key={activeTab.path}
                   path={activeTab.path}
                   baseDir={baseDir}
@@ -746,17 +725,14 @@ function ToolHost({ toolId }: { toolId: ToolId | null }) {
  * 与 docToTab 配套使用。
  *
  * sourcesRef：编辑器当前内容（会随按键更新）
- * originalSourcesRef："上次磁盘上看到的"原文 baseline，给 preserveBlankLines 用
  */
 function ingestDoc(
   doc: RenderedDoc,
   sourcesRef: React.RefObject<Record<string, string>>,
-  originalSourcesRef: React.RefObject<Record<string, string>>,
   docsRef: React.RefObject<Record<string, ParsedDocument>>,
   imagesRef: React.RefObject<Record<string, ImagePayload>>,
 ) {
   sourcesRef.current![doc.path] = doc.source
-  originalSourcesRef.current![doc.path] = doc.source
   if (doc.kind === 'markdown' && doc.payload) {
     docsRef.current![doc.path] = doc.payload as ParsedDocument
   } else if (doc.kind === 'image' && doc.payload) {

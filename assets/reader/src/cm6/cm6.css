@@ -1,0 +1,386 @@
+/*
+ * CodeMirror 6 编辑器视觉层（Typora SeeYue Dark 风）。
+ *
+ * 这层只管：
+ * - .cm-editor 整体外观（字体 / 行高 / 背景 / scroll bar）
+ * - .cm-md-* 装饰类（heading / blockquote / list / hr / strong / emphasis / strike / inlineCode / link / hidden）
+ *
+ * markdown 预览（图片实渲染 / HTML widget）走另一组 CSS，阶段 4 再加。
+ */
+
+.cm6-host {
+  height: 100%;
+  overflow: auto;
+  background: var(--color-seeyue-bg);
+}
+
+/* ── EditorView 容器 ────────────────────────────────────────── */
+.cm6-host .cm-editor {
+  /* CM6 默认 outline，太硬 */
+  outline: none !important;
+  background: var(--color-seeyue-bg);
+  color: var(--color-seeyue-fg);
+  font-family: var(--font-cjk);
+  font-size: 15px;
+  line-height: 1.85;
+}
+.cm6-host .cm-editor.cm-focused {
+  outline: none;
+}
+.cm6-host .cm-scroller {
+  /* Typora 风行宽：min(75vw, 1100px)，居中 */
+  font-family: var(--font-cjk);
+  padding: 32px max(48px, calc((100% - 1100px) / 2));
+}
+.cm6-host .cm-content {
+  caret-color: var(--color-seeyue-accent);
+  padding: 0;
+}
+.cm6-host .cm-line {
+  padding: 0;
+}
+.cm6-host .cm-cursor {
+  border-left-color: var(--color-seeyue-accent);
+  border-left-width: 2px;
+}
+.cm6-host .cm-selectionBackground,
+.cm6-host .cm-content ::selection {
+  background: rgba(94, 129, 172, 0.45) !important;
+}
+.cm6-host .cm-activeLine {
+  background: rgba(94, 129, 172, 0.06);
+}
+.cm6-host .cm-gutters {
+  display: none;
+}
+
+/* ── 隐藏触发字符（# / ** / __ / ` / [] / () / >） ────────── */
+.cm-md-hidden {
+  display: none;
+}
+
+/* ── 行级：heading ─────────────────────────────────────────── */
+.cm-md-heading {
+  font-weight: 600;
+  color: var(--color-seeyue-fg-strong);
+  line-height: 1.45;
+  margin: 0;
+  padding: 4px 0;
+  letter-spacing: 0.02em;
+}
+.cm-md-h1 {
+  font-size: 28px;
+  color: #d4a574;
+  border-bottom: 1px solid var(--color-seeyue-border);
+  padding-bottom: 8px;
+  margin-top: 6px;
+}
+.cm-md-h2 {
+  font-size: 24px;
+  color: #7fb8c9;
+  border-bottom: 1px solid var(--color-seeyue-border);
+  padding-bottom: 6px;
+}
+.cm-md-h3 {
+  font-size: 20px;
+  color: #9cb5a2;
+}
+.cm-md-h4 {
+  font-size: 18px;
+  color: var(--color-seeyue-fg-strong);
+}
+.cm-md-h5 {
+  font-size: 16px;
+  color: var(--color-seeyue-fg);
+}
+.cm-md-h6 {
+  font-size: 15px;
+  color: var(--color-seeyue-fg-muted);
+}
+
+/* ── 行级：blockquote ──────────────────────────────────────── */
+.cm-md-blockquote {
+  position: relative;
+  padding-left: 14px;
+  color: var(--color-seeyue-fg-muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+.cm-md-blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-seeyue-border-strong);
+  border-radius: 2px;
+}
+
+/* ── 行级：list（视觉节制，主要靠 markdown 自身缩进） ─────── */
+.cm-md-list-line {
+  /* 不动 padding，CM6 自己有 */
+}
+
+/* 替换的圆点 widget（光标不在本行时替 - / * / + 显示） */
+.cm-md-bullet {
+  display: inline-block;
+  width: 1.2em;
+  margin-right: 0.4em;
+  color: var(--color-seeyue-accent);
+  text-align: center;
+  font-weight: 700;
+}
+
+/* 任务列表 checkbox */
+.cm-md-task {
+  vertical-align: middle;
+  margin-right: 0.5em;
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-seeyue-accent-strong);
+}
+
+/* ── 行级：hr ──────────────────────────────────────────────── */
+.cm-md-hr-line {
+  text-align: center;
+}
+.cm-md-hr {
+  display: inline-block;
+  width: 100%;
+  height: 1px;
+  background: var(--color-seeyue-border-strong);
+  margin: 0.6em 0;
+  vertical-align: middle;
+}
+
+/* ── 内联：strong / emphasis / strike / inlineCode / link ── */
+.cm-md-strong {
+  font-weight: 700;
+  color: var(--color-seeyue-fg-strong);
+}
+.cm-md-emphasis {
+  font-style: italic;
+  color: var(--color-seeyue-fg-strong);
+}
+.cm-md-strike {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-seeyue-danger);
+  color: var(--color-seeyue-fg-muted);
+}
+.cm-md-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--color-seeyue-code-fg);
+  background: var(--color-seeyue-inline-code-bg);
+  border: 1px solid var(--color-seeyue-code-border);
+  border-radius: 6px;
+  padding: 0.05em 0.4em;
+}
+/* 反引号字符（光标进入 inline code 范围时露出）—— 用更柔和的颜色，
+   提示这是 marker 不是内容；同时避免破坏 chip 圆角的视觉。 */
+.cm-md-inline-code:has(+ *) > .cm-md-tick,
+.cm-md-tick {
+  color: var(--color-seeyue-fg-dim);
+  opacity: 0.65;
+}
+.cm-md-link {
+  color: var(--color-seeyue-accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(136, 192, 208, 0.4);
+  text-underline-offset: 3px;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   表格 widget
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.cm-md-table-widget {
+  margin: 0.6em 0;
+  overflow-x: auto;
+  font-family: var(--font-cjk);
+}
+.cm-md-table-widget table {
+  border-collapse: collapse;
+  width: auto;
+  max-width: 100%;
+  background: var(--color-seeyue-bg);
+  border: 1px solid var(--color-seeyue-border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.cm-md-table-widget th,
+.cm-md-table-widget td {
+  padding: 6px 12px;
+  border-right: 1px solid var(--color-seeyue-border);
+  border-bottom: 1px solid var(--color-seeyue-border);
+  font-size: 13.5px;
+  line-height: 1.55;
+  text-align: left;
+  vertical-align: top;
+}
+.cm-md-table-widget th:last-child,
+.cm-md-table-widget td:last-child {
+  border-right: 0;
+}
+.cm-md-table-widget tr:last-child td {
+  border-bottom: 0;
+}
+.cm-md-table-widget thead {
+  background: var(--color-seeyue-sidebar-strong);
+}
+.cm-md-table-widget thead th {
+  font-weight: 600;
+  color: var(--color-seeyue-fg-strong);
+  border-bottom-color: var(--color-seeyue-border-strong);
+}
+.cm-md-table-widget tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   代码块 + Prism token 着色
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.cm-md-codeblock-line {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.65;
+  background: var(--color-seeyue-code-bg);
+  color: var(--color-seeyue-fg);
+  /* 让两侧不留白色 gap，整段代码块成为视觉块 */
+  padding-left: 16px;
+  padding-right: 16px;
+}
+/* 第一个内容行右上角显示语言 chip */
+.cm-md-codeblock-first {
+  position: relative;
+}
+.cm-md-codeblock-first::after {
+  content: attr(data-lang);
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-seeyue-fg-muted);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Prism / refractor token 色（One Dark 风，与原 milkdown 配色一致） */
+.cm6-host .token.comment,
+.cm6-host .token.prolog,
+.cm6-host .token.doctype,
+.cm6-host .token.cdata {
+  color: #5c6370;
+  font-style: italic;
+}
+.cm6-host .token.punctuation {
+  color: #abb2bf;
+}
+.cm6-host .token.property,
+.cm6-host .token.tag,
+.cm6-host .token.boolean,
+.cm6-host .token.number,
+.cm6-host .token.constant,
+.cm6-host .token.symbol {
+  color: #d19a66;
+}
+.cm6-host .token.selector,
+.cm6-host .token.attr-name,
+.cm6-host .token.string,
+.cm6-host .token.char,
+.cm6-host .token.builtin {
+  color: #98c379;
+}
+.cm6-host .token.operator,
+.cm6-host .token.entity,
+.cm6-host .token.url,
+.cm6-host .token.variable {
+  color: #56b6c2;
+}
+.cm6-host .token.atrule,
+.cm6-host .token.attr-value,
+.cm6-host .token.function,
+.cm6-host .token.class-name {
+  color: #61afef;
+}
+.cm6-host .token.keyword {
+  color: #c678dd;
+}
+.cm6-host .token.regex,
+.cm6-host .token.important {
+  color: #e06c75;
+}
+.cm6-host .token.deleted {
+  color: #e06c75;
+}
+.cm6-host .token.inserted {
+  color: #98c379;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   图片 / HTML widget
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.cm-md-image-widget {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  vertical-align: top;
+}
+.cm-md-image-widget img {
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: 6px;
+  background: var(--color-seeyue-bg-deep);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.cm-md-image-widget.errored {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(191, 97, 106, 0.14);
+  color: var(--color-seeyue-danger);
+  font-size: 12px;
+}
+.cm-md-image-widget.errored::before {
+  content: '⚠ 图片加载失败';
+}
+.cm-md-image-widget .cap {
+  font-size: 12px;
+  color: var(--color-seeyue-fg-muted);
+  font-style: italic;
+}
+
+.cm-md-html-widget {
+  font-family: var(--font-cjk);
+}
+.cm-md-html-widget table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+.cm-md-html-widget th,
+.cm-md-html-widget td {
+  border: 1px solid var(--color-seeyue-border);
+  padding: 4px 8px;
+}
+.cm-md-html-widget tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.025);
+}
+.cm-md-html-widget details {
+  margin: 0.4em 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-seeyue-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.cm-md-html-widget summary {
+  cursor: pointer;
+  color: var(--color-seeyue-fg-strong);
+}
