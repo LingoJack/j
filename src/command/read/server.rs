@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
 use super::embed::ReaderAssets;
-use super::renderer::{RenderedDoc, render_file};
+use super::renderer::{RenderedDoc, is_image_path, render_file};
 use super::{MAX_ASSET_SIZE, MAX_DIR_ENTRIES, MAX_FILE_SIZE};
 
 /// 心跳超时：前端断联超过这个时长，server 自动 shutdown。
@@ -206,11 +206,18 @@ async fn api_file(Query(q): Query<FileQuery>) -> Result<Json<RenderedDoc>, ApiEr
         if !metadata.is_file() {
             return Err(ApiError::bad_request("不是一个普通文件"));
         }
-        if metadata.len() > MAX_FILE_SIZE {
+        // 图片：放宽到 MAX_ASSET_SIZE（不读字节进 source，所以也不用担心内存）
+        // 其它：MAX_FILE_SIZE
+        let limit = if is_image_path(&path) {
+            MAX_ASSET_SIZE
+        } else {
+            MAX_FILE_SIZE
+        };
+        if metadata.len() > limit {
             return Err(ApiError::bad_request(format!(
                 "文件过大（{} 字节，超过 {} 字节上限）",
                 metadata.len(),
-                MAX_FILE_SIZE
+                limit
             )));
         }
         render_file(&path).map_err(ApiError::bad_request)

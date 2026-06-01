@@ -1,24 +1,28 @@
 {
-  "name": "web",
+  "name": "reader",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "j read 命令使用的 Reader SPA。产物 dist/ 由 rust-embed 编译时打包进 j 二进制。",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
-    "preview": "vite preview"
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\""
   },
   "dependencies": {
+    "@milkdown/ctx": "^7.21.1",
+    "@milkdown/kit": "^7.21.1",
+    "@milkdown/plugin-prism": "^7.21.1",
+    "@milkdown/prose": "^7.21.1",
+    "@milkdown/react": "^7.21.1",
+    "@milkdown/utils": "^7.21.1",
     "@tailwindcss/vite": "^4.2.2",
-    "@types/react-syntax-highlighter": "^15.5.13",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.2",
-    "react-syntax-highlighter": "^16.1.1",
+    "refractor": "^5.0.0",
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
@@ -36,4 +40,3 @@
     "vite": "^8.0.1"
   }
 }
-

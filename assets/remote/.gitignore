@@ -1,2 +1,4 @@
 node_modules
-dist
+# 注意：dist/ **不**忽略 —— 单文件产物 dist/remote.html 会被 rust-embed
+# 编译进 j 二进制，必须随源码一起提交，否则 clone 后无法直接 cargo build。
+# 重新生成：`make build-remote` 或 `cd assets/remote && npm run build`。

@@ -2,6 +2,8 @@
 //!
 //! 当前实现：
 //! - `MarkdownRenderer` — 复用 `crate::markdown::parser::parse_markdown` 产出 IR
+//! - `ImageRenderer`    — 图片直通；source 为空，payload 携带 mime / size，前端经
+//!   `/api/asset` 拉原始字节
 //! - `PlainTextRenderer` — 其它格式的兜底
 //!
 //! 未来扩展（接口已预留，实现待补）：
@@ -13,11 +15,12 @@ use serde::Serialize;
 use std::path::Path;
 
 /// 文档类型 — 用于前端按类型分发组件。
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DocKind {
     Markdown,
     PlainText,
+    Image,
     // 占位，本期不实现
     #[allow(dead_code)]
     Pptx,
@@ -36,11 +39,12 @@ pub struct RenderedDoc {
     pub filename: String,
     /// 文档类型
     pub kind: DocKind,
-    /// 编辑器初始内容（textarea 的 value）
+    /// 编辑器初始内容（textarea 的 value）；图片为空串
     pub source: String,
     /// 类型特定的载荷（首次解析的快照）：
     /// - Markdown → `ParsedDocument` JSON
     /// - PlainText → `null`（前端不需要）
+    /// - Image    → `{ "mime": ..., "size": ... }`，前端可用于 status bar
     pub payload: serde_json::Value,
 }
 
@@ -78,6 +82,21 @@ impl Renderer for PlainTextRenderer {
     }
 }
 
+/// 图片渲染器：不读取文件内容到 source（前端走 `/api/asset` 直接拉字节）；
+/// payload 仅包含若干元数据。
+pub struct ImageRenderer;
+
+impl Renderer for ImageRenderer {
+    fn render(&self, _source: &str) -> Result<serde_json::Value, String> {
+        // payload 在 render_file 里组装（需要文件元数据），这里返回 null 占位。
+        Ok(serde_json::Value::Null)
+    }
+
+    fn kind(&self) -> DocKind {
+        DocKind::Image
+    }
+}
+
 /// 根据文件扩展名选择渲染器。
 pub fn pick_renderer(path: &Path) -> Box<dyn Renderer> {
     let ext = path
@@ -87,19 +106,53 @@ pub fn pick_renderer(path: &Path) -> Box<dyn Renderer> {
         .unwrap_or_default();
     match ext.as_str() {
         "md" | "markdown" => Box::new(MarkdownRenderer),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "avif" | "apng"
+        | "tif" | "tiff" => Box::new(ImageRenderer),
         _ => Box::new(PlainTextRenderer),
     }
+}
+
+/// 仅按扩展名判断是否图片。给调用方在「读文件之前」选定大小上限。
+pub fn is_image_path(path: &Path) -> bool {
+    pick_renderer(path).kind() == DocKind::Image
 }
 
 /// 读取并渲染单文件，构建 `RenderedDoc`。
 ///
 /// 调用方需提前完成路径校验（存在性、是普通文件、大小上限）。
 pub fn render_file(path: &Path) -> Result<RenderedDoc, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("读取文件失败：{e}"))?;
     let renderer = pick_renderer(path);
+    let kind = renderer.kind();
+
+    let filename = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("untitled")
+        .to_string();
+
+    // 图片：不把字节塞进 source，前端通过 /api/asset 取原始数据。
+    if kind == DocKind::Image {
+        let metadata = std::fs::metadata(path).map_err(|e| format!("读取图片元数据失败：{e}"))?;
+        let mime = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string();
+        let payload = serde_json::json!({
+            "mime": mime,
+            "size": metadata.len(),
+        });
+        return Ok(RenderedDoc {
+            path: path.display().to_string(),
+            filename,
+            kind,
+            source: String::new(),
+            payload,
+        });
+    }
+
+    let bytes = std::fs::read(path).map_err(|e| format!("读取文件失败：{e}"))?;
 
     // Markdown 必须 UTF-8；其它类型走 lossy 转换以兼容偶发 BOM / 非 UTF-8 文件
-    let source = match renderer.kind() {
+    let source = match kind {
         DocKind::Markdown => std::str::from_utf8(&bytes)
             .map_err(|e| format!("文件不是合法的 UTF-8 编码：{e}"))?
             .to_string(),
@@ -107,16 +160,11 @@ pub fn render_file(path: &Path) -> Result<RenderedDoc, String> {
     };
 
     let payload = renderer.render(&source)?;
-    let filename = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("untitled")
-        .to_string();
 
     Ok(RenderedDoc {
         path: path.display().to_string(),
         filename,
-        kind: renderer.kind(),
+        kind,
         source,
         payload,
     })

@@ -23,11 +23,15 @@ use rust_embed::RustEmbed;
 
 /// 编译时嵌入资源统一管理
 ///
-/// 所有 assets 目录下的文件都会被嵌入到二进制中
+/// 所有 assets 目录下的文件都会被嵌入到二进制中。
+/// 例外：`remote/` 与 `reader/` 这两个前端工作区有自己的 RustEmbed struct
+/// （`crate::command::chat::remote::RemoteAssets` /
+/// `crate::command::read::ReaderAssets`），这里整棵跳过，避免把它们的
+/// 源码 / node_modules / 构建配置一并塞进二进制。
 #[derive(Debug, RustEmbed)]
 #[folder = "assets/"]
-#[exclude = "remote/node_modules/*"]
-#[exclude = "remote/dist/*"]
+#[exclude = "remote/*"]
+#[exclude = "reader/*"]
 pub struct Assets;
 
 // ========== 重导出子模块公开 API ==========

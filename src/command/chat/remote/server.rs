@@ -1,8 +1,8 @@
 //! HTTP + WebSocket 混合服务器（ECDH P-256 加密通信）
 
+use super::RemoteAssets;
 use super::crypto;
 use super::protocol::{WsInbound, WsOutbound};
-use crate::assets::Assets;
 use futures::SinkExt;
 use futures::stream::StreamExt;
 use std::sync::Arc;
@@ -441,7 +441,7 @@ async fn serve_html(mut stream: TcpStream) -> Result<(), Box<dyn std::error::Err
         }
     }
 
-    let html = Assets::get("remote.html")
+    let html = RemoteAssets::get("remote.html")
         .map(|f| f.data.to_vec())
         .unwrap_or_else(|| b"<h1>remote.html not found</h1>".to_vec());
 

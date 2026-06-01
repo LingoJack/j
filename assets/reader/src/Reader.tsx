@@ -4,6 +4,7 @@ import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
 import { MilkdownEditor } from './milkdown/MilkdownEditor'
 import { PlainTextEditor } from './PlainTextEditor'
+import { ImageViewer } from './ImageViewer'
 import { TableOfContents } from './TableOfContents'
 import { extractHeadings } from './toc'
 import { Toast } from './Toast'
@@ -15,6 +16,7 @@ import {
   Sparkles,
 } from './Icon'
 import type {
+  ImagePayload,
   InitialResp,
   ParsedDocument,
   RenderedDoc,
@@ -54,6 +56,8 @@ export function Reader() {
   const sourcesRef = useRef<Record<string, string>>({})
   /** 每个 markdown tab 的最新 IR；按 path 索引 */
   const docsRef = useRef<Record<string, ParsedDocument>>({})
+  /** 每个 image tab 的元信息（mime / size）；按 path 索引 */
+  const imagesRef = useRef<Record<string, ImagePayload>>({})
 
   const toggleToc = useCallback(() => {
     setTocCollapsed((prev) => {
@@ -90,7 +94,7 @@ export function Reader() {
         })) as RenderedDoc
         if (cancelled) return
 
-        ingestDoc(doc, sourcesRef, docsRef)
+        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
         setTabs([docToTab(doc)])
         setActiveTabPath(doc.path)
         setLoadState({ kind: 'ready' })
@@ -200,7 +204,7 @@ export function Reader() {
               })
           return r.json()
         })) as RenderedDoc
-        ingestDoc(doc, sourcesRef, docsRef)
+        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
         setTabs((prev) => [...prev, docToTab(doc)])
         setActiveTabPath(doc.path)
       } catch (e) {
@@ -240,6 +244,7 @@ export function Reader() {
       // 清掉 ref 桶里的内容，不让已关 tab 占内存
       delete sourcesRef.current[path]
       delete docsRef.current[path]
+      delete imagesRef.current[path]
     },
     [activeTabPath],
   )
@@ -248,6 +253,8 @@ export function Reader() {
     async (path: string) => {
       const t = tabs.find((x) => x.path === path)
       if (!t) return
+      // 图片是只读视图：⌘S 直接 no-op，避免把空 source 覆盖回去毁掉文件
+      if (t.kind === 'image') return
       const source = sourcesRef.current[path] ?? ''
       updateTab(path, { saving: 'saving', error: undefined })
       try {
@@ -454,6 +461,13 @@ export function Reader() {
                   onParsed={handleDocParsed}
                   onSave={() => saveTab(activeTab.path)}
                 />
+              ) : activeTab.kind === 'image' ? (
+                <ImageViewer
+                  key={activeTab.path}
+                  path={activeTab.path}
+                  filename={activeTab.filename}
+                  payload={imagesRef.current[activeTab.path] ?? null}
+                />
               ) : (
                 <PlainTextEditor
                   key={activeTab.path}
@@ -521,7 +535,7 @@ function docToTab(doc: RenderedDoc): Tab {
     path: doc.path,
     filename: doc.filename,
     kind:
-      doc.kind === 'markdown' || doc.kind === 'plain_text'
+      doc.kind === 'markdown' || doc.kind === 'plain_text' || doc.kind === 'image'
         ? doc.kind
         : 'plain_text',
     dirty: false,
@@ -530,17 +544,20 @@ function docToTab(doc: RenderedDoc): Tab {
 }
 
 /**
- * 把一份 RenderedDoc 拆进 sources / docs 两个 ref 桶。
+ * 把一份 RenderedDoc 拆进 sources / docs / images 三个 ref 桶。
  * 与 docToTab 配套使用。
  */
 function ingestDoc(
   doc: RenderedDoc,
   sourcesRef: React.RefObject<Record<string, string>>,
   docsRef: React.RefObject<Record<string, ParsedDocument>>,
+  imagesRef: React.RefObject<Record<string, ImagePayload>>,
 ) {
   sourcesRef.current![doc.path] = doc.source
   if (doc.kind === 'markdown' && doc.payload) {
     docsRef.current![doc.path] = doc.payload as ParsedDocument
+  } else if (doc.kind === 'image' && doc.payload) {
+    imagesRef.current![doc.path] = doc.payload as ImagePayload
   }
 }
 
@@ -562,6 +579,8 @@ function EditorBar({
   onCopyPath: () => void
 }) {
   const segs = breadcrumb(tab.path)
+  // 图片是只读视图：不显示 dirty / 保存按钮（一旦触发 /api/save 会用空 source 覆盖原文件）
+  const editable = tab.kind !== 'image'
   return (
     <div className="seeyue-editor-bar">
       <div className="breadcrumb" title={tab.path}>
@@ -575,17 +594,17 @@ function EditorBar({
           </span>
         ))}
       </div>
-      {tab.dirty && (
+      {editable && tab.dirty && (
         <span className="status-pill" data-tone="warn">
           ● 未保存
         </span>
       )}
-      {tab.saving === 'saving' && (
+      {editable && tab.saving === 'saving' && (
         <span className="status-pill" data-tone="accent">
           保存中…
         </span>
       )}
-      {tab.saving === 'error' && (
+      {editable && tab.saving === 'error' && (
         <span className="status-pill" data-tone="danger" title={tab.error}>
           保存失败
         </span>
@@ -593,13 +612,15 @@ function EditorBar({
       <button className="seeyue-icon-btn" onClick={onCopyPath} title="复制路径">
         <Copy size={14} />
       </button>
-      <button
-        className="seeyue-icon-btn"
-        onClick={onSave}
-        title="保存（⌘S）"
-      >
-        <Save size={14} />
-      </button>
+      {editable && (
+        <button
+          className="seeyue-icon-btn"
+          onClick={onSave}
+          title="保存（⌘S）"
+        >
+          <Save size={14} />
+        </button>
+      )}
     </div>
   )
 }

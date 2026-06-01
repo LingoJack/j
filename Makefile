@@ -145,8 +145,8 @@ status: current_dir ## 查看 Git 状态
 # ============================================
 build-remote: ## 构建 Remote 前端
 	@echo "🌐 构建 Remote 前端..."
-	@cd assets/remote && npm install --silent && npm run build && cp dist/remote.html ..
-	@echo "☑️ Remote 前端构建完成"
+	@cd assets/remote && npm install --silent && npm run build
+	@echo "☑️ Remote 前端构建完成（输出至 assets/remote/dist/remote.html）"
 
 build-web: ## 构建 Web 前端
 	@echo "🌐 构建 Web 前端..."
@@ -155,8 +155,8 @@ build-web: ## 构建 Web 前端
 
 build-reader-web: ## 构建 `j read` 命令使用的 Reader SPA（产物嵌入二进制）
 	@echo "📖 构建 Reader SPA..."
-	@cd web && npm install --silent && npm run build:reader
-	@echo "☑️ Reader SPA 构建完成（输出至 assets/reader_web/）"
+	@cd assets/reader && npm install --silent && npm run build
+	@echo "☑️ Reader SPA 构建完成（输出至 assets/reader/dist/）"
 
 build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
 	@echo "🔴 构建 j-indicator..."

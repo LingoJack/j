@@ -886,3 +886,76 @@ textarea.seeyue-textarea {
     transform: translateX(0);
   }
 }
+
+/* —— Image viewer ——
+ * 居中、保持比例、不裁切；底部一行紧凑的 status bar，跟 EditorBar 风格一致。
+ */
+.seeyue-image-viewer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-seeyue-bg);
+}
+
+.seeyue-image-viewer .image-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px;
+  background:
+    /* 棋盘格背景：让透明 PNG 的透明区域可见 */
+    linear-gradient(45deg, color-mix(in srgb, var(--color-seeyue-fg-dim) 12%, transparent) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, color-mix(in srgb, var(--color-seeyue-fg-dim) 12%, transparent) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--color-seeyue-fg-dim) 12%, transparent) 75%) 8px 8px / 16px 16px,
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--color-seeyue-fg-dim) 12%, transparent) 75%) 8px 8px / 16px 16px;
+}
+
+.seeyue-image-viewer .image-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  /* 像素艺术 / 截图放大时不模糊 —— 默认走 auto，这里不强制 */
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+  background: var(--color-seeyue-bg-deep);
+}
+
+.seeyue-image-viewer .image-error {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--color-seeyue-danger, #bf616a);
+}
+
+.seeyue-image-viewer .image-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--color-seeyue-border);
+  font-size: 12px;
+  color: var(--color-seeyue-fg-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--color-seeyue-bg);
+}
+
+.seeyue-image-viewer .image-statusbar .filename {
+  color: var(--color-seeyue-fg);
+  font-weight: 500;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seeyue-image-viewer .image-statusbar .sep {
+  opacity: 0.5;
+}
+
+.seeyue-image-viewer .image-statusbar .mime {
+  margin-left: auto;
+  opacity: 0.8;
+}

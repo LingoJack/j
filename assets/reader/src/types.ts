@@ -54,14 +54,19 @@ export interface ParsedDocument {
 }
 
 // `/api/file` 响应：单文件渲染产物
-export type DocKind = 'markdown' | 'plain_text' | 'pptx' | 'docx' | 'xlsx'
+export type DocKind = 'markdown' | 'plain_text' | 'image' | 'pptx' | 'docx' | 'xlsx'
+
+export interface ImagePayload {
+  mime: string
+  size: number
+}
 
 export interface RenderedDoc {
   path: string
   filename: string
   kind: DocKind
   source: string
-  payload: ParsedDocument | null | unknown
+  payload: ParsedDocument | ImagePayload | null | unknown
 }
 
 // `/api/list` 响应：目录列出结果

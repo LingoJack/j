@@ -61,11 +61,17 @@ fn run(
 
     let (initial_path, root_dir): (Option<PathBuf>, PathBuf) = if metadata.is_file() {
         // 文件入口：作为 initial tab；root_dir = 父目录
-        if metadata.len() > MAX_FILE_SIZE {
+        // 图片走 MAX_ASSET_SIZE（20MiB），其它走 MAX_FILE_SIZE（5MiB）
+        let limit = if renderer::is_image_path(&canonical) {
+            MAX_ASSET_SIZE
+        } else {
+            MAX_FILE_SIZE
+        };
+        if metadata.len() > limit {
             return Err(format!(
                 "文件过大（{} 字节，超过 {} 字节上限），暂不支持预览",
                 metadata.len(),
-                MAX_FILE_SIZE
+                limit
             ));
         }
         let root = canonical
