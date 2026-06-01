@@ -153,6 +153,18 @@ export function FileGeneric(props: IconBaseProps) {
   )
 }
 
+/** 新建文件：文件 icon + 加号 */
+export function FilePlus(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+      <path d="M14 3v6h6" />
+      <path d="M12 13v6" />
+      <path d="M9 16h6" />
+    </svg>
+  )
+}
+
 export function Search(props: IconBaseProps) {
   return (
     <svg {...svgProps(props)}>
@@ -314,26 +326,68 @@ export function Sparkles(props: IconBaseProps) {
   )
 }
 
-/** 工具箱 / 扳手（活动栏 toolbox tab） */
-export function Wrench(props: IconBaseProps) {
+/** 工具箱（活动栏 toolbox tab）：lucide toolbox 风 —— 一个带把手的箱子 */
+export function Toolbox(props: IconBaseProps) {
   return (
     <svg {...svgProps(props)}>
-      <path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-7 7a3 3 0 1 1-4.2-4.2l7-7Z" />
-      <path d="M14.7 6.3 11 10l-2 2" />
+      {/* 把手 */}
+      <path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      {/* 箱体 */}
+      <rect x="3" y="8" width="18" height="13" rx="2" />
+      {/* 中线 + 锁扣 */}
+      <path d="M3 14h18" />
+      <path d="M10 14v2" />
+      <path d="M14 14v2" />
     </svg>
   )
 }
 
-/** 文本 diff 工具图标：两个箭头互指，象征对比两个版本 */
+/**
+ * 文本 diff 工具图标：lucide git-compare 风。
+ * 左上 → 右下 两个分支节点 + 拐角箭头，比之前的"双圆 + 直线"更有"对比/分支"语义。
+ */
 export function GitCompare(props: IconBaseProps) {
   return (
     <svg {...svgProps(props)}>
-      <circle cx="6" cy="6" r="2.4" />
-      <circle cx="18" cy="18" r="2.4" />
-      <path d="M6 8.4V14a3 3 0 0 0 3 3h6" />
-      <path d="m13 14 2 3-2 3" />
-      <path d="M18 15.6V10a3 3 0 0 0-3-3H9" />
-      <path d="m11 10-2-3 2-3" />
+      <circle cx="6" cy="6" r="2.6" />
+      <circle cx="18" cy="18" r="2.6" />
+      <path d="M11 6h4a3 3 0 0 1 3 3v6.4" />
+      <path d="m15 13 3 3-3 3" />
+      <path d="M13 18H9a3 3 0 0 1-3-3V8.6" />
+      <path d="m9 11-3-3 3-3" />
+    </svg>
+  )
+}
+
+/**
+ * JSON 工具图标：一对花括号 { }，象征 JSON 的字面量边界。
+ * lucide braces 风。
+ */
+export function Braces(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" />
+      <path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" />
+    </svg>
+  )
+}
+
+/** 展开 / 折叠：圆里加号 / 减号，给 JSON 树用 */
+export function PlusSquare(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
+    </svg>
+  )
+}
+
+export function MinusSquare(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M8 12h8" />
     </svg>
   )
 }

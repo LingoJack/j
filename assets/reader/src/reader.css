@@ -379,6 +379,36 @@ textarea.seeyue-textarea {
   text-overflow: ellipsis;
 }
 
+/* 行尾「+」按钮：默认隐藏，hover 行 / focus 时浮现 */
+.seeyue-tree-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-seeyue-fg-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease,
+    background-color 0.15s ease;
+  margin-right: 4px;
+}
+.seeyue-tree-row:hover .seeyue-tree-action,
+.seeyue-tree-row:focus-within .seeyue-tree-action {
+  opacity: 1;
+}
+.seeyue-tree-action:hover {
+  color: var(--color-seeyue-success);
+  background: rgba(163, 190, 140, 0.15);
+}
+.seeyue-tree-row[data-active='true'] .seeyue-tree-action {
+  color: var(--color-seeyue-fg-strong);
+}
+
 /* —— 子树左侧层级线 —— */
 .seeyue-tree-branch {
   position: relative;
@@ -703,6 +733,15 @@ textarea.seeyue-textarea {
   gap: 8px;
   margin-top: 18px;
 }
+.seeyue-modal-error {
+  margin: 8px 0 0 !important;
+  padding: 6px 10px;
+  font-size: 12px !important;
+  color: var(--color-seeyue-danger) !important;
+  background: rgba(191, 97, 106, 0.12);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
 .seeyue-btn {
   padding: 6px 14px;
   font-size: 12.5px;
@@ -983,6 +1022,50 @@ textarea.seeyue-textarea {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   VerticalSplitter：拖动调节宽度
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.seeyue-splitter {
+  position: relative;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  /* 让点击命中范围比视觉宽 —— 实际可拖区域更宽，对鼠标友好 */
+  user-select: none;
+  touch-action: none;
+}
+.seeyue-splitter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--color-seeyue-border);
+  transition: background-color 0.15s ease;
+}
+.seeyue-splitter:hover::before,
+.seeyue-splitter:active::before {
+  background: var(--color-seeyue-accent);
+}
+.seeyue-splitter .grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 36px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+.seeyue-splitter:hover .grip,
+.seeyue-splitter:active .grip {
+  background: var(--color-seeyue-accent);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ActivityBar：最左侧 44px 垂直活动栏（仿 VSCode）
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
@@ -1058,19 +1141,45 @@ textarea.seeyue-textarea {
   background: var(--color-seeyue-accent-soft);
   color: var(--color-seeyue-fg-strong);
 }
-.seeyue-toolbox-row[data-active='true'] .seeyue-toolbox-icon {
-  color: var(--color-seeyue-accent);
-}
 .seeyue-toolbox-icon {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   color: var(--color-seeyue-fg-muted);
   background: var(--color-seeyue-bg-deep);
+  box-shadow: inset 0 0 0 1px var(--color-seeyue-border);
+  transition: color 0.15s ease, background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.seeyue-toolbox-icon[data-tone='accent'] {
+  color: var(--color-seeyue-accent);
+  background: var(--color-seeyue-accent-mute);
+  box-shadow: inset 0 0 0 1px rgba(136, 192, 208, 0.3);
+}
+.seeyue-toolbox-icon[data-tone='success'] {
+  color: var(--color-seeyue-success);
+  background: rgba(163, 190, 140, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(163, 190, 140, 0.3);
+}
+.seeyue-toolbox-icon[data-tone='warn'] {
+  color: var(--color-seeyue-warn);
+  background: rgba(208, 135, 112, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(208, 135, 112, 0.3);
+}
+.seeyue-toolbox-icon[data-tone='purple'] {
+  color: var(--color-seeyue-purple);
+  background: rgba(180, 142, 173, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(180, 142, 173, 0.3);
+}
+.seeyue-toolbox-row:hover .seeyue-toolbox-icon {
+  filter: brightness(1.15);
+}
+.seeyue-toolbox-row[data-active='true'] .seeyue-toolbox-icon {
+  filter: brightness(1.2);
 }
 .seeyue-toolbox-text {
   display: flex;
@@ -1282,4 +1391,189 @@ textarea.seeyue-textarea {
 }
 .diff-row .cell[data-op='pad'] .text {
   color: var(--color-seeyue-fg-dim);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   JsonTool：JSON 查看器
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.seeyue-json-tool {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-seeyue-bg);
+}
+
+.seeyue-json-toolbar .stat[data-tone='accent'] {
+  color: var(--color-seeyue-accent);
+  background: var(--color-seeyue-accent-mute);
+}
+
+.seeyue-json-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 1px;
+  background: var(--color-seeyue-border);
+  min-height: 0;
+}
+
+.seeyue-json-input,
+.seeyue-json-tree {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-seeyue-bg);
+  min-width: 0;
+  min-height: 0;
+}
+.seeyue-json-input .pane-head,
+.seeyue-json-tree .pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  color: var(--color-seeyue-fg-muted);
+  border-bottom: 1px solid var(--color-seeyue-border);
+  background: var(--color-seeyue-sidebar);
+  letter-spacing: 0.04em;
+}
+.seeyue-json-input .pane-head .hint,
+.seeyue-json-tree .pane-head .hint {
+  font-size: 11px;
+  color: var(--color-seeyue-fg-dim);
+}
+.seeyue-json-input textarea {
+  flex: 1;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.seeyue-json-tree .tree-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.seeyue-json-tree .json-empty {
+  color: var(--color-seeyue-fg-dim);
+  font-family: var(--font-cjk);
+  font-size: 12.5px;
+  padding: 16px 4px;
+}
+.seeyue-json-tree .json-error {
+  color: var(--color-seeyue-danger);
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  margin: 0;
+  padding: 8px 4px;
+}
+
+.json-node {
+  position: relative;
+}
+.json-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 0;
+  cursor: default;
+  border-radius: 3px;
+}
+.json-row:hover {
+  background: rgba(94, 129, 172, 0.08);
+}
+.json-row .caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  color: var(--color-seeyue-fg-dim);
+  cursor: pointer;
+}
+.json-row .json-key {
+  color: var(--color-seeyue-accent);
+}
+.json-row .json-colon {
+  color: var(--color-seeyue-fg-dim);
+  margin-right: 2px;
+}
+.json-row .json-bracket {
+  color: var(--color-seeyue-fg-muted);
+}
+.json-row .json-summary {
+  color: var(--color-seeyue-fg-dim);
+  font-style: italic;
+  margin: 0 4px;
+}
+.json-close-row {
+  cursor: default;
+}
+
+.json-children {
+  margin-left: 14px;
+  padding-left: 6px;
+  border-left: 1px dashed rgba(76, 86, 106, 0.55);
+}
+
+.json-leaf {
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px dashed transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.json-leaf:hover {
+  border-color: var(--color-seeyue-border-strong);
+  background: var(--color-seeyue-elevated);
+}
+.json-leaf-string {
+  color: var(--color-seeyue-success);
+}
+.json-leaf-number {
+  color: var(--color-seeyue-warn);
+}
+.json-leaf-bool {
+  color: var(--color-seeyue-purple);
+}
+.json-leaf-null {
+  color: var(--color-seeyue-fg-dim);
+  font-style: italic;
+}
+.json-leaf-input {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--color-seeyue-bg-deep);
+  border: 1px solid var(--color-seeyue-accent);
+  border-radius: 4px;
+  color: var(--color-seeyue-fg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  outline: none;
+  min-width: 80px;
+}
+select.json-leaf-input {
+  cursor: pointer;
+}
+
+.seeyue-json-toast {
+  position: absolute;
+  right: 18px;
+  top: 64px;
+  padding: 6px 12px;
+  background: var(--color-seeyue-elevated);
+  border: 1px solid var(--color-seeyue-border-strong);
+  border-left: 3px solid var(--color-seeyue-success);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-seeyue-fg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: seeyue-fade-in 0.15s ease;
 }

@@ -10,6 +10,7 @@ import {
   FileImage,
   FileMd,
   FileText,
+  FilePlus,
   FolderClosed,
   FolderOpen,
   FolderRoot,
@@ -26,6 +27,8 @@ interface Props {
   onToggleHidden: () => void
   activePath: string | null
   onOpen: (path: string) => void
+  /** 新建文件请求：父级把空文件创建在 dir 下，并把新建的绝对路径回传打开。 */
+  onCreateFile?: (dir: string, name: string) => Promise<string>
 }
 
 /** 每个目录节点维护的状态 */
@@ -46,12 +49,15 @@ interface NodeState {
  *   active 文件用主色块 + 末尾 endLine 装饰
  */
 export function FileTree(props: Props) {
-  const { root, onChangeRoot, showHidden, onToggleHidden, activePath, onOpen } =
+  const { root, onChangeRoot, showHidden, onToggleHidden, activePath, onOpen, onCreateFile } =
     props
   // 以路径为 key 存储每个已访问目录的状态
   const [nodes, setNodes] = useState<Record<string, NodeState>>({})
   const [filter, setFilter] = useState('')
   const [pickingRoot, setPickingRoot] = useState(false)
+  /** 新建文件对话框：null 表示未打开；非 null 时记录目标父目录绝对路径 */
+  const [creatingIn, setCreatingIn] = useState<string | null>(null)
+  const [creatingError, setCreatingError] = useState<string | null>(null)
 
   const loadDir = useCallback(
     async (dir: string) => {
@@ -138,6 +144,32 @@ export function FileTree(props: Props) {
     [nodes, loadDir],
   )
 
+  /**
+   * 「新建文件」对话框确认后实际调用。
+   *
+   * 失败：把错误回写到 dialog 上方红字提示，dialog 不关，方便用户改名重试。
+   * 成功：刷新目标父目录的列表（让新文件出现），并通过 onOpen 直接打开它。
+   */
+  const submitCreate = useCallback(
+    async (parentDir: string, name: string) => {
+      if (!onCreateFile) {
+        setCreatingError('当前环境不支持新建文件')
+        return
+      }
+      try {
+        const newPath = await onCreateFile(parentDir, name)
+        setCreatingIn(null)
+        setCreatingError(null)
+        // 重载父目录，把新文件刷出来
+        await loadDir(parentDir)
+        onOpen(newPath)
+      } catch (e) {
+        setCreatingError(String(e))
+      }
+    },
+    [onCreateFile, loadDir, onOpen],
+  )
+
   // 路径面包屑分段
   const crumbs = useMemo(() => splitPath(root), [root])
   const filterLower = filter.trim().toLowerCase()
@@ -151,6 +183,18 @@ export function FileTree(props: Props) {
           <span>文件</span>
         </button>
         <div className="flex-1" />
+        {onCreateFile && (
+          <button
+            className="seeyue-icon-btn"
+            onClick={() => {
+              setCreatingError(null)
+              setCreatingIn(root)
+            }}
+            title="在当前根目录新建文件"
+          >
+            <FilePlus size={15} />
+          </button>
+        )}
         <button
           className="seeyue-icon-btn"
           onClick={() => setPickingRoot(true)}
@@ -223,6 +267,14 @@ export function FileTree(props: Props) {
           onOpen={onOpen}
           activePath={activePath}
           filter={filterLower}
+          onRequestCreate={
+            onCreateFile
+              ? (dir) => {
+                  setCreatingError(null)
+                  setCreatingIn(dir)
+                }
+              : undefined
+          }
         />
       </div>
 
@@ -239,6 +291,24 @@ export function FileTree(props: Props) {
           }}
         />
       )}
+
+      {creatingIn && (
+        <PromptDialog
+          title="新建文件"
+          description={`将在 ${creatingIn} 下创建新文件：`}
+          initialValue=""
+          placeholder="例如 notes.md"
+          confirmLabel="创建"
+          error={creatingError ?? undefined}
+          onCancel={() => {
+            setCreatingIn(null)
+            setCreatingError(null)
+          }}
+          onConfirm={(name) => {
+            void submitCreate(creatingIn, name)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -251,6 +321,7 @@ interface DirNodeProps {
   onOpen: (path: string) => void
   activePath: string | null
   filter: string
+  onRequestCreate?: (dir: string) => void
 }
 
 function DirNode({
@@ -261,6 +332,7 @@ function DirNode({
   onOpen,
   activePath,
   filter,
+  onRequestCreate,
 }: DirNodeProps) {
   const state = nodes[path]
   const indent = (lvl: number) => 8 + lvl * 14
@@ -305,6 +377,7 @@ function DirNode({
             onOpen={onOpen}
             activePath={activePath}
             filter={filter}
+            onRequestCreate={onRequestCreate}
           />
         ))}
       {state.expanded && filter && filtered && filtered.length === 0 && (
@@ -335,6 +408,7 @@ function EntryRow({
   onOpen,
   activePath,
   filter,
+  onRequestCreate,
 }: {
   entry: DirEntry
   depth: number
@@ -343,19 +417,27 @@ function EntryRow({
   onOpen: (path: string) => void
   activePath: string | null
   filter: string
+  onRequestCreate?: (dir: string) => void
 }) {
   const sub = nodes[entry.path]
   const isActive = !entry.is_dir && entry.path === activePath
   const indent = 4 + depth * 14
   return (
     <>
-      <button
-        type="button"
-        onClick={() => (entry.is_dir ? onToggle(entry.path) : onOpen(entry.path))}
+      <div
         className="seeyue-tree-row"
         data-active={isActive ? 'true' : undefined}
         style={{ paddingLeft: indent }}
         title={entry.path}
+        role="button"
+        tabIndex={0}
+        onClick={() => (entry.is_dir ? onToggle(entry.path) : onOpen(entry.path))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            entry.is_dir ? onToggle(entry.path) : onOpen(entry.path)
+          }
+        }}
       >
         <span className="seeyue-tree-caret">
           {entry.is_dir ? (
@@ -383,7 +465,20 @@ function EntryRow({
           />
         </span>
         <span className="seeyue-tree-label">{entry.name}</span>
-      </button>
+        {entry.is_dir && onRequestCreate && (
+          <button
+            type="button"
+            className="seeyue-tree-action"
+            title="在该目录新建文件"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRequestCreate(entry.path)
+            }}
+          >
+            <FilePlus size={12} />
+          </button>
+        )}
+      </div>
       {entry.is_dir && sub?.expanded && (
         <DirNode
           path={entry.path}
@@ -393,6 +488,7 @@ function EntryRow({
           onOpen={onOpen}
           activePath={activePath}
           filter={filter}
+          onRequestCreate={onRequestCreate}
         />
       )}
     </>

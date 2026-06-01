@@ -3,6 +3,7 @@ import { ActivityBar, type ActivityKey } from './ActivityBar'
 import { FileTree } from './FileTree'
 import { Toolbox } from './Toolbox'
 import { DiffTool } from './DiffTool'
+import { JsonTool } from './JsonTool'
 import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
 import { QuitConfirmDialog } from './QuitConfirmDialog'
@@ -12,6 +13,7 @@ import { ImageViewer } from './ImageViewer'
 import { TableOfContents } from './TableOfContents'
 import { extractHeadings } from './toc'
 import { Toast } from './Toast'
+import { VerticalSplitter } from './Splitter'
 import { MarkdownBaseDirContext } from './MarkdownIR'
 import { preserveBlankLines } from './preserveBlanks'
 import {
@@ -40,7 +42,14 @@ const MAX_TABS = 32
 /** 工具 tab 标签上显示的名字。新增工具时在这里加一项。 */
 const TOOL_TITLES: Record<ToolId, string> = {
   diff: '文本 Diff',
+  json: 'JSON 查看器',
 }
+
+/** 侧栏宽度（活动栏右侧的 FileTree / Toolbox 面板） */
+const SIDEBAR_DEFAULT = 270
+const SIDEBAR_MIN = 180
+const SIDEBAR_MAX = 560
+const SIDEBAR_LS_KEY = 'jreader.sidebarWidth'
 
 export function Reader() {
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' })
@@ -73,6 +82,20 @@ export function Reader() {
   const [tocCollapsed, setTocCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('jreader.tocCollapsed') === '1'
   })
+  /**
+   * 侧栏宽度（活动栏右侧那一列）—— 用户可拖动调节，持久化到 localStorage。
+   * 初值会被夹紧到 [SIDEBAR_MIN, SIDEBAR_MAX]，防止上一次恶意 / 意外的 0 值。
+   */
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const raw = localStorage.getItem(SIDEBAR_LS_KEY)
+    const n = raw ? Number(raw) : SIDEBAR_DEFAULT
+    if (!Number.isFinite(n)) return SIDEBAR_DEFAULT
+    return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, n))
+  })
+  const handleSidebarResize = useCallback((next: number) => {
+    setSidebarWidth(next)
+    localStorage.setItem(SIDEBAR_LS_KEY, String(Math.round(next)))
+  }, [])
   /** 监听 doc 更新（每次 /api/parse 完成就 +1）—— 给 TOC 触发重算 */
   const [docVersion, setDocVersion] = useState(0)
 
@@ -373,6 +396,24 @@ export function Reader() {
   }, [])
 
   /**
+   * 调 /api/create 在指定父目录里创建一个新文件，成功返回新文件绝对路径。
+   * 失败时把后端 message 透给上层，让 PromptDialog 弹红字让用户改名重试。
+   */
+  const createFile = useCallback(async (dir: string, name: string): Promise<string> => {
+    const res = await fetch('./api/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir, name }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? `HTTP ${res.status}`)
+    }
+    const data = (await res.json()) as { path: string }
+    return data.path
+  }, [])
+
+  /**
    * 关掉整个 reader：通知服务端 shutdown + 关闭浏览器窗口。
    *
    * - app 模式（`j read` 默认）：window.close() 真的会关掉那个窗口
@@ -518,10 +559,11 @@ export function Reader() {
       <div
         className="h-full grid bg-seeyue-bg text-seeyue-fg"
         style={{
-          // 4 列：[44px 活动栏] [270px 侧栏面板] [1fr 主区] [TOC（仅 markdown 显示）]
+          // 5 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [5px 分割条]
+          //        [1fr 主区] [TOC（仅 markdown 显示）]
           gridTemplateColumns: showToc
-            ? `44px 270px 1fr ${tocCollapsed ? '28px' : '240px'}`
-            : '44px 270px 1fr',
+            ? `44px ${sidebarWidth}px 5px 1fr ${tocCollapsed ? '28px' : '240px'}`
+            : `44px ${sidebarWidth}px 5px 1fr`,
         }}
       >
         {/* 最左：垂直活动栏 */}
@@ -537,11 +579,22 @@ export function Reader() {
               onToggleHidden={() => setShowHidden((v) => !v)}
               activePath={activeTabPath}
               onOpen={openFile}
+              onCreateFile={createFile}
             />
           ) : (
             <Toolbox activeToolId={activeToolId} onOpen={openTool} />
           )}
         </aside>
+
+        {/* 侧栏宽度调节 splitter */}
+        <VerticalSplitter
+          width={sidebarWidth}
+          min={SIDEBAR_MIN}
+          max={SIDEBAR_MAX}
+          defaultWidth={SIDEBAR_DEFAULT}
+          onResize={handleSidebarResize}
+          ariaLabel="调节侧栏宽度"
+        />
 
         {/* 中：Tab 条 + 编辑器顶栏 + 编辑区 */}
         <main className="flex flex-col overflow-hidden">
@@ -676,6 +729,8 @@ function ToolHost({ toolId }: { toolId: ToolId | null }) {
   switch (toolId) {
     case 'diff':
       return <DiffTool />
+    case 'json':
+      return <JsonTool />
     default:
       return (
         <div className="seeyue-empty">

@@ -8,6 +8,8 @@ interface Props {
   placeholder?: string
   confirmLabel?: string
   cancelLabel?: string
+  /** 可选的错误提示，显示在输入框下方红字 */
+  error?: string
   onConfirm: (value: string) => void
   onCancel: () => void
 }
@@ -25,6 +27,7 @@ export function PromptDialog({
   placeholder,
   confirmLabel = '确定',
   cancelLabel = '取消',
+  error,
   onConfirm,
   onCancel,
 }: Props) {
@@ -71,6 +74,7 @@ export function PromptDialog({
             }
           }}
         />
+        {error && <p className="seeyue-modal-error">{error}</p>}
         <div className="seeyue-modal-actions">
           <button className="seeyue-btn" onClick={onCancel}>
             {cancelLabel}

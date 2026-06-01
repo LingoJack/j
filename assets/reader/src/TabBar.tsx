@@ -1,4 +1,5 @@
 import {
+  Braces,
   Close,
   FileMd,
   FileGeneric,
@@ -7,7 +8,7 @@ import {
   FileImage,
   GitCompare,
   Power,
-  Wrench,
+  Toolbox as ToolboxIcon,
   pickFileIconKind,
 } from './Icon'
 import type { Tab, ToolId } from './types'
@@ -118,7 +119,9 @@ function ToolIcon({ toolId }: { toolId: ToolId | null }) {
   switch (toolId) {
     case 'diff':
       return <GitCompare size={13} />
+    case 'json':
+      return <Braces size={13} />
     default:
-      return <Wrench size={13} />
+      return <ToolboxIcon size={13} />
   }
 }

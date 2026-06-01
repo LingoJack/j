@@ -8,7 +8,7 @@
  * 用 data-active 控制选中态视觉（左侧高亮条 + 图标点亮）。键盘聚焦时
  * 也走 :focus-visible 描边，保证 Tab 可达。
  */
-import { Files, Wrench } from './Icon'
+import { Files, Toolbox as ToolboxIcon } from './Icon'
 
 export type ActivityKey = 'files' | 'toolbox'
 
@@ -25,7 +25,7 @@ interface ItemDef {
 
 const ITEMS: ItemDef[] = [
   { key: 'files', title: '文件 (⌘1)', Icon: Files },
-  { key: 'toolbox', title: '工具箱 (⌘2)', Icon: Wrench },
+  { key: 'toolbox', title: '工具箱 (⌘2)', Icon: ToolboxIcon },
 ]
 
 export function ActivityBar({ active, onSelect }: Props) {

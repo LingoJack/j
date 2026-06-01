@@ -134,6 +134,7 @@ pub fn serve_blocking(
             .route("/api/list", get(api_list))
             .route("/api/parse", post(api_parse))
             .route("/api/save", post(api_save))
+            .route("/api/create", post(api_create))
             .route("/api/asset", get(api_asset))
             .route("/api/heartbeat", post(api_heartbeat))
             .route("/api/shutdown", post(api_shutdown))
@@ -382,6 +383,81 @@ async fn api_save(Json(req): Json<SaveReq>) -> Result<Json<SaveResp>, ApiError> 
         .map(|d| d.as_millis())
         .unwrap_or(0);
     Ok(Json(SaveResp { ok: true, saved_at }))
+}
+
+// ---------------------------------------------------------------------------
+// /api/create — 在指定目录创建一个新文件（默认空内容）
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CreateReq {
+    /// 父目录绝对路径（必须已存在且是目录）
+    dir: String,
+    /// 新文件名（不能含 `/` 或 `\`，不能为 `.` / `..`）
+    name: String,
+    /// 可选：初始内容；缺省为空字符串
+    #[serde(default)]
+    source: String,
+}
+
+#[derive(Serialize)]
+struct CreateResp {
+    /// 新文件的规范化绝对路径，前端拿到后直接 open
+    path: String,
+}
+
+async fn api_create(Json(req): Json<CreateReq>) -> Result<Json<CreateResp>, ApiError> {
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(ApiError::bad_request("文件名不能为空"));
+    }
+    if name == "." || name == ".." {
+        return Err(ApiError::bad_request("非法文件名"));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(ApiError::bad_request("文件名不能包含路径分隔符"));
+    }
+    if req.source.len() as u64 > MAX_FILE_SIZE {
+        return Err(ApiError::bad_request(format!(
+            "初始内容过大（{} 字节，超过 {} 字节上限）",
+            req.source.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+
+    let dir = canonicalize(&req.dir)?;
+    let dir_meta =
+        std::fs::metadata(&dir).map_err(|e| ApiError::bad_request(format!("无法读取目录：{e}")))?;
+    if !dir_meta.is_dir() {
+        return Err(ApiError::bad_request("目标不是一个目录"));
+    }
+    let target = dir.join(name);
+    if target.exists() {
+        return Err(ApiError::bad_request(format!(
+            "已存在同名文件或目录：{}",
+            target.display()
+        )));
+    }
+
+    // 用 tempfile + persist_noclobber 避免覆盖（极小竞态窗口里也不会写入已存在的文件）
+    let mut tmp = tempfile::NamedTempFile::new_in(&dir)
+        .map_err(|e| ApiError::internal(format!("创建临时文件失败：{e}")))?;
+    use std::io::Write;
+    if !req.source.is_empty() {
+        tmp.write_all(req.source.as_bytes())
+            .map_err(|e| ApiError::internal(format!("写入临时文件失败：{e}")))?;
+    }
+    tmp.as_file()
+        .sync_all()
+        .map_err(|e| ApiError::internal(format!("同步临时文件失败：{e}")))?;
+    tmp.persist_noclobber(&target)
+        .map_err(|e| ApiError::internal(format!("落盘失败：{e}")))?;
+
+    let canonical = std::fs::canonicalize(&target)
+        .map_err(|e| ApiError::internal(format!("解析新建文件路径失败：{e}")))?;
+    Ok(Json(CreateResp {
+        path: canonical.display().to_string(),
+    }))
 }
 
 // ---------------------------------------------------------------------------

@@ -63,7 +63,7 @@ export type DocKind = 'markdown' | 'plain_text' | 'image' | 'pptx' | 'docx' | 'x
 export type TabKind = DocKind | 'tool'
 
 /** 内置工具 ID。新增工具时在这里加一个分支，并在 Toolbox / Reader 路由里加分发。 */
-export type ToolId = 'diff'
+export type ToolId = 'diff' | 'json'
 
 export interface ImagePayload {
   mime: string
