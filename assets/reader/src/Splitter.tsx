@@ -68,7 +68,7 @@ export function VerticalSplitter({
 
   return (
     <div
-      className="seeyue-splitter"
+      className="group relative w-[5px] h-full cursor-col-resize bg-transparent select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-0.5 before:w-px before:bg-seeyue-border before:transition-colors before:duration-150 hover:before:bg-seeyue-accent active:before:bg-seeyue-accent"
       role="separator"
       aria-orientation="vertical"
       aria-label={ariaLabel ?? '调节宽度'}
@@ -76,7 +76,7 @@ export function VerticalSplitter({
       onDoubleClick={onDoubleClick}
       title="拖动调节宽度（双击恢复默认）"
     >
-      <div className="grip" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[3px] h-9 rounded-sm bg-transparent transition-colors duration-150 group-hover:bg-seeyue-accent group-active:bg-seeyue-accent" />
     </div>
   )
 }

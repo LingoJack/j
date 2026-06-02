@@ -43,10 +43,10 @@ const TOOLS: ToolDef[] = [
 
 export function Toolbox({ activeToolId, onOpen }: Props) {
   return (
-    <div className="h-full flex flex-col text-[13px] text-seeyue-fg seeyue-sidebar-shell">
+    <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar shadow-[0_0_12px_rgba(0,0,0,0.3)]">
       {/* —— 顶部标题栏 —— */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border">
-        <button className="seeyue-tab" data-active="true">
+        <button className="relative inline-flex items-center gap-1.5 px-1 pb-1.5 text-[13px] font-medium text-seeyue-fg-muted cursor-pointer bg-transparent border-0 outline-none transition-colors duration-200 hover:text-seeyue-fg-strong data-[active=true]:text-seeyue-fg-strong after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-[-1px] after:h-[3px] after:rounded-[1.5px] after:bg-transparent data-[active=true]:after:bg-seeyue-accent-strong" data-active="true">
           <ToolboxIcon size={14} />
           <span>工具箱</span>
         </button>
@@ -59,17 +59,17 @@ export function Toolbox({ activeToolId, onOpen }: Props) {
           <button
             key={tool.id}
             type="button"
-            className="seeyue-toolbox-row"
+            className="group flex items-center gap-2.5 w-full px-2.5 py-2 bg-transparent border-0 rounded-md text-left cursor-pointer text-seeyue-fg transition-colors duration-150 hover:bg-seeyue-elevated data-[active=true]:bg-seeyue-accent-soft data-[active=true]:text-seeyue-fg-strong"
             data-active={tool.id === activeToolId ? 'true' : undefined}
             onClick={() => onOpen(tool.id)}
             title={tool.description}
           >
-            <span className="seeyue-toolbox-icon" data-tone={tool.tone}>
+            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] text-seeyue-fg-muted bg-seeyue-bg-deep shadow-[inset_0_0_0_1px_var(--color-seeyue-border)] transition-all duration-150 data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute data-[tone=accent]:shadow-[inset_0_0_0_1px_rgba(136,192,208,0.3)] data-[tone=success]:text-seeyue-success data-[tone=success]:bg-[rgba(163,190,140,0.12)] data-[tone=success]:shadow-[inset_0_0_0_1px_rgba(163,190,140,0.3)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.14)] data-[tone=warn]:shadow-[inset_0_0_0_1px_rgba(208,135,112,0.3)] data-[tone=purple]:text-seeyue-purple data-[tone=purple]:bg-[rgba(180,142,173,0.14)] data-[tone=purple]:shadow-[inset_0_0_0_1px_rgba(180,142,173,0.3)] group-hover:brightness-110 group-data-[active=true]:brightness-[1.2]" data-tone={tool.tone}>
               <tool.Icon size={16} />
             </span>
-            <span className="seeyue-toolbox-text">
-              <span className="name">{tool.name}</span>
-              <span className="desc">{tool.description}</span>
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span className="text-[13px] font-medium text-seeyue-fg-strong">{tool.name}</span>
+              <span className="text-[11.5px] text-seeyue-fg-dim leading-normal whitespace-normal">{tool.description}</span>
             </span>
           </button>
         ))}

@@ -31,10 +31,10 @@ export function ImageViewer({ path, filename, payload }: Props) {
   }, [path])
 
   return (
-    <div className="seeyue-image-viewer">
-      <div className="image-stage">
+    <div className="h-full flex flex-col bg-seeyue-bg">
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-auto p-6 bg-[linear-gradient(45deg,rgba(236,239,244,0.054)_25%,transparent_25%)_0_0/16px_16px,linear-gradient(-45deg,rgba(236,239,244,0.054)_25%,transparent_25%)_0_0/16px_16px,linear-gradient(45deg,transparent_75%,rgba(236,239,244,0.054)_75%)_8px_8px/16px_16px,linear-gradient(-45deg,transparent_75%,rgba(236,239,244,0.054)_75%)_8px_8px/16px_16px]">
         {error ? (
-          <div className="image-error">加载失败：{error}</div>
+          <div className="font-mono text-[13px] text-seeyue-danger">加载失败：{error}</div>
         ) : (
           <img
             src={src}
@@ -45,23 +45,24 @@ export function ImageViewer({ path, filename, payload }: Props) {
               setMeta({ w: img.naturalWidth, h: img.naturalHeight })
             }}
             onError={() => setError('无法加载图片')}
+            className="max-w-full max-h-full object-contain select-none shadow-[0_6px_24px_rgba(0,0,0,0.18)] rounded bg-seeyue-bg-deep"
           />
         )}
       </div>
-      <div className="image-statusbar">
-        <span className="filename" title={path}>
+      <div className="flex items-center gap-2 px-3.5 py-1.5 border-t border-seeyue-border text-xs text-seeyue-fg-dim font-mono bg-seeyue-bg">
+        <span className="text-seeyue-fg font-medium max-w-[40%] overflow-hidden text-ellipsis whitespace-nowrap" title={path}>
           {filename}
         </span>
-        <span className="sep">·</span>
+        <span className="opacity-50">·</span>
         <span>
           {meta ? `${meta.w} × ${meta.h}` : '解码中…'}
         </span>
         {payload && (
           <>
-            <span className="sep">·</span>
+            <span className="opacity-50">·</span>
             <span>{formatBytes(payload.size)}</span>
-            <span className="sep">·</span>
-            <span className="mime">{payload.mime}</span>
+            <span className="opacity-50">·</span>
+            <span className="ml-auto opacity-80">{payload.mime}</span>
           </>
         )}
       </div>

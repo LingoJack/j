@@ -64,50 +64,50 @@ export function DiffTool() {
   }
 
   return (
-    <div className="seeyue-diff-tool">
-      <div className="seeyue-diff-toolbar">
-        <span className="title">文本 Diff</span>
-        <span className="stat" data-tone="del">
+    <div className="h-full flex flex-col bg-seeyue-bg">
+      <div className="flex items-center gap-2.5 px-3.5 py-2 border-b border-seeyue-border bg-seeyue-sidebar-strong text-xs">
+        <span className="text-[13px] font-medium text-seeyue-fg-strong">文本 Diff</span>
+        <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="del">
           - {delCount}
         </span>
-        <span className="stat" data-tone="add">
+        <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="add">
           + {addCount}
         </span>
         {truncated && (
-          <span className="stat" data-tone="warn" title={`输入超过 ${MAX_LINES} 行，已截断`}>
+          <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="warn" title={`输入超过 ${MAX_LINES} 行，已截断`}>
             ⚠ 已截断
           </span>
         )}
         <div className="flex-1" />
-        <button type="button" className="seeyue-btn" onClick={swap} title="交换左右两边">
+        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[tone=primary]:bg-seeyue-accent-strong data-[tone=primary]:text-seeyue-fg-strong data-[tone=primary]:hover:bg-seeyue-accent data-[tone=primary]:hover:text-seeyue-bg data-[tone=danger]:text-seeyue-danger data-[tone=danger]:hover:bg-[rgba(191,97,106,0.18)]" onClick={swap} title="交换左右两边">
           ⇄ 交换
         </button>
-        <button type="button" className="seeyue-btn" onClick={clear} title="清空两边">
+        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[tone=primary]:bg-seeyue-accent-strong data-[tone=primary]:text-seeyue-fg-strong data-[tone=primary]:hover:bg-seeyue-accent data-[tone=primary]:hover:text-seeyue-bg data-[tone=danger]:text-seeyue-danger data-[tone=danger]:hover:bg-[rgba(191,97,106,0.18)]" onClick={clear} title="清空两边">
           清空
         </button>
       </div>
 
-      <div className="seeyue-diff-inputs">
-        <div className="pane">
-          <div className="pane-head">
-            <span className="dot" data-tone="del" />
+      <div className="grid grid-cols-2 gap-px bg-seeyue-border border-b border-seeyue-border flex-[0_0_240px] min-h-[180px]">
+        <div className="flex flex-col bg-seeyue-bg min-w-0">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] text-seeyue-fg-muted border-b border-seeyue-border bg-seeyue-sidebar">
+            <span className="w-2 h-2 rounded-full data-[tone=add]:bg-seeyue-success data-[tone=del]:bg-seeyue-danger" data-tone="del" />
             原始文本（A）
           </div>
           <textarea
-            className="seeyue-textarea"
+            className="seeyue-textarea flex-1 w-full px-2.5 py-2.5 text-[13px] leading-[1.6]"
             value={left}
             spellCheck={false}
             placeholder="粘贴原始文本…"
             onChange={(e) => setLeft(e.target.value)}
           />
         </div>
-        <div className="pane">
-          <div className="pane-head">
-            <span className="dot" data-tone="add" />
+        <div className="flex flex-col bg-seeyue-bg min-w-0">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] text-seeyue-fg-muted border-b border-seeyue-border bg-seeyue-sidebar">
+            <span className="w-2 h-2 rounded-full data-[tone=add]:bg-seeyue-success data-[tone=del]:bg-seeyue-danger" data-tone="add" />
             修改后文本（B）
           </div>
           <textarea
-            className="seeyue-textarea"
+            className="seeyue-textarea flex-1 w-full px-2.5 py-2.5 text-[13px] leading-[1.6]"
             value={right}
             spellCheck={false}
             placeholder="粘贴新版本文本…"
@@ -116,14 +116,14 @@ export function DiffTool() {
         </div>
       </div>
 
-      <div className="seeyue-diff-result">
-        <div className="result-head">差异对照</div>
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="px-3.5 py-1.5 text-[11.5px] text-seeyue-fg-muted bg-seeyue-sidebar border-b border-seeyue-border tracking-[0.04em]">差异对照</div>
         {rows.length === 0 ? (
-          <div className="result-empty">两边都为空</div>
+          <div className="flex-1 flex items-center justify-center text-seeyue-fg-dim text-[13px]">两边都为空</div>
         ) : addCount === 0 && delCount === 0 ? (
-          <div className="result-empty result-equal">✓ 两段文本完全相同</div>
+          <div className="flex-1 flex items-center justify-center text-seeyue-success text-[13px]">✓ 两段文本完全相同</div>
         ) : (
-          <div className="result-grid">
+          <div className="flex-1 overflow-auto font-mono text-[12.5px] leading-[1.55]">
             {rows.map((r, i) => (
               <DiffRow key={i} row={r} />
             ))}
@@ -137,16 +137,16 @@ export function DiffTool() {
 function DiffRow({ row }: { row: Row }) {
   const { op, leftLine, rightLine, leftText, rightText } = row
   return (
-    <div className="diff-row" data-op={op}>
-      <div className="cell" data-side="left" data-op={op === 'add' ? 'pad' : op}>
-        <span className="lineno">{leftLine ?? ''}</span>
-        <span className="marker">{op === 'del' ? '-' : op === 'eq' ? ' ' : ''}</span>
-        <pre className="text">{leftText}</pre>
+    <div className="grid grid-cols-2 border-b border-[rgba(76,86,106,0.12)] hover:bg-[rgba(94,129,172,0.04)]" data-op={op}>
+      <div className="group grid grid-cols-[48px_14px_1fr] items-start py-px border-r border-seeyue-border min-w-0 last:border-r-0 data-[op=del]:bg-[rgba(191,97,106,0.14)] data-[op=add]:bg-[rgba(163,190,140,0.14)] data-[op=pad]:bg-[rgba(76,86,106,0.18)]" data-side="left" data-op={op === 'add' ? 'pad' : op}>
+        <span className="text-right px-2 text-seeyue-fg-dim text-[11px] select-none">{leftLine ?? ''}</span>
+        <span className="text-center text-seeyue-fg-dim select-none group-data-[op=del]:text-seeyue-danger group-data-[op=del]:font-semibold group-data-[op=add]:text-seeyue-success group-data-[op=add]:font-semibold">{op === 'del' ? '-' : op === 'eq' ? ' ' : ''}</span>
+        <pre className="m-0 pr-2 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap break-all text-seeyue-fg bg-transparent group-data-[op=pad]:text-seeyue-fg-dim">{leftText}</pre>
       </div>
-      <div className="cell" data-side="right" data-op={op === 'del' ? 'pad' : op}>
-        <span className="lineno">{rightLine ?? ''}</span>
-        <span className="marker">{op === 'add' ? '+' : op === 'eq' ? ' ' : ''}</span>
-        <pre className="text">{rightText}</pre>
+      <div className="group grid grid-cols-[48px_14px_1fr] items-start py-px border-r border-seeyue-border min-w-0 last:border-r-0 data-[op=del]:bg-[rgba(191,97,106,0.14)] data-[op=add]:bg-[rgba(163,190,140,0.14)] data-[op=pad]:bg-[rgba(76,86,106,0.18)]" data-side="right" data-op={op === 'del' ? 'pad' : op}>
+        <span className="text-right px-2 text-seeyue-fg-dim text-[11px] select-none">{rightLine ?? ''}</span>
+        <span className="text-center text-seeyue-fg-dim select-none group-data-[op=del]:text-seeyue-danger group-data-[op=del]:font-semibold group-data-[op=add]:text-seeyue-success group-data-[op=add]:font-semibold">{op === 'add' ? '+' : op === 'eq' ? ' ' : ''}</span>
+        <pre className="m-0 pr-2 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap break-all text-seeyue-fg bg-transparent group-data-[op=pad]:text-seeyue-fg-dim">{rightText}</pre>
       </div>
     </div>
   )

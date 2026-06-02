@@ -30,12 +30,12 @@ const ITEMS: ItemDef[] = [
 
 export function ActivityBar({ active, onSelect }: Props) {
   return (
-    <nav className="seeyue-activity-bar" aria-label="侧栏切换">
+    <nav className="flex flex-col items-center gap-1 py-2 bg-seeyue-bg-deep border-r border-seeyue-border" aria-label="侧栏切换">
       {ITEMS.map(({ key, title, Icon }) => (
         <button
           key={key}
           type="button"
-          className="seeyue-activity-item"
+          className="relative inline-flex items-center justify-center w-9 h-9 rounded-md bg-transparent border-0 text-seeyue-fg-dim cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated focus-visible:outline-2 focus-visible:outline-seeyue-accent focus-visible:outline-offset-2 data-[active=true]:text-seeyue-fg-strong before:content-[''] before:absolute before:-left-1 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-sm before:bg-transparent before:transition-colors before:duration-150 data-[active=true]:before:bg-seeyue-accent-strong"
           data-active={key === active ? 'true' : undefined}
           title={title}
           onClick={() => onSelect(key)}

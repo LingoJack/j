@@ -28,19 +28,19 @@ export function Toast({
 
   return (
     <div
-      className="seeyue-toast"
+      className="group fixed top-4 right-4 z-60 max-w-[360px] flex items-start gap-2.5 px-3 py-2.5 bg-seeyue-elevated border border-seeyue-border-strong rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.35)] text-[13px] text-seeyue-fg animate-seeyue-slide-in data-[tone=error]:border-l-[3px] data-[tone=error]:border-l-seeyue-danger data-[tone=success]:border-l-[3px] data-[tone=success]:border-l-seeyue-success data-[tone=info]:border-l-[3px] data-[tone=info]:border-l-seeyue-accent"
       data-tone={kind}
       role="status"
       onClick={onClose}
     >
-      <span className="seeyue-toast-icon">
+      <span className="shrink-0 mt-0.5 group-data-[tone=error]:text-seeyue-danger group-data-[tone=success]:text-seeyue-success group-data-[tone=info]:text-seeyue-accent">
         {kind === 'error' && <AlertTriangle size={16} />}
         {kind === 'success' && <CheckCircle size={16} />}
         {kind === 'info' && <Info size={16} />}
       </span>
-      <span className="seeyue-toast-msg">{message}</span>
+      <span className="flex-1 whitespace-pre-wrap break-words">{message}</span>
       <button
-        className="seeyue-toast-close"
+        className="shrink-0 cursor-pointer bg-transparent border-0 text-seeyue-fg-dim p-0 inline-flex items-center justify-center transition-colors duration-150 hover:text-seeyue-fg-strong"
         onClick={(e) => {
           e.stopPropagation()
           onClose()

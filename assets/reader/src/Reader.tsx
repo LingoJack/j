@@ -712,9 +712,9 @@ function ToolHost({ toolId }: { toolId: ToolId | null }) {
       return <JsonTool />
     default:
       return (
-        <div className="seeyue-empty">
-          <div className="title">未知工具</div>
-          <div className="subtitle">toolId = {String(toolId)}</div>
+        <div className="h-full flex flex-col items-center justify-center p-12 text-seeyue-fg-dim text-[13px] text-center">
+          <div className="text-seeyue-fg text-[15px] font-medium mb-1.5">未知工具</div>
+          <div className="text-seeyue-fg-muted mb-4 leading-[1.7]">toolId = {String(toolId)}</div>
         </div>
       )
   }
@@ -761,39 +761,39 @@ function EditorBar({
   // 图片是只读视图：不显示 dirty / 保存按钮（一旦触发 /api/save 会用空 source 覆盖原文件）
   const editable = tab.kind !== 'image'
   return (
-    <div className="seeyue-editor-bar">
-      <div className="breadcrumb" title={tab.path}>
+    <div className="flex items-center h-8 px-3 bg-seeyue-bg border-b border-seeyue-border text-xs text-seeyue-fg-dim gap-2">
+      <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden" title={tab.path}>
         {segs.map((s, i) => (
           <span
             key={i}
-            className={`crumb ${i === segs.length - 1 ? 'crumb-leaf' : ''}`}
+            className={`whitespace-nowrap overflow-hidden text-ellipsis ${i === segs.length - 1 ? 'text-seeyue-fg' : ''}`}
           >
-            {i > 0 && <span className="crumb-sep"> / </span>}
+            {i > 0 && <span className="opacity-50"> / </span>}
             {s}
           </span>
         ))}
       </div>
       {editable && tab.dirty && (
-        <span className="status-pill" data-tone="warn">
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(208,135,112,0.18)] text-seeyue-warn">
           ● 未保存
         </span>
       )}
       {editable && tab.saving === 'saving' && (
-        <span className="status-pill" data-tone="accent">
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-seeyue-accent-mute text-seeyue-accent">
           保存中…
         </span>
       )}
       {editable && tab.saving === 'error' && (
-        <span className="status-pill" data-tone="danger" title={tab.error}>
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(191,97,106,0.18)] text-seeyue-danger" title={tab.error}>
           保存失败
         </span>
       )}
-      <button className="seeyue-icon-btn" onClick={onCopyPath} title="复制路径">
+      <button className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed" onClick={onCopyPath} title="复制路径">
         <Copy size={14} />
       </button>
       {editable && (
         <button
-          className="seeyue-icon-btn"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onSave}
           title="保存（⌘S）"
         >
@@ -806,37 +806,37 @@ function EditorBar({
 
 function EmptyState() {
   return (
-    <div className="seeyue-empty">
-      <span className="glyph">
+    <div className="h-full flex flex-col items-center justify-center p-12 text-seeyue-fg-dim text-[13px] text-center">
+      <span className="flex items-center justify-center w-[84px] h-[84px] rounded-full bg-[linear-gradient(135deg,rgba(94,129,172,0.12),rgba(163,190,140,0.08))] text-seeyue-accent mb-[18px] shadow-[inset_0_0_0_1px_rgba(94,129,172,0.25)]">
         <BookOpen size={36} />
       </span>
-      <div className="title flex items-center gap-1.5">
+      <div className="text-seeyue-fg text-[15px] font-medium mb-1.5 flex items-center gap-1.5">
         <Sparkles size={14} className="opacity-70" />
         从左侧选一个文件开始阅读
       </div>
-      <div className="subtitle">
+      <div className="text-seeyue-fg-muted mb-[18px] leading-[1.7]">
         也可以直接在终端运行 <code>j read &lt;file&gt;</code> 打开指定文件。
       </div>
-      <div className="shortcuts">
-        <div className="row">
-          <kbd>⌘</kbd>
-          <kbd>S</kbd>
+      <div className="grid gap-1.5 text-xs text-seeyue-fg-dim">
+        <div className="flex items-center gap-2 justify-center">
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">S</kbd>
           <span>保存当前文件</span>
         </div>
-        <div className="row">
-          <kbd>⌘</kbd>
-          <kbd>W</kbd>
+        <div className="flex items-center gap-2 justify-center">
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">W</kbd>
           <span>/</span>
-          <kbd>⌃</kbd>
-          <kbd>W</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌃</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">W</kbd>
           <span>关闭当前 Tab；空时退出 reader</span>
         </div>
-        <div className="row">
-          <kbd>⌘</kbd>
-          <kbd>⇧</kbd>
-          <kbd>←</kbd>
+        <div className="flex items-center gap-2 justify-center">
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⇧</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">←</kbd>
           <span>/</span>
-          <kbd>→</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">→</kbd>
           <span>切换前后 Tab</span>
         </div>
       </div>

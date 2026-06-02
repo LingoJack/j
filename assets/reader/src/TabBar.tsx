@@ -26,11 +26,11 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
   if (tabs.length === 0) {
     // 空态依然给一条「关闭 reader」入口，免得只能在编辑器里才能找到
     return (
-      <div className="seeyue-tabbar seeyue-tabbar-empty">
-        <span className="seeyue-tabbar-empty-hint">没有打开的文件</span>
+      <div className="flex items-center h-[38px] bg-seeyue-sidebar-strong border-b border-seeyue-border overflow-x-auto overflow-y-hidden px-2 pl-3.5 gap-2 [&::-webkit-scrollbar]:h-1">
+        <span className="flex-1 text-xs text-seeyue-fg-dim tracking-[0.02em]">没有打开的文件</span>
         <button
           type="button"
-          className="seeyue-icon-btn seeyue-tabbar-quit"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onQuit}
           title="关闭 reader"
         >
@@ -40,13 +40,13 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
     )
   }
   return (
-    <div className="seeyue-tabbar">
+    <div className="flex items-stretch h-[38px] bg-seeyue-sidebar-strong border-b border-seeyue-border overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-1">
       {tabs.map((tab) => {
         const isActive = tab.path === activePath
         return (
           <div
             key={tab.path}
-            className="seeyue-tab-pill"
+            className="inline-flex items-center gap-1.5 h-full px-3 pl-3.5 text-[13px] text-seeyue-fg-muted cursor-pointer relative border-r border-seeyue-border transition-colors duration-150 select-none hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[active=true]:text-seeyue-fg-strong data-[active=true]:bg-seeyue-bg after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-0 after:h-0.5 after:bg-transparent data-[active=true]:after:bg-seeyue-accent-strong"
             data-active={isActive ? 'true' : undefined}
             onClick={() => onActivate(tab.path)}
             onAuxClick={(e) => {
@@ -66,14 +66,14 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
             >
               <TabIcon tab={tab} />
             </span>
-            <span className="tab-name">{tab.filename}</span>
+            <span className="max-w-[200px] whitespace-nowrap overflow-hidden text-ellipsis">{tab.filename}</span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 onClose(tab.path)
               }}
-              className={`tab-close ${tab.dirty ? 'tab-dirty-mark' : ''}`}
+              className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded border-0 bg-transparent text-seeyue-fg-dim cursor-pointer transition-all duration-150 shrink-0 hover:text-seeyue-fg-strong hover:bg-[rgba(191,97,106,0.4)]${tab.dirty ? ' text-seeyue-warn hover:text-seeyue-fg-strong hover:bg-[rgba(191,97,106,0.4)]' : ''}`}
               title={tab.dirty ? '有未保存改动 · 关闭' : '关闭'}
             >
               {tab.dirty ? (
@@ -87,7 +87,7 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
       })}
       <button
         type="button"
-        className="seeyue-icon-btn seeyue-tabbar-quit"
+        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] disabled:opacity-30 disabled:cursor-not-allowed"
         onClick={onQuit}
         title="关闭 reader"
       >

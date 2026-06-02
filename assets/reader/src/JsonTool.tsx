@@ -184,35 +184,35 @@ export function JsonTool() {
   const stats = useMemo(() => (tree ? countTree(tree) : null), [tree])
 
   return (
-    <div className="seeyue-json-tool">
-      <div className="seeyue-diff-toolbar seeyue-json-toolbar">
-        <span className="title">JSON 查看器</span>
+    <div className="h-full flex flex-col bg-seeyue-bg">
+      <div className="flex items-center gap-2.5 px-3.5 py-2 border-b border-seeyue-border bg-seeyue-sidebar-strong text-xs">
+        <span className="text-[13px] font-medium text-seeyue-fg-strong">JSON 查看器</span>
         {stats && (
           <>
-            <span className="stat" data-tone="accent">
+            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="accent">
               对象 {stats.objects}
             </span>
-            <span className="stat" data-tone="accent">
+            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="accent">
               数组 {stats.arrays}
             </span>
-            <span className="stat">叶子 {stats.leaves}</span>
+            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute">叶子 {stats.leaves}</span>
           </>
         )}
         {error && (
-          <span className="stat" data-tone="warn" title={error}>
+          <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="warn" title={error}>
             ⚠ 解析错误
           </span>
         )}
         <div className="flex-1" />
-        <button type="button" className="seeyue-btn" onClick={format} title="格式化（缩进 2）">
+        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated" onClick={format} title="格式化（缩进 2）">
           格式化
         </button>
-        <button type="button" className="seeyue-btn" onClick={minify} title="压缩">
+        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated" onClick={minify} title="压缩">
           压缩
         </button>
         <button
           type="button"
-          className="seeyue-btn"
+          className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
           onClick={collapseAll}
           disabled={!tree}
           title="折叠所有"
@@ -221,7 +221,7 @@ export function JsonTool() {
         </button>
         <button
           type="button"
-          className="seeyue-btn"
+          className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
           onClick={expandAll}
           disabled={!tree}
           title="展开所有"
@@ -230,25 +230,25 @@ export function JsonTool() {
         </button>
         <button
           type="button"
-          className="seeyue-btn"
+          className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
           onClick={copyAll}
           title="复制 JSON 文本"
         >
           <Copy size={12} /> 复制
         </button>
-        <button type="button" className="seeyue-btn" onClick={clear} title="清空">
+        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated" onClick={clear} title="清空">
           清空
         </button>
       </div>
 
-      <div className="seeyue-json-body">
-        <div className="seeyue-json-input">
-          <div className="pane-head">
+      <div className="flex-1 grid grid-cols-[380px_1fr] gap-px bg-seeyue-border min-h-0">
+        <div className="flex flex-col bg-seeyue-bg min-w-0 min-h-0">
+          <div className="flex items-center justify-between px-3 py-1.5 text-[11.5px] text-seeyue-fg-muted border-b border-seeyue-border bg-seeyue-sidebar tracking-[0.04em]">
             <span>原文（⌘↵ 解析）</span>
-            <span className="hint">{raw.length} 字符</span>
+            <span className="text-[11px] text-seeyue-fg-dim">{raw.length} 字符</span>
           </div>
           <textarea
-            className="seeyue-textarea"
+            className="seeyue-textarea flex-1 w-full px-2.5 py-2.5 text-[13px] leading-[1.6]"
             value={raw}
             spellCheck={false}
             placeholder="粘贴 JSON…"
@@ -258,14 +258,14 @@ export function JsonTool() {
           />
         </div>
 
-        <div className="seeyue-json-tree">
-          <div className="pane-head">
+        <div className="flex flex-col bg-seeyue-bg min-w-0 min-h-0">
+          <div className="flex items-center justify-between px-3 py-1.5 text-[11.5px] text-seeyue-fg-muted border-b border-seeyue-border bg-seeyue-sidebar tracking-[0.04em]">
             <span>树视图</span>
-            <span className="hint">点击叶子值可修改</span>
+            <span className="text-[11px] text-seeyue-fg-dim">点击叶子值可修改</span>
           </div>
-          <div className="tree-scroll">
+          <div className="flex-1 overflow-auto px-3 pb-4 font-mono text-[12.5px] leading-[1.65]">
             {error ? (
-              <pre className="json-error">{error}</pre>
+              <pre className="text-seeyue-danger whitespace-pre-wrap font-mono text-[12.5px] m-0 px-2 py-2">{error}</pre>
             ) : tree ? (
               <JsonNode
                 value={tree}
@@ -275,13 +275,13 @@ export function JsonTool() {
                 onUpdate={updateAtPath}
               />
             ) : (
-              <div className="json-empty">输入 JSON 后这里会出现树形结构</div>
+              <div className="text-seeyue-fg-dim font-cjk text-[12.5px] px-4 py-4">输入 JSON 后这里会出现树形结构</div>
             )}
           </div>
         </div>
       </div>
 
-      {toast && <div className="seeyue-json-toast">{toast}</div>}
+      {toast && <div className="absolute right-[18px] top-16 px-3 py-1.5 bg-seeyue-elevated border border-seeyue-border-strong border-l-[3px] border-l-seeyue-success rounded-md text-xs text-seeyue-fg shadow-[0_4px_12px_rgba(0,0,0,0.3)] animate-seeyue-fade-in">{toast}</div>}
     </div>
   )
 }
@@ -309,9 +309,9 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
     const open = isObj ? '{' : '['
     const close = isObj ? '}' : ']'
     return (
-      <div className="json-node">
-        <div className="json-row" onClick={() => onToggle(path)}>
-          <span className="caret">
+      <div className="relative">
+        <div className="flex items-center gap-1 py-px cursor-default rounded-sm hover:bg-[rgba(94,129,172,0.08)]" onClick={() => onToggle(path)}>
+          <span className="shrink-0 inline-flex items-center justify-center w-[13px] text-seeyue-fg-dim cursor-pointer">
             {len > 0 ? (
               isCollapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />
             ) : (
@@ -319,20 +319,20 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
             )}
           </span>
           {keyLabel !== undefined && (
-            <span className="json-key">{keyLabel}</span>
+            <span className="text-seeyue-accent">{keyLabel}</span>
           )}
-          {keyLabel !== undefined && <span className="json-colon">:</span>}
-          <span className="json-bracket">{open}</span>
+          {keyLabel !== undefined && <span className="text-seeyue-fg-dim mr-0.5">:</span>}
+          <span className="text-seeyue-fg-muted">{open}</span>
           {isCollapsed && len > 0 && (
-            <span className="json-summary">
+            <span className="text-seeyue-fg-dim italic mx-1">
               {len} {isObj ? '项' : '元素'}
             </span>
           )}
-          {isCollapsed && <span className="json-bracket">{close}</span>}
+          {isCollapsed && <span className="text-seeyue-fg-muted">{close}</span>}
         </div>
         {!isCollapsed && (
           <>
-            <div className="json-children">
+            <div className="ml-3.5 pl-1.5 border-l border-dashed border-[rgba(76,86,106,0.55)]">
               {isObj
                 ? value.entries.map((e, i) => (
                     <JsonNode
@@ -357,11 +357,11 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
                     />
                   ))}
             </div>
-            <div className="json-row json-close-row">
-              <span className="caret">
+            <div className="flex items-center gap-1 py-px cursor-default rounded-sm hover:bg-[rgba(94,129,172,0.08)] cursor-default">
+              <span className="shrink-0 inline-flex items-center justify-center w-[13px] text-seeyue-fg-dim cursor-pointer">
                 <span style={{ display: 'inline-block', width: 11 }} />
               </span>
-              <span className="json-bracket">{close}</span>
+              <span className="text-seeyue-fg-muted">{close}</span>
             </div>
           </>
         )}
@@ -370,15 +370,15 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
   }
   // 叶子
   return (
-    <div className="json-node">
-      <div className="json-row">
-        <span className="caret">
+    <div className="relative">
+      <div className="flex items-center gap-1 py-px cursor-default rounded-sm hover:bg-[rgba(94,129,172,0.08)]">
+        <span className="shrink-0 inline-flex items-center justify-center w-[13px] text-seeyue-fg-dim cursor-pointer">
           <span style={{ display: 'inline-block', width: 11 }} />
         </span>
         {keyLabel !== undefined && (
-          <span className="json-key">{keyLabel}</span>
+          <span className="text-seeyue-accent">{keyLabel}</span>
         )}
-        {keyLabel !== undefined && <span className="json-colon">:</span>}
+        {keyLabel !== undefined && <span className="text-seeyue-fg-dim mr-0.5">:</span>}
         <LeafEditor
           value={value}
           onCommit={(next) => onUpdate(path, () => next)}
@@ -416,7 +416,7 @@ function LeafEditor({
   if (!editing) {
     return (
       <span
-        className={`json-leaf json-leaf-${value.kind}`}
+        className={`cursor-pointer px-1 rounded-sm border border-dashed border-transparent transition-all duration-150 hover:border-seeyue-border-strong hover:bg-seeyue-elevated ${value.kind === 'string' ? 'text-seeyue-success' : value.kind === 'number' ? 'text-seeyue-warn' : value.kind === 'bool' ? 'text-seeyue-purple' : value.kind === 'null' ? 'text-seeyue-fg-dim italic' : ''}`}
         onClick={startEdit}
         title="点击修改"
       >
@@ -429,7 +429,7 @@ function LeafEditor({
   if (value.kind === 'bool') {
     return (
       <select
-        className="json-leaf-input"
+        className="inline-flex items-center h-[22px] px-1.5 bg-seeyue-bg-deep border border-seeyue-accent rounded text-seeyue-fg font-mono text-[12.5px] outline-none min-w-[80px] cursor-pointer"
         autoFocus
         defaultValue={String(value.value)}
         onBlur={(e) => commitText(e.currentTarget.value)}
@@ -445,7 +445,7 @@ function LeafEditor({
     // 简化：null 显示一个能切到 string 的小提示
     return (
       <select
-        className="json-leaf-input"
+        className="inline-flex items-center h-[22px] px-1.5 bg-seeyue-bg-deep border border-seeyue-accent rounded text-seeyue-fg font-mono text-[12.5px] outline-none min-w-[80px] cursor-pointer"
         autoFocus
         defaultValue="null"
         onBlur={(e) => {
@@ -474,7 +474,7 @@ function LeafEditor({
   }
   return (
     <input
-      className="json-leaf-input"
+      className="inline-flex items-center h-[22px] px-1.5 bg-seeyue-bg-deep border border-seeyue-accent rounded text-seeyue-fg font-mono text-[12.5px] outline-none min-w-[80px]"
       autoFocus
       type="text"
       value={draft}
