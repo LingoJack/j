@@ -169,7 +169,7 @@ class TableWidget extends WidgetType {
     const trH = document.createElement('tr')
     splitRow(lines[0]).forEach((cell, i) => {
       const th = document.createElement('th')
-      th.textContent = cell.trim()
+      renderInlineMarkdown(th, cell.trim())
       if (aligns[i]) th.style.textAlign = aligns[i]
       trH.appendChild(th)
     })
@@ -182,7 +182,7 @@ class TableWidget extends WidgetType {
       const tr = document.createElement('tr')
       splitRow(lines[i]).forEach((cell, j) => {
         const td = document.createElement('td')
-        td.textContent = cell.trim()
+        renderInlineMarkdown(td, cell.trim())
         if (aligns[j]) td.style.textAlign = aligns[j]
         tr.appendChild(td)
       })
@@ -195,6 +195,57 @@ class TableWidget extends WidgetType {
   ignoreEvent() {
     // 让点击 / 选中传给 CM6 —— 用户点表格时光标会落进 widget 之后的位置
     return false
+  }
+}
+
+/**
+ * 将单元格内的 inline markdown 渲染为 DOM 节点。
+ * 支持：`` `code` ``、`**bold**`、`*italic*`、`~~strikethrough~~`、`[link](url)`。
+ * 纯正则逐段扫描，不依赖 AST。
+ */
+function renderInlineMarkdown(parent: HTMLElement, text: string) {
+  // 匹配优先级：code > link > strikethrough > bold > italic
+  const re =
+    /(?<code>`[^`]+`)|(?<link>\[(?:[^\]\\]|\\.)*\]\((?:[^()\\]|\\.)*\))|(?<del>~~[^~]+~~)|(?<bold>\*\*(?:[^*]|(?!\*\*)\*)+\*\*)|(?<italic>\*(?:[^*]|(?<!\*)\*(?!\*))+\*)/g
+  let last = 0
+  for (const m of text.matchAll(re)) {
+    // m.index 一定不为 undefined（matchAll 保证）
+    const idx = m.index!
+    if (idx > last) {
+      parent.appendChild(document.createTextNode(text.slice(last, idx)))
+    }
+    const raw = m[0]
+    if (m.groups!.code) {
+      const code = document.createElement('code')
+      code.textContent = raw.slice(1, -1)
+      parent.appendChild(code)
+    } else if (m.groups!.link) {
+      const lb = raw.indexOf('](')
+      const linkText = raw.slice(1, lb)
+      const href = raw.slice(lb + 2, -1)
+      const a = document.createElement('a')
+      a.href = href
+      a.textContent = linkText
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      parent.appendChild(a)
+    } else if (m.groups!.del) {
+      const del = document.createElement('del')
+      del.textContent = raw.slice(2, -2)
+      parent.appendChild(del)
+    } else if (m.groups!.bold) {
+      const strong = document.createElement('strong')
+      strong.textContent = raw.slice(2, -2)
+      parent.appendChild(strong)
+    } else if (m.groups!.italic) {
+      const em = document.createElement('em')
+      em.textContent = raw.slice(1, -1)
+      parent.appendChild(em)
+    }
+    last = idx + raw.length
+  }
+  if (last < text.length) {
+    parent.appendChild(document.createTextNode(text.slice(last)))
   }
 }
 
@@ -526,17 +577,17 @@ const livePreviewPlugin = ViewPlugin.fromClass(
 
 function buildTableBlockDecos(state: EditorState): DecorationSet {
   const ranges: Range<Decoration>[] = []
-  const intersectsCursor = (from: number, to: number) => {
-    for (const r of state.selection.ranges) {
-      if (r.from <= to && r.to >= from) return true
-    }
-    return false
-  }
+  // 必须显式指定 from/to 遍历全文，否则默认只遍历视口内的节点（Lezer 增量解析特性），
+  // 导致视口外的表格不生成 decoration，滚动下去才渲染。
   syntaxTree(state).iterate({
+    from: 0,
+    to: state.doc.length,
     enter: (node) => {
       if (node.name !== 'Table') return undefined
-      // 光标进入表格范围时不 widget —— 用户改单元格内容时直接编辑源码
-      if (intersectsCursor(node.from, node.to)) return false
+      /* Typora 体验：表格始终渲染为 widget，不因光标位置回退源码。
+       * 用户要改单元格时直接在 widget 上操作（后续可通过 contenteditable
+       * 单元格或双击切源码模式支持）。破坏语法（如删掉 | 行）时 Lezer
+       * 不再识别 Table 节点 → 自然回到源码形态。 */
       const raw = state.doc.sliceString(node.from, node.to)
       ranges.push(
         Decoration.replace({

@@ -239,6 +239,38 @@
 .cm-md-table-widget tbody tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
 }
+.cm-md-table-widget td code,
+.cm-md-table-widget th code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--color-seeyue-code-bg);
+  color: var(--color-seeyue-code-fg);
+}
+.cm-md-table-widget td strong,
+.cm-md-table-widget th strong {
+  font-weight: 650;
+  color: var(--color-seeyue-fg-strong);
+}
+.cm-md-table-widget td em,
+.cm-md-table-widget th em {
+  font-style: italic;
+}
+.cm-md-table-widget td a,
+.cm-md-table-widget th a {
+  color: var(--color-seeyue-accent);
+  text-decoration: none;
+}
+.cm-md-table-widget td a:hover,
+.cm-md-table-widget th a:hover {
+  text-decoration: underline;
+}
+.cm-md-table-widget td del,
+.cm-md-table-widget th del {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    代码块 + Prism token 着色
