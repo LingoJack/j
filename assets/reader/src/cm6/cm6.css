@@ -22,7 +22,9 @@
   color: var(--color-seeyue-fg);
   font-family: var(--font-cjk);
   font-size: 15px;
-  line-height: 1.85;
+  /* 1.5 倍行距：跟 Word 默认对齐，比之前 1.85 紧凑，每屏信息密度更高。
+     代码块行高在下面单独压回 1.6（monospace 不需要这么松）。 */
+  line-height: 1.5;
 }
 .cm6-host .cm-editor.cm-focused {
   outline: none;
@@ -240,26 +242,83 @@
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    代码块 + Prism token 着色
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-.cm-md-codeblock-line {
+   视觉模型（macOS 风）：
+     ┌──────────────────────────────────┐
+     │ ● ● ●                       RUST │  ← .cm-md-codeblock-fence-top（首行 ```，固定 28px 高）
+     ├──────────────────────────────────┤
+     │  fn main() {                     │  ← .cm-md-codeblock-line（内容行）
+     │      println!("Hello");          │
+     │  }                               │
+     └──────────────────────────────────┘  ← .cm-md-codeblock-fence-bottom（末行 ```，8px 收口）
+
+   - fence 首行带 `data-lang` 属性：CSS `attr(data-lang)` 在 ::after 取出来当 chip
+   - fence 行原 ``` 文本被 codeHighlight.ts 通过 `Decoration.replace({})` 抹空
+     —— CSS 这里只管视觉外观，不管文本
+
+   注意：这些是 line decoration，CM6 的行 padding 默认是 0，左右 padding
+   要由 .cm-md-codeblock-line 给出，否则代码会贴边。 */
+
+/* 内容行：等宽字体 + 块底色 + 左右内边距。
+   注意：左右 padding 是 *字符到代码块底色块边沿* 的距离 —— 给得舒服一点
+   （20px）才不会让长代码视觉上"撞墙"。
+
+   ★ 选择器特异性：上面 `.cm6-host .cm-line { padding: 0 }` 是 0,2,0，会把
+     单类选择器（0,1,0）的 padding 全压回 0。这里必须用 `.cm6-host .cm-line.xxx`
+     形式（0,3,0）才能赢过去。fence-top/bottom 同理。 */
+.cm6-host .cm-line.cm-md-codeblock-line {
   font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 13.5px;
+  line-height: 1.6;
   background: var(--color-seeyue-code-bg);
   color: var(--color-seeyue-fg);
-  /* 让两侧不留白色 gap，整段代码块成为视觉块 */
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: 20px;
+  padding-right: 20px;
 }
-/* 第一个内容行右上角显示语言 chip */
-.cm-md-codeblock-first {
+
+/* 首/末内容行：在 fence 装饰栏和正文之间多塞一点垂直缓冲，让代码字符
+   不"贴"到顶栏分隔线 / 底部圆角收口上。CM6 line decoration 没有"段
+   级"概念，只能由 codeHighlight.ts 在第一个内容行额外挂这个类来达成。 */
+.cm6-host .cm-line.cm-md-codeblock-line-first {
+  padding-top: 10px;
+}
+.cm6-host .cm-line.cm-md-codeblock-line-last {
+  padding-bottom: 10px;
+}
+
+/* 首行围栏：固定高 + macOS 三圆点 + 右上 lang chip + 顶部圆角 */
+.cm6-host .cm-line.cm-md-codeblock-fence-top {
   position: relative;
+  height: 28px;
+  margin-top: 0.6em;
+  background: var(--color-seeyue-panel);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  border-bottom: 1px solid var(--color-seeyue-code-border);
+  /* 不要 padding —— fence 行内容已经被 replace 抹空，padding 会撑高 */
+  padding: 0;
+  /* 让首行不显示原 ``` 字符的 fallback baseline 闪烁 */
+  overflow: hidden;
 }
-.cm-md-codeblock-first::after {
+.cm-md-codeblock-fence-top::before {
+  /* 红黄绿三个 macOS 圆点，纯装饰，不接事件 */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 14px 14px, #ff5f57 4.5px, transparent 5px),
+    radial-gradient(circle at 32px 14px, #febc2e 4.5px, transparent 5px),
+    radial-gradient(circle at 50px 14px, #28c840 4.5px, transparent 5px);
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.cm-md-codeblock-fence-top::after {
+  /* lang chip：data-lang 属性由 codeHighlight.ts 透出来；
+     没有 data-lang 时 attr() 返回空字符串，::after 不可见但占位无碍 */
   content: attr(data-lang);
   position: absolute;
-  top: 4px;
+  top: 6px;
   right: 12px;
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -267,7 +326,19 @@
   text-transform: uppercase;
   color: var(--color-seeyue-fg-muted);
   pointer-events: none;
-  opacity: 0.7;
+  opacity: 0.75;
+}
+
+/* 末行围栏：仅做底部圆角收口。高度给到 12px，让底部圆角弧度更柔；
+   同时给段落级 margin-bottom，跟下一个段落留出呼吸感。 */
+.cm6-host .cm-line.cm-md-codeblock-fence-bottom {
+  height: 12px;
+  padding: 0;
+  margin-bottom: 0.6em;
+  background: var(--color-seeyue-code-bg);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  overflow: hidden;
 }
 
 /* Prism / refractor token 色（One Dark 风，与原 milkdown 配色一致） */

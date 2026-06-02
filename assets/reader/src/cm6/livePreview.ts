@@ -22,7 +22,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from '@codemirror/view'
-import { type Range } from '@codemirror/state'
+import { type EditorState, type Range } from '@codemirror/state'
 import { dedupSlugs, slugify } from '../slug'
 
 // ---------------------------------------------------------------------------
@@ -463,20 +463,12 @@ function buildDecorations(view: EditorView): DecorationSet {
           entries.push({ from: nodeFrom, to: nodeTo, deco: hideMarker })
         }
         // ── 表格：整段替成真 <table> widget ─────────────────────────
+        // 注意：Table 是块级 widget，块级装饰必须由 facet provider 给出
+        // （CM6 不允许 ViewPlugin 提供 block decoration），所以这里不处理 ——
+        // Table 的 widget 由下面 `tableBlockDecorations` 抽到独立 extension。
         else if (name === 'Table') {
-          const raw = view.state.doc.sliceString(nodeFrom, nodeTo)
-          // 光标进入表格范围时不 widget —— 用户改单元格内容时直接编辑源码
-          if (!intersectsCursor(nodeFrom, nodeTo)) {
-            entries.push({
-              from: nodeFrom,
-              to: nodeTo,
-              deco: Decoration.replace({
-                widget: new TableWidget(raw),
-                block: true,
-              }),
-            })
-            return false
-          }
+          // 让外层迭代器跳过 Table 子节点（避免里面的 EmphasisMark 被误处理）
+          return false
         }
         return undefined
       },
@@ -496,10 +488,12 @@ function buildDecorations(view: EditorView): DecorationSet {
  * 监听：
  * - `docChanged` —— 文档变了重算（语法树会跟进）
  * - `viewportChanged` —— 滚动到新区域时给新可见行装饰
- * - `selectionSet` —— **只为 InlineCode 和 Table 服务**：这两个元素是"光标
- *   进入时暴露 / 离开时收起"。其它 marker 都是永久 hide，不受 selection 影响。
+ * - `selectionSet` —— **只为 InlineCode 服务**：光标进入 inline code 时
+ *   暴露反引号让用户能编辑；离开时再 hide。其它 marker 都是永久 hide。
+ *   （Table 也有"光标进入暴露源码"语义，但其 block widget 走下面独立的
+ *   `tableBlockDecorations` extension —— CM6 不允许 ViewPlugin 提供 block 装饰。）
  */
-export const livePreview = ViewPlugin.fromClass(
+const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet
     constructor(view: EditorView) {
@@ -515,6 +509,57 @@ export const livePreview = ViewPlugin.fromClass(
     decorations: (v) => v.decorations,
   },
 )
+
+// ---------------------------------------------------------------------------
+// 表格 block widget —— 独立 extension
+// ---------------------------------------------------------------------------
+//
+// 为什么单独抽：CM6 硬性约束 `Decoration.replace({block: true, ...})` 必须
+// 通过 `EditorView.decorations.compute(...)`（facet provider，等价于 StateField）
+// 提供。从 ViewPlugin 暴露 block 装饰会抛
+// "Block decorations may not be specified via plugins"。README 里的
+// `| 命令 | 说明 |` 表格就会触发。
+//
+// facet provider 拿不到 view，只能拿 state；意味着 selectionSet 也走 'selection'
+// 依赖。每次重算都要扫全文 syntax tree 找 Table 节点 —— 但 Lezer 自带缓存，
+// 在文档不变时 iterate 走的是已缓存的 tree，成本可接受。
+
+function buildTableBlockDecos(state: EditorState): DecorationSet {
+  const ranges: Range<Decoration>[] = []
+  const intersectsCursor = (from: number, to: number) => {
+    for (const r of state.selection.ranges) {
+      if (r.from <= to && r.to >= from) return true
+    }
+    return false
+  }
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (node.name !== 'Table') return undefined
+      // 光标进入表格范围时不 widget —— 用户改单元格内容时直接编辑源码
+      if (intersectsCursor(node.from, node.to)) return false
+      const raw = state.doc.sliceString(node.from, node.to)
+      ranges.push(
+        Decoration.replace({
+          widget: new TableWidget(raw),
+          block: true,
+        }).range(node.from, node.to),
+      )
+      return false
+    },
+  })
+  return Decoration.set(ranges, true)
+}
+
+const tableBlockDecorations = EditorView.decorations.compute(
+  ['doc', 'selection'],
+  (state) => buildTableBlockDecos(state),
+)
+
+/**
+ * 对外导出：把内部 ViewPlugin（inline 装饰）和独立 facet provider（block 表格 widget）
+ * 一起作为单个 extension 暴露 —— 调用方仍像以前一样写 `livePreview`。
+ */
+export const livePreview = [livePreviewPlugin, tableBlockDecorations]
 
 /**
  * 全文扫描所有 heading，返回按出现顺序的去重 slug 列表。

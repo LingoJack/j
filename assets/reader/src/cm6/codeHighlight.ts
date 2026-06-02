@@ -210,19 +210,29 @@ function buildHighlightDecos(view: EditorView): DecorationSet {
   const ranges: Range<Decoration>[] = []
 
   for (const b of blocks) {
-    // 行级装饰：整个 block 加 .cm-md-codeblock-line
     const startLine = view.state.doc.lineAt(b.blockFrom).number
     const endLine = view.state.doc.lineAt(b.blockTo).number
-    for (let n = startLine; n <= endLine; n++) {
+
+    // ── 中间内容行：加 .cm-md-codeblock-line（块底色 + monospace 字体）。
+    //    第一个内容行额外加 -line-first（CSS 给 padding-top）；
+    //    最后一个内容行额外加 -line-last（padding-bottom），让代码字符
+    //    跟 fence 装饰栏之间有呼吸距离。
+    //    fence 行（startLine / endLine）走独立类，下面单独加 —— 这样
+    //    内容行 padding/font-size 跟 fence 行（28px / 12px 高度）解耦。
+    const firstContentLine = startLine + 1
+    const lastContentLine = endLine - 1
+    for (let n = firstContentLine; n <= lastContentLine; n++) {
       const ln = view.state.doc.line(n)
+      const classes = ['cm-md-codeblock-line']
+      if (n === firstContentLine) classes.push('cm-md-codeblock-line-first')
+      if (n === lastContentLine) classes.push('cm-md-codeblock-line-last')
       ranges.push(
-        Decoration.line({ class: 'cm-md-codeblock-line' }).range(ln.from),
+        Decoration.line({ class: classes.join(' ') }).range(ln.from),
       )
     }
 
-    // 围栏行（``` 开 / ``` 闭）永久 hide —— 跟其它 marker 一样，
-    // 用户删 backtick 让 FencedCode 不再成立时，fence 自动以文本形态回来。
-    // 首行同时也带有语言标识符（```rust），整行一起 hide；语言以 ::after 展示在右上角。
+    // ── 围栏行的 *文本* 永久 hide —— 用户删 backtick 让 FencedCode
+    //    不再成立时，fence 自动以文本形态回来。
     const firstLine = view.state.doc.line(startLine)
     const lastLine = view.state.doc.line(endLine)
     ranges.push(Decoration.replace({}).range(firstLine.from, firstLine.to))
@@ -230,15 +240,25 @@ function buildHighlightDecos(view: EditorView): DecorationSet {
       ranges.push(Decoration.replace({}).range(lastLine.from, lastLine.to))
     }
 
-    // 把语言标识符通过 line decoration 的 attributes 透到 DOM 上，
-    // 让 CSS ::before 在第一个内容行右上角显示语言 chip
-    if (b.lang && endLine - startLine >= 2) {
-      const firstContentLine = view.state.doc.line(startLine + 1)
+    // ── 首行围栏：fence-top 行级类 + data-lang（CSS ::after 取出来当 chip）
+    //    没语言时不挂 data-lang，避免 ::after 在某些 CSS 引擎里渲染空字符串占位异常。
+    const fenceTopAttrs: Record<string, string> = {}
+    if (b.lang) fenceTopAttrs['data-lang'] = b.lang
+    ranges.push(
+      Decoration.line({
+        class: 'cm-md-codeblock-fence-top',
+        attributes: fenceTopAttrs,
+      }).range(firstLine.from),
+    )
+
+    // ── 末行围栏：fence-bottom 行级类（仅当代码块至少 2 行时存在）
+    //    单行代码块（用户正在敲第二行 ``` 还没敲完）此时只渲染顶栏，
+    //    底部圆角不收口 —— 视觉上"未完成"，符合源码状态。
+    if (endLine !== startLine) {
       ranges.push(
-        Decoration.line({
-          class: 'cm-md-codeblock-line cm-md-codeblock-first',
-          attributes: { 'data-lang': b.lang },
-        }).range(firstContentLine.from),
+        Decoration.line({ class: 'cm-md-codeblock-fence-bottom' }).range(
+          lastLine.from,
+        ),
       )
     }
 
