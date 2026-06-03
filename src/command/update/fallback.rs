@@ -2,6 +2,7 @@ use colored::Colorize;
 
 use super::codesign::fix_codesign_and_quarantine;
 use super::github_auth::get_github_auth_token;
+#[cfg(target_os = "macos")]
 use super::indicator::install_indicator_from_release;
 use super::restart::restart_self;
 

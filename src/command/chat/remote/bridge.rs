@@ -1,6 +1,7 @@
 //! WsBridge: 主循环与 WebSocket 服务器之间的通道封装
 
 use super::protocol::{WsInbound, WsOutbound};
+#[cfg(target_os = "macos")]
 use std::process::Child;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

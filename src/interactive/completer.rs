@@ -530,7 +530,7 @@ impl Hinter for CopilotHinter {
         // 历史提示使用 String hint，需要包装转换
         self.history_hinter
             .hint(line, pos, ctx)
-            .map(|s| DisplayOnlyHint(s))
+            .map(DisplayOnlyHint)
     }
 }
 

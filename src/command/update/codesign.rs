@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use colored::Colorize;
 
 /// 修复 macOS 上替换后的代码签名和隔离属性
