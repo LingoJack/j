@@ -255,7 +255,7 @@ impl MarkdownEditor {
             .viewport
             .scroll_offset
             .saturating_sub(visual_offset)
-            .min(all_visual_lines.len().saturating_sub(1).max(0));
+            .min(all_visual_lines.len().saturating_sub(1));
         let visible_end_local = (visible_start_local + content_height).min(all_visual_lines.len());
 
         // EOF 兜底：当渲染窗口已包含到 EOF（render_end == line_count）但局部窗口

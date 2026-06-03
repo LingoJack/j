@@ -7,7 +7,7 @@ import { JsonTool } from './JsonTool'
 import { TabBar } from './TabBar'
 import { CloseConfirmDialog } from './CloseConfirmDialog'
 import { QuitConfirmDialog } from './QuitConfirmDialog'
-import { CodemirrorEditor } from './cm6/CodemirrorEditor'
+import { MarkdownEditor } from './editor/MarkdownEditor'
 import { PlainTextEditor } from './PlainTextEditor'
 import { ImageViewer } from './ImageViewer'
 import { TableOfContents } from './TableOfContents'
@@ -596,11 +596,12 @@ export function Reader() {
               activeTab.kind === 'tool' ? (
                 <ToolHost toolId={activeTab.toolId ?? null} />
               ) : activeTab.kind === 'markdown' ? (
-                <CodemirrorEditor
+                <MarkdownEditor
                   key={activeTab.path}
                   path={activeTab.path}
                   baseDir={baseDir}
                   initialSource={sourcesRef.current[activeTab.path] ?? ''}
+                  initialDoc={docsRef.current[activeTab.path] ?? { blocks: [] }}
                   onChange={handleSourceChange}
                   onParsed={handleDocParsed}
                   onSave={() => saveTab(activeTab.path)}

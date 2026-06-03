@@ -203,10 +203,8 @@ fn probe_free_port() -> Result<u16, String> {
 /// 失败（找不到 Chrome / Edge）回退到系统默认浏览器（普通标签页）。
 /// 用户也可以显式 `j read --tab <file>` 走标签页模式。
 fn open_in_browser(url: &str, tab: bool) -> Result<(), String> {
-    if !tab {
-        if let Ok(()) = try_open_app_mode(url) {
-            return Ok(());
-        }
+    if !tab && let Ok(()) = try_open_app_mode(url) {
+        return Ok(());
     }
     open_default(url)
 }

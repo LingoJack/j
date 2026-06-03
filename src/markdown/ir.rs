@@ -68,6 +68,8 @@ pub enum BlockKind {
     BlockQuote(Vec<Block>),
     /// 水平分隔线
     Rule,
+    /// HTML 原始块（如 <div>、<br /> 等）
+    HtmlBlock(String),
 }
 
 /// 表格数据

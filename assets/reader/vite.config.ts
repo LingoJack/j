@@ -34,12 +34,8 @@ export default defineConfig({
           ) {
             return 'react-vendor'
           }
-          // CodeMirror 6 + refractor 整体走单独 chunk（便于浏览器缓存）
-          if (
-            id.includes('node_modules/@codemirror/') ||
-            id.includes('node_modules/@lezer/') ||
-            id.includes('node_modules/refractor/')
-          ) {
+          // refractor 走单独 chunk
+          if (id.includes('node_modules/refractor/')) {
             return 'editor-vendor'
           }
         },

@@ -565,6 +565,23 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
                 });
             }
 
+            // ===== HTML Block =====
+            Event::Html(html) | Event::InlineHtml(html) => {
+                let trimmed = html.trim();
+                if trimmed.is_empty() {
+                    // 跳过空 HTML
+                } else if ctx.in_code_block || ctx.in_table {
+                    // 在代码块或表格内，作为文本处理
+                    ctx.push_inline(Inline::Text(html.to_string()));
+                } else {
+                    ctx.flush_paragraph();
+                    ctx.push_block(Block {
+                        source: ctx.current_source,
+                        kind: BlockKind::HtmlBlock(trimmed.to_string()),
+                    });
+                }
+            }
+
             // ===== Table =====
             Event::Start(Tag::Table(alignments)) => {
                 ctx.flush_paragraph();

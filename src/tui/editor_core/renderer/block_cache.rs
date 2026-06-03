@@ -16,6 +16,8 @@
 
 use crate::markdown::ir::{Block, BlockKind, ListData, ParsedDocument, SourceRange};
 use crate::markdown::parser::parse_markdown;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// 缓存里保留的 block 字段（不携带 inline / table data，节省内存）
 #[derive(Debug, Clone)]
@@ -57,6 +59,8 @@ pub(crate) struct BlockCache {
     line_count: usize,
     /// 上次构建时的折行宽度
     width: usize,
+    /// 上次构建时的源码内容指纹
+    content_hash: u64,
 }
 
 impl BlockCache {
@@ -71,7 +75,10 @@ impl BlockCache {
 
     /// 当前缓存是否对给定 lines + width 仍然有效
     pub(crate) fn is_valid_for(&self, lines: &[String], width: usize) -> bool {
-        self.valid && self.line_count == lines.len() && self.width == width
+        self.valid
+            && self.line_count == lines.len()
+            && self.width == width
+            && self.content_hash == hash_lines(lines)
     }
 
     /// 重建缓存：调用 parser、扁平化 block 树、填行号映射
@@ -114,6 +121,7 @@ impl BlockCache {
         self.blocks = flat;
         self.line_count = lines.len();
         self.width = width;
+        self.content_hash = hash_lines(lines);
         self.valid = true;
         self.revision = self.revision.wrapping_add(1);
     }
@@ -198,6 +206,12 @@ impl BlockCache {
     }
 }
 
+fn hash_lines(lines: &[String]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    lines.hash(&mut hasher);
+    hasher.finish()
+}
+
 /// 递归把 block 树展开成扁平列表（先父后子）
 fn flatten_block(block: &Block, lines: &[String], out: &mut Vec<CachedBlock>) {
     let kind = match &block.kind {
@@ -213,6 +227,7 @@ fn flatten_block(block: &Block, lines: &[String], out: &mut Vec<CachedBlock>) {
         BlockKind::List(_) => CachedKind::List,
         BlockKind::BlockQuote(_) => CachedKind::BlockQuote,
         BlockKind::Paragraph(_) => CachedKind::Paragraph,
+        BlockKind::HtmlBlock(_) => CachedKind::Paragraph,
         BlockKind::Rule => CachedKind::Rule,
     };
     // pulldown-cmark 偶尔把 block 紧跟着的空行（甚至下一个 block 的首行）也算进

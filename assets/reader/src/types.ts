@@ -13,6 +13,7 @@ export type Inline =
   | { type: 'code'; value: string }
   | { type: 'link'; value: { text: Inline[]; url: string } }
   | { type: 'image'; value: { url: string; alt: string } }
+  | { type: 'html'; value: string }
   | { type: 'soft_break' }
   | { type: 'hard_break' }
 
@@ -42,6 +43,7 @@ export type BlockKind =
   | { type: 'table'; value: TableData }
   | { type: 'list'; value: ListData }
   | { type: 'block_quote'; value: Block[] }
+  | { type: 'html_block'; value: string }
   | { type: 'rule' }
 
 export interface Block {

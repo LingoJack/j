@@ -28,6 +28,7 @@ pub fn render_block(block: &Block, ctx: &RenderContext) -> Vec<Line<'static>> {
         BlockKind::Table(data) => render_table(data, &data.alignments, ctx.width, ctx.theme),
         BlockKind::List(data) => render_list(data, ctx, 0),
         BlockKind::BlockQuote(blocks) => render_blockquote(blocks, ctx),
+        BlockKind::HtmlBlock(html) => render_html_block(html, ctx),
         BlockKind::Rule => render_rule(ctx),
     }
 }
@@ -293,4 +294,12 @@ fn render_image_placeholder(
             .add_modifier(Modifier::DIM),
     )));
     lines
+}
+
+/// HTML 原始块渲染：直接输出原始文本（TUI 不渲染 HTML）。
+fn render_html_block(html: &str, ctx: &RenderContext) -> Vec<Line<'static>> {
+    let style = Style::default().fg(ctx.theme.text_dim());
+    html.lines()
+        .map(|line| Line::from(Span::styled(line.to_string(), style)))
+        .collect()
 }

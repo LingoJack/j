@@ -1,0 +1,224 @@
+/**
+ * 自研 Markdown 编辑器样式。
+ *
+ * 所有样式使用 Tailwind v4 的 @theme 变量。
+ * 仅保留 @layer components 中无法用 utility 表达的深层选择器。
+ */
+
+/* ---- 编辑器容器 ---- */
+.md-editor {
+  padding: 24px 32px;
+  font-family: var(--font-seeyue-cjk, var(--font-seeyue-sans, sans-serif));
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-seeyue-fg);
+  caret-color: var(--color-seeyue-accent);
+}
+
+.md-editor:focus {
+  outline: none;
+}
+
+/* ---- Block 基础 ---- */
+.md-block {
+  margin-bottom: 12px;
+}
+
+.md-block:focus {
+  outline: none;
+}
+
+/* ---- Heading ---- */
+.md-heading {
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  color: var(--color-seeyue-fg-strong);
+}
+
+.md-heading[data-level="1"] { font-size: 26px; margin-top: 28px; }
+.md-heading[data-level="2"] { font-size: 21px; margin-top: 24px; padding-bottom: 6px; border-bottom: 1px solid var(--color-seeyue-border); }
+.md-heading[data-level="3"] { font-size: 17px; }
+.md-heading[data-level="4"] { font-size: 15px; }
+.md-heading[data-level="5"] { font-size: 14px; }
+.md-heading[data-level="6"] { font-size: 13px; color: var(--color-seeyue-fg-muted); }
+
+/* ---- Paragraph ---- */
+.md-paragraph {
+  margin-bottom: 12px;
+}
+
+/* ---- Inline 元素 ---- */
+.md-editor strong {
+  font-weight: 650;
+  color: var(--color-seeyue-fg-strong);
+}
+
+.md-editor em {
+  font-style: italic;
+}
+
+.md-editor del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.md-editor code {
+  font-family: var(--font-seeyue-mono, monospace);
+  font-size: 0.88em;
+  background: var(--color-seeyue-elevated);
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: var(--color-seeyue-warn);
+}
+
+.md-editor a {
+  color: var(--color-seeyue-accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(136, 192, 208, 0.25);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.md-editor a:hover {
+  color: var(--color-seeyue-accent-strong);
+  border-bottom-color: var(--color-seeyue-accent-strong);
+}
+
+.md-editor img {
+  max-width: 100%;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* ---- 代码块 ---- */
+.md-code-wrap {
+  background: var(--color-seeyue-bg-deep);
+  border: 1px solid var(--color-seeyue-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 14px 0;
+}
+
+.md-code-lang {
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: var(--color-seeyue-fg-dim);
+  background: var(--color-seeyue-sidebar);
+  border-bottom: 1px solid var(--color-seeyue-border);
+  font-family: var(--font-seeyue-mono, monospace);
+  user-select: none;
+}
+
+.md-code-pre {
+  margin: 0;
+  padding: 14px 18px;
+  overflow-x: auto;
+  background: transparent;
+}
+
+.md-code-content {
+  font-family: var(--font-seeyue-mono, monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-seeyue-fg);
+  white-space: pre;
+  display: block;
+  outline: none;
+}
+
+/* ---- 表格 ---- */
+.md-table-wrap {
+  overflow-x: auto;
+  margin: 14px 0;
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--color-seeyue-border);
+  padding: 8px 12px;
+  text-align: left;
+  outline: none;
+  min-width: 60px;
+}
+
+.md-table th {
+  background: var(--color-seeyue-sidebar-strong);
+  font-weight: 600;
+  color: var(--color-seeyue-fg-strong);
+}
+
+.md-table td {
+  background: var(--color-seeyue-bg);
+}
+
+.md-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.md-table td:focus,
+.md-table th:focus {
+  background: var(--color-seeyue-elevated);
+  box-shadow: inset 0 0 0 2px var(--color-seeyue-accent);
+}
+
+/* ---- 引用块 ---- */
+.md-blockquote {
+  border-left: 3px solid var(--color-seeyue-accent);
+  padding-left: 16px;
+  margin: 14px 0;
+  color: var(--color-seeyue-fg-muted);
+  background: rgba(136, 192, 208, 0.04);
+  border-radius: 0 6px 6px 0;
+}
+
+.md-blockquote .md-block {
+  margin-bottom: 6px;
+}
+
+/* ---- 列表 ---- */
+.md-list {
+  padding-left: 24px;
+  margin: 10px 0;
+}
+
+.md-list-item {
+  margin-bottom: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.md-list-text {
+  flex: 1;
+  outline: none;
+}
+
+.md-checkbox {
+  margin-top: 5px;
+  accent-color: var(--color-seeyue-success);
+}
+
+.md-task-item {
+  list-style: none;
+  margin-left: -20px;
+}
+
+/* ---- HR ---- */
+.md-hr {
+  border: none;
+  height: 1px;
+  background: var(--color-seeyue-border);
+  margin: 24px 0;
+}
+
+/* ---- Selection ---- */
+.md-editor ::selection {
+  background: rgba(136, 192, 208, 0.22);
+}

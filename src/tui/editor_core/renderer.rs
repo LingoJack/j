@@ -488,7 +488,7 @@ impl MarkdownRenderer {
             vec![Line::from(spans)]
         } else if is_wrapped {
             // 折行的第一段：走整行 inline 切片路径（与续行一致），统一渲染产物坐标系
-            let full_line_spans = self.render_inline(&line_content);
+            let full_line_spans = self.render_inline(line_content);
             let vl_spans =
                 extract_span_range(&full_line_spans, vl.visible_start_char, vl.visible_end_char);
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
@@ -496,7 +496,7 @@ impl MarkdownRenderer {
             vec![Line::from(spans)]
         } else {
             // 未折行：完整一行，走块级前缀渲染（heading 图标 / bullet / blockquote 等）
-            vec![self.render_single_line_with_number(&line_content, logical_line, wrap_width)]
+            vec![self.render_single_line_with_number(line_content, logical_line, wrap_width)]
         }
     }
 

@@ -132,6 +132,7 @@ pub fn serve_blocking(
             .route("/api/initial", get(api_initial))
             .route("/api/file", get(api_file))
             .route("/api/list", get(api_list))
+            .route("/api/parse", post(api_parse))
             .route("/api/save", post(api_save))
             .route("/api/create", post(api_create))
             .route("/api/asset", get(api_asset))
@@ -310,6 +311,33 @@ async fn api_list(Query(q): Query<ListQuery>) -> Result<Json<ListResp>, ApiError
         entries: all,
         truncated,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// /api/parse — 实时 Markdown 解析（前端编辑后调用）
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ParseReq {
+    source: String,
+}
+
+async fn api_parse(Json(req): Json<ParseReq>) -> Result<Json<serde_json::Value>, ApiError> {
+    if req.source.len() as u64 > MAX_FILE_SIZE {
+        return Err(ApiError::bad_request(format!(
+            "内容过大（{} 字节，超过 {} 字节上限）",
+            req.source.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+    let value = tokio::task::spawn_blocking(move || {
+        let doc = crate::markdown::parser::parse_markdown(&req.source, 120);
+        serde_json::to_value(&doc).map_err(|e| format!("Markdown IR 序列化失败：{e}"))
+    })
+    .await
+    .map_err(|e| ApiError::internal(format!("blocking 任务 join 失败：{e}")))?
+    .map_err(ApiError::internal)?;
+    Ok(Json(value))
 }
 
 // ---------------------------------------------------------------------------
