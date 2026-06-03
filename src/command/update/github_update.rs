@@ -3,6 +3,7 @@ use colored::Colorize;
 use super::codesign::fix_codesign_and_quarantine;
 use super::fallback::perform_update_fallback;
 use super::github_auth::{get_github_auth_token, print_auth_hint};
+#[cfg(target_os = "macos")]
 use super::indicator::install_indicator_from_release;
 use super::permission::{can_write_to_dir, get_exe_dir, is_root};
 use super::restart::restart_self;
@@ -25,11 +26,19 @@ pub(crate) fn perform_update(interactive: bool) {
     #[cfg(all(target_arch = "aarch64", target_os = "windows"))]
     let target = "windows-arm64";
 
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    let target = "linux-x64";
+
+    #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+    let target = "linux-arm64";
+
     #[cfg(not(any(
         all(target_arch = "aarch64", target_os = "macos"),
         all(target_arch = "x86_64", target_os = "macos"),
         all(target_arch = "x86_64", target_os = "windows"),
-        all(target_arch = "aarch64", target_os = "windows")
+        all(target_arch = "aarch64", target_os = "windows"),
+        all(target_arch = "x86_64", target_os = "linux"),
+        all(target_arch = "aarch64", target_os = "linux")
     )))]
     {
         println!("{}", "当前平台暂不支持自动更新，请手动更新".red());

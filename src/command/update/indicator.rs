@@ -1,10 +1,12 @@
+#[cfg(target_os = "macos")]
 use colored::Colorize;
 
+#[cfg(target_os = "macos")]
 use super::codesign::fix_codesign_and_quarantine;
 
+#[cfg(target_os = "macos")]
 /// 从 GitHub Release 下载并安装 j-indicator 到 j 同目录
 /// 这是 best-effort 的：失败只打印警告，不影响主更新
-#[cfg(target_os = "macos")]
 pub(crate) fn install_indicator_from_release(version: &str) {
     // 确定 j 所在目录
     let j_dir = match std::env::current_exe() {

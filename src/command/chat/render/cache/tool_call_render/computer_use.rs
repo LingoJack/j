@@ -1,8 +1,11 @@
 //! ComputerUse 工具调用渲染
 
+#[cfg(target_os = "macos")]
 use crate::command::chat::render::theme::Theme;
+#[cfg(target_os = "macos")]
 use ratatui::text::Line;
 
+#[cfg(target_os = "macos")]
 use super::shared::render_kv_line;
 
 /// ComputerUse 工具展开渲染
