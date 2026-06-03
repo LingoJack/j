@@ -147,9 +147,15 @@ export function MarkdownEditor({
     if (!host) return
 
     // 找到当前正在编辑的 block 元素
-    const activeEl = skipActive ? (host.querySelector(':focus') as HTMLElement | null) : null
-    const activeBlockEl = activeEl ? (activeEl.closest('[data-block-type]') as HTMLElement | null) : null
+    const activeBlockEl = skipActive ? findActiveBlockElement(host) : null
     const activeCacheKey = activeBlockEl?.dataset?.cacheKey ?? null
+    const activeIndex = activeBlockEl
+      ? Array.from(host.children).indexOf(activeBlockEl)
+      : -1
+
+    if (skipActive && isHostEditing(host) && !activeBlockEl) {
+      return
+    }
 
     // 保存焦点 block 的 DOM 引用（如果有焦点）
     let savedActiveNode: HTMLElement | null = null
@@ -177,7 +183,10 @@ export function MarkdownEditor({
         const key = blockKey(block, i)
 
         // 焦点 block 保留原 DOM
-        if (savedActiveNode && key === activeCacheKey) {
+        if (
+          savedActiveNode
+          && (key === activeCacheKey || i === activeIndex)
+        ) {
           savedActiveNode.dataset.cacheKey = key
           renderCache.current.set(key, savedActiveNode)
           fragment.appendChild(savedActiveNode)
@@ -240,6 +249,33 @@ export function MarkdownEditor({
   )
 }
 
+function isHostEditing(host: HTMLElement): boolean {
+  const active = document.activeElement
+  if (active instanceof Node && host.contains(active)) {
+    return true
+  }
+
+  const selection = window.getSelection()
+  const anchor = selection?.anchorNode
+  return anchor instanceof Node && host.contains(anchor)
+}
+
+function findActiveBlockElement(host: HTMLElement): HTMLElement | null {
+  const active = document.activeElement
+  if (active instanceof HTMLElement && host.contains(active)) {
+    const block = active.closest('[data-block-type]')
+    if (block instanceof HTMLElement) return block
+  }
+
+  const selection = window.getSelection()
+  const anchor = selection?.anchorNode
+  if (!(anchor instanceof Node) || !host.contains(anchor)) return null
+
+  const el = anchor instanceof HTMLElement ? anchor : anchor.parentElement
+  const block = el?.closest('[data-block-type]')
+  return block instanceof HTMLElement ? block : null
+}
+
 // ---------------------------------------------------------------------------
 // Block → DOM 渲染
 // ---------------------------------------------------------------------------
@@ -259,6 +295,7 @@ function createBlockElement(
       el.dataset.blockType = 'heading'
       el.dataset.level = String(kind.value.level)
       el.contentEditable = 'true'
+      el.appendChild(createMarkdownMarker(`${'#'.repeat(kind.value.level)} `))
       renderInlines(kind.value.content, el)
       el.addEventListener('input', onEdit)
       return el
@@ -432,7 +469,8 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
   // 语言标签
   const label = document.createElement('div')
   label.className = 'md-code-lang'
-  label.textContent = lang
+  label.textContent = '```' + lang
+  label.dataset.mdMarker = 'true'
   wrap.appendChild(label)
 
   // 代码区域
@@ -447,6 +485,12 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
 
   pre.appendChild(codeEl)
   wrap.appendChild(pre)
+
+  const footer = document.createElement('div')
+  footer.className = 'md-code-fence-end'
+  footer.dataset.mdMarker = 'true'
+  footer.textContent = '```'
+  wrap.appendChild(footer)
 
   return wrap
 }
@@ -573,6 +617,7 @@ function serializeInlineContent(el: HTMLElement): string {
       result += node.textContent ?? ''
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const child = node as HTMLElement
+      if (child.dataset.mdMarker === 'true') continue
       const tag = child.tagName
       if (tag === 'STRONG' || tag === 'B') {
         result += '**' + serializeInlineContent(child) + '**'
@@ -581,7 +626,7 @@ function serializeInlineContent(el: HTMLElement): string {
       } else if (tag === 'DEL' || tag === 'S') {
         result += '~~' + serializeInlineContent(child) + '~~'
       } else if (tag === 'CODE') {
-        result += '`' + (child.textContent ?? '') + '`'
+        result += '`' + serializeInlineContent(child) + '`'
       } else if (tag === 'A') {
         const href = child.getAttribute('href') ?? ''
         result += '[' + serializeInlineContent(child) + '](' + href + ')'
@@ -597,6 +642,15 @@ function serializeInlineContent(el: HTMLElement): string {
     }
   }
   return result
+}
+
+function createMarkdownMarker(text: string): HTMLElement {
+  const span = document.createElement('span')
+  span.className = 'md-marker'
+  span.dataset.mdMarker = 'true'
+  span.contentEditable = 'false'
+  span.textContent = text
+  return span
 }
 
 function serializeTable(table: HTMLTableElement): string[] {

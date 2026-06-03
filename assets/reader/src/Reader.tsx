@@ -436,7 +436,7 @@ export function Reader() {
     [activeTabPath],
   )
 
-  // —— 全局快捷键：(⌘|⌃) S / W / ⇧← / ⇧→ / 1 / 2 ——
+  // —— 全局快捷键：(⌘|⌃) S / W / ⌥← / ⌥→ / 1 / 2 ——
   // 同时接受 metaKey（macOS ⌘）与 ctrlKey（macOS ⌃ 或 Win/Linux Ctrl）。
   // 这是因为普通 Chrome 标签页里 ⌘W 会被浏览器吞掉关掉标签，根本传不到 JS；
   // 此时用户可以退而用 ⌃W 关闭当前 reader tab。
@@ -483,8 +483,8 @@ export function Reader() {
         }
         return
       }
-      // ⌘⇧← / ⌘⇧→ 切 tab
-      if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      // VS Code 风格：⌘⌥← / ⌘⌥→ 切 tab（Win/Linux 用 Ctrl+Alt+←/→）
+      if (e.altKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault()
         handlersRef.current.cycleTab(e.key === 'ArrowLeft' ? -1 : 1)
         return

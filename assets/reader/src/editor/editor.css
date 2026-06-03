@@ -28,6 +28,19 @@
   outline: none;
 }
 
+/* ---- Markdown 标识 ---- */
+.md-marker,
+.md-code-fence-end {
+  color: var(--color-seeyue-fg-dim);
+  font-family: var(--font-seeyue-mono, monospace);
+  font-weight: 400;
+  opacity: 0.68;
+}
+
+.md-marker {
+  user-select: none;
+}
+
 /* ---- Heading ---- */
 .md-heading {
   font-weight: 600;
@@ -107,6 +120,13 @@
   background: var(--color-seeyue-sidebar);
   border-bottom: 1px solid var(--color-seeyue-border);
   font-family: var(--font-seeyue-mono, monospace);
+  user-select: none;
+}
+
+.md-code-fence-end {
+  padding: 0 14px 8px;
+  font-size: 11.5px;
+  background: var(--color-seeyue-bg-deep);
   user-select: none;
 }
 

@@ -41,25 +41,33 @@ function renderOneInline(inline: Inline): Node {
 
     case 'strong': {
       const el = document.createElement('strong')
+      el.appendChild(createMarker('**'))
       renderInlines(inline.value, el)
+      el.appendChild(createMarker('**'))
       return el
     }
 
     case 'emphasis': {
       const el = document.createElement('em')
+      el.appendChild(createMarker('*'))
       renderInlines(inline.value, el)
+      el.appendChild(createMarker('*'))
       return el
     }
 
     case 'strikethrough': {
       const el = document.createElement('del')
+      el.appendChild(createMarker('~~'))
       renderInlines(inline.value, el)
+      el.appendChild(createMarker('~~'))
       return el
     }
 
     case 'code': {
       const el = document.createElement('code')
-      el.textContent = inline.value
+      el.appendChild(createMarker('`'))
+      el.appendChild(document.createTextNode(inline.value))
+      el.appendChild(createMarker('`'))
       return el
     }
 
@@ -68,7 +76,9 @@ function renderOneInline(inline: Inline): Node {
       a.href = inline.value.url
       a.target = '_blank'
       a.rel = 'noopener noreferrer'
+      a.appendChild(createMarker('['))
       renderInlines(inline.value.text, a)
+      a.appendChild(createMarker(`](${inline.value.url})`))
       return a
     }
 
@@ -97,4 +107,13 @@ function renderOneInline(inline: Inline): Node {
     default:
       return document.createTextNode('')
   }
+}
+
+function createMarker(text: string): HTMLElement {
+  const span = document.createElement('span')
+  span.className = 'md-marker'
+  span.dataset.mdMarker = 'true'
+  span.contentEditable = 'false'
+  span.textContent = text
+  return span
 }
