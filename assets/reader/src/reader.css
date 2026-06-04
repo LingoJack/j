@@ -22,9 +22,9 @@
   --color-seeyue-elevated: #e8e0d5;
 
   /* —— 边框 —— */
-  --color-seeyue-border: #ddd4c8;
-  --color-seeyue-border-strong: #c8bfb2;
-  --color-seeyue-border-dim: rgba(200, 191, 178, 0.5);
+  --color-seeyue-border: rgba(200, 191, 178, 0.35);
+  --color-seeyue-border-strong: rgba(200, 191, 178, 0.6);
+  --color-seeyue-border-dim: rgba(200, 191, 178, 0.25);
 
   /* —— 文本 —— */
   --color-seeyue-fg: #3d3630;
@@ -43,9 +43,9 @@
   --color-seeyue-purple: #7a5ea0;
 
   /* —— 代码 —— */
-  --color-seeyue-code-bg: #f0ebe4;
-  --color-seeyue-code-border: #ddd4c8;
-  --color-seeyue-inline-code-bg: #ede4d8;
+  --color-seeyue-code-bg: #f5f0ea;
+  --color-seeyue-code-border: rgba(200, 191, 178, 0.4);
+  --color-seeyue-inline-code-bg: #f0ebe4;
 
   /* —— 字体栈 —— */
   --font-cjk:
@@ -141,7 +141,7 @@
   .seeyue-prose :not(pre) > code {
     color: var(--color-seeyue-purple);
     background: var(--color-seeyue-inline-code-bg);
-    border: 1px solid var(--color-seeyue-code-border);
+    border: none;
     border-radius: 4px;
     padding: 0.05em 0.35em;
     font-family: var(--font-mono);
@@ -170,36 +170,36 @@
     margin: 2.5em 0;
   }
 
-  /* 代码块装饰栏：macOS 三圆点 + 右上角 lang */
+  /* 代码块：深色主题 + macOS 三圆点 */
   .seeyue-codeblock {
     position: relative;
     margin: 1.2em 0;
-    border-radius: 8px;
-    border: 1px solid var(--color-seeyue-code-border);
-    background: var(--color-seeyue-code-bg);
+    border-radius: 12px;
+    border: none;
+    background: #2b2520;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
   }
   .seeyue-codeblock::before {
     content: '';
     display: block;
-    height: 28px;
-    background: var(--color-seeyue-code-bg);
-    border-bottom: 1px solid var(--color-seeyue-code-border);
+    height: 36px;
+    background: #342e28;
+    border-bottom: none;
     background-image:
-      radial-gradient(circle at 14px 14px, #e05050 4px, transparent 4.5px),
-      radial-gradient(circle at 30px 14px, #c8a830 4px, transparent 4.5px),
-      radial-gradient(circle at 46px 14px, #50a860 4px, transparent 4.5px);
+      radial-gradient(circle at 20px 18px, #ff5f57 5px, transparent 5.5px),
+      radial-gradient(circle at 40px 18px, #febc2e 5px, transparent 5.5px),
+      radial-gradient(circle at 60px 18px, #28c840 5px, transparent 5.5px);
     background-repeat: no-repeat;
   }
   .seeyue-codeblock-lang {
     position: absolute;
-    top: 6px;
-    right: 12px;
+    top: 10px;
+    right: 16px;
     font-size: 11px;
     font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-seeyue-fg-dim);
+    letter-spacing: 0.06em;
+    color: #8a8078;
     z-index: 1;
   }
 }

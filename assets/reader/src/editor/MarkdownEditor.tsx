@@ -11,6 +11,9 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { Block, ParsedDocument, Inline, Alignment } from '../types'
 import { resetInlineCache, renderInlines } from './inline-renderer'
+import { renderHighlightedCode } from './code-highlight'
+import { slugify } from '../slug'
+import { extractText } from '../MarkdownIR'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -321,6 +324,9 @@ function createBlockElement(
       el.className = 'md-block md-heading'
       el.dataset.blockType = 'heading'
       el.dataset.level = String(kind.value.level)
+      // 设置 heading id，供 TOC 点击 scrollIntoView
+      const headingText = extractText(kind.value.content)
+      if (headingText) el.id = slugify(headingText)
       el.contentEditable = 'true'
       el.appendChild(createMarkdownMarker(`${'#'.repeat(kind.value.level)} `))
       renderInlines(kind.value.content, el)
@@ -488,6 +494,7 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
   wrap.dataset.blockType = 'code'
   wrap.dataset.lang = lang
 
+  // 语言标签
   const label = document.createElement('div')
   label.className = 'md-code-lang'
   label.textContent = lang || 'code'
@@ -500,17 +507,12 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
   const codeEl = document.createElement('code')
   codeEl.className = 'md-code-content'
   codeEl.contentEditable = 'true'
-  codeEl.textContent = code
+  // 使用语法高亮渲染
+  codeEl.appendChild(renderHighlightedCode(code, lang))
   codeEl.addEventListener('input', onEdit)
 
   pre.appendChild(codeEl)
   wrap.appendChild(pre)
-
-  const footer = document.createElement('div')
-  footer.className = 'md-code-fence-end'
-  footer.dataset.mdMarker = 'true'
-  footer.textContent = '```'
-  wrap.appendChild(footer)
 
   return wrap
 }

@@ -552,7 +552,7 @@ export function Reader() {
         <ActivityBar active={activeActivity} onSelect={selectActivity} />
 
         {/* 左：侧栏（按 activeActivity 切换内容） */}
-        <aside className="border-r border-seeyue-border overflow-hidden">
+        <aside className="overflow-hidden">
           {activeActivity === 'files' ? (
             <FileTree
               root={treeRoot}
@@ -764,7 +764,7 @@ function EditorBar({
   // 图片是只读视图：不显示 dirty / 保存按钮（一旦触发 /api/save 会用空 source 覆盖原文件）
   const editable = tab.kind !== 'image'
   return (
-    <div className="flex items-center h-8 px-3 bg-seeyue-bg border-b border-seeyue-border text-xs text-seeyue-fg-dim gap-2">
+    <div className="flex items-center h-8 px-3 bg-seeyue-bg text-xs text-seeyue-fg-dim gap-2">
       <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden" title={tab.path}>
         {segs.map((s, i) => (
           <span

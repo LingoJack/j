@@ -8,7 +8,7 @@
 @layer components {
   /* ---- 编辑器容器 ---- */
   .md-editor {
-    @apply mx-auto max-w-[820px] px-12 py-8 text-[15px] leading-[1.8] text-seeyue-fg outline-none;
+    @apply mx-auto max-w-[1060px] px-8 py-8 text-[15px] leading-[1.8] text-seeyue-fg outline-none;
     font-family: var(--font-cjk);
     caret-color: var(--color-seeyue-accent);
   }
@@ -34,14 +34,12 @@
     margin-bottom: 10px;
 
     &[data-level='1'] {
-      @apply text-[28px] border-b-2 border-seeyue-border;
+      @apply text-[28px];
       margin-top: 0;
-      padding-bottom: 8px;
     }
     &[data-level='2'] {
-      @apply text-[22px] border-b border-seeyue-border;
+      @apply text-[22px];
       margin-top: 28px;
-      padding-bottom: 6px;
     }
     &[data-level='3'] { @apply text-lg; }
     &[data-level='4'] { @apply text-base; }
@@ -65,7 +63,7 @@
     @apply line-through opacity-55;
   }
   .md-editor code {
-    @apply rounded border border-seeyue-code-border bg-seeyue-inline-code-bg text-seeyue-purple;
+    @apply rounded bg-seeyue-inline-code-bg text-seeyue-purple;
     font-family: var(--font-mono);
     font-size: 0.88em;
     padding: 2px 5px;
@@ -87,27 +85,58 @@
 
   /* ---- 代码块 ---- */
   .md-code-wrap {
-    @apply relative overflow-hidden rounded-lg border border-seeyue-code-border bg-seeyue-code-bg;
-    margin: 16px 0;
+    @apply relative overflow-hidden rounded-xl;
+    margin: 20px 0;
+    background: #2b2520;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
   }
+
+  /* macOS 三圆点标题栏 */
+  .md-code-wrap::before {
+    content: '';
+    display: block;
+    height: 36px;
+    background: #342e28;
+    background-image:
+      radial-gradient(circle at 20px 18px, #ff5f57 5px, transparent 5.5px),
+      radial-gradient(circle at 40px 18px, #febc2e 5px, transparent 5.5px),
+      radial-gradient(circle at 60px 18px, #28c840 5px, transparent 5.5px);
+    background-repeat: no-repeat;
+  }
+
   .md-code-lang {
-    @apply select-none border-b border-seeyue-code-border bg-seeyue-code-bg text-[11px] uppercase tracking-wider text-seeyue-fg-dim;
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    @apply select-none text-[11px] text-[#8a8078] tracking-wider;
     font-family: var(--font-mono);
-    padding: 6px 16px 4px;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
   }
+
   .md-code-pre {
     @apply m-0 overflow-x-auto bg-transparent;
-    padding: 14px 20px;
+    padding: 16px 22px 18px;
   }
+
   .md-code-content {
-    @apply block whitespace-pre text-[13px] leading-[1.65] text-seeyue-fg outline-none;
+    @apply block whitespace-pre text-[13px] leading-[1.7] outline-none;
     font-family: var(--font-mono);
+    color: #d4c8b8;
+    background: transparent;
+  }
+
+  /* 覆盖 .md-editor code 对代码块内 code 的背景色污染 */
+  .md-code-wrap code,
+  .md-code-wrap pre {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    color: #d4c8b8;
   }
 
   /* ---- 表格 ---- */
   .md-table-wrap {
-    @apply overflow-x-auto rounded-md border border-seeyue-border;
+    @apply overflow-x-auto rounded-md;
     margin: 16px 0;
   }
   .md-table {
@@ -115,18 +144,19 @@
   }
   .md-table th,
   .md-table td {
-    @apply border border-seeyue-border text-left outline-none;
+    @apply text-left outline-none;
     padding: 8px 14px;
     min-width: 60px;
+    border-bottom: 1px solid var(--color-seeyue-border);
   }
   .md-table th {
-    @apply bg-seeyue-panel font-semibold text-seeyue-fg-strong;
+    @apply font-semibold text-seeyue-fg-strong;
   }
   .md-table td {
-    @apply bg-seeyue-bg;
+    @apply bg-transparent;
   }
-  .md-table tr:nth-child(even) td {
-    background: rgba(200, 191, 178, 0.15);
+  .md-table tr:hover td {
+    background: rgba(200, 191, 178, 0.08);
   }
   .md-table td:focus,
   .md-table th:focus {
@@ -189,4 +219,12 @@
   .md-blockquote .md-list {
     margin: 4px 0;
   }
+
+  /* ---- 代码语法高亮（深色主题） ---- */
+  .md-code-content .hl-kw   { color: #e8a87c; font-weight: 500; }
+  .md-code-content .hl-str  { color: #8cc084; }
+  .md-code-content .hl-num  { color: #d4a84c; }
+  .md-code-content .hl-cmt  { color: #6e6358; font-style: italic; }
+  .md-code-content .hl-type { color: #7cb8d4; }
+  .md-code-content .hl-punct { color: #8a7e72; }
 }
