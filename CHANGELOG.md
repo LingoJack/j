@@ -1,3 +1,25 @@
+# v12.10.95
+
+
+### 新功能
+
+- **自研 Markdown 编辑器**: 替换 CodeMirror 6 编辑器，采用 Rust 后端解析 IR + 前端 contenteditable DOM 渲染的新架构。编辑器显示源码标识符（如 `#`、`**`），支持富文本序列化回 Markdown，新增 `/api/parse` 后端接口实时解析文档
+- **REPL 历史命令补全**: 重构 Hint 系统为 `CopilotHint` 枚举，区分纯展示提示和可补全的历史命令，输入时可通过右箭头键接受历史命令建议
+- **HTML 原始块支持**: Markdown 解析器和渲染器新增 `HtmlBlock` 类型，支持 `<div>`、`<br />` 等 HTML 块的解析与渲染
+- **表格单元格行内 Markdown 渲染**: 表格单元格内支持加粗、斜体、代码等行内 Markdown 语法的富文本渲染，表格始终以 widget 形式展示
+
+### 改进
+
+- **Reader CSS 迁移至 Tailwind v4 工具类**: 所有 Reader 前端组件（ActivityBar、FileTree、TabBar、DiffTool、JsonTool、Toolbox、Toast、对话框等）的样式从自定义 CSS 类迁移为 Tailwind v4 内联工具类，移除大量手写 CSS
+- **Tab 切换快捷键改为 VS Code 风格**: 切换标签页快捷键从 ⌘⇧←/→ 改为 ⌥←/⌥→（VS Code 风格）
+- **Todo 存储格式迁移至 JSONL**: 待办数据从单文件 JSON（`todo.json`）改为逐行 JSONL（`todo.jsonl`），单行损坏不影响其余数据，错误处理更健壮
+- **编辑器 block 缓存增加内容指纹**: BlockCache 新增 `content_hash` 字段，内容变更时正确失效缓存，避免行数和宽度未变时的脏缓存问题
+
+### Bug 修复
+
+- **修复 Linux 构建**: 为 macOS 专有代码（codesign、indicator、Child 进程等）添加 `#[cfg(target_os = "macos")]` 条件编译，新增 Linux x86_64/aarch64 自动更新平台目标，修复 Linux 下 `make install` 报错
+</result
+
 # v12.10.94
 
 
