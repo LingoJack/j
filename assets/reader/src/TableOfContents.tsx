@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronsLeft, ChevronsRight, ListTree } from './Icon'
+import { ChevronsRight, ListTree } from './Icon'
 import type { HeadingItem } from './toc'
 
 interface Props {
@@ -34,36 +34,38 @@ export function TableOfContents({
     return () => observer.disconnect()
   }, [headings, collapsed])
 
+  // 收起态：只显示一个小圆按钮
   if (collapsed) {
     return (
       <button
         type="button"
         onClick={onToggleCollapsed}
-        className="h-full flex items-start justify-center pt-3.5 bg-seeyue-sidebar text-seeyue-fg-dim cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong"
+        className="absolute right-3 top-3 z-10 flex items-center justify-center w-7 h-7 rounded-md bg-seeyue-bg/80 backdrop-blur-sm text-seeyue-fg-dim border border-seeyue-border-dim cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated hover:border-seeyue-border-strong"
         title="展开目录"
       >
-        <ChevronsLeft size={16} />
+        <ListTree size={14} />
       </button>
     )
   }
 
+  // 无标题
   if (headings.length === 0) {
     return (
-      <div className="h-full flex flex-col bg-seeyue-sidebar">
-        <div className="flex items-center justify-between px-3.5 pt-[14px] pb-1">
-          <span className="font-cjk text-sm font-medium text-seeyue-fg-strong tracking-[0.04em] relative pb-1 after:content-[''] after:absolute after:left-0 after:bottom-[-1px] after:w-7 after:h-0.5 after:bg-seeyue-accent-strong after:rounded-sm flex items-center gap-1.5">
-            <ListTree size={14} /> Contents
+      <div className="absolute right-3 top-3 z-10 w-[180px] rounded-lg bg-seeyue-bg/85 backdrop-blur-sm border border-seeyue-border-dim shadow-[0_2px_12px_rgba(26,22,18,0.06)]">
+        <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
+          <span className="text-[11px] font-semibold text-seeyue-fg-dim uppercase tracking-wider flex items-center gap-1.5">
+            <ListTree size={12} /> Contents
           </span>
           <button
             type="button"
-            className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[active=true]:text-seeyue-success data-[active=true]:bg-[rgba(163,190,140,0.15)] disabled:opacity-30 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center w-5 h-5 rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
             onClick={onToggleCollapsed}
             title="收起目录"
           >
-            <ChevronsRight size={14} />
+            <ChevronsRight size={12} />
           </button>
         </div>
-        <div className="px-4 pt-6 text-xs text-seeyue-fg-dim italic">
+        <div className="px-3 pb-3 text-[11px] text-seeyue-fg-dim italic">
           暂无标题
         </div>
       </div>
@@ -73,21 +75,21 @@ export function TableOfContents({
   const minLevel = Math.min(...headings.map((h) => h.level))
 
   return (
-    <nav className="h-full flex flex-col bg-seeyue-sidebar">
-      <div className="flex items-center justify-between px-3.5 pt-[14px] pb-1">
-        <span className="font-cjk text-sm font-medium text-seeyue-fg-strong tracking-[0.04em] relative pb-1 after:content-[''] after:absolute after:left-0 after:bottom-[-1px] after:w-7 after:h-0.5 after:bg-seeyue-accent-strong after:rounded-sm flex items-center gap-1.5">
-          <ListTree size={14} /> Contents
+    <nav className="absolute right-3 top-3 z-10 w-[200px] max-h-[calc(100%-24px)] rounded-lg bg-seeyue-bg/85 backdrop-blur-sm border border-seeyue-border-dim shadow-[0_2px_12px_rgba(26,22,18,0.06)] flex flex-col">
+      <div className="flex items-center justify-between px-3 pt-2.5 pb-1 shrink-0">
+        <span className="text-[11px] font-semibold text-seeyue-fg-dim uppercase tracking-wider flex items-center gap-1.5">
+          <ListTree size={12} /> Contents
         </span>
         <button
           type="button"
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[active=true]:text-seeyue-success data-[active=true]:bg-[rgba(163,190,140,0.15)] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center w-5 h-5 rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
           onClick={onToggleCollapsed}
           title="收起目录"
         >
-          <ChevronsRight size={14} />
+          <ChevronsRight size={12} />
         </button>
       </div>
-      <ul className="flex-1 overflow-y-auto px-1 pb-4 list-none m-0 border-l border-seeyue-border ml-3.5">
+      <ul className="flex-1 overflow-y-auto px-2 pb-2 pt-1 list-none m-0">
         {headings.map((h) => {
           const indent = h.level - minLevel
           const isActive = h.id === activeId
@@ -101,9 +103,13 @@ export function TableOfContents({
                     .getElementById(h.id)
                     ?.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className="block py-[3px] px-1.5 pl-2.5 -ml-px border-l-2 border-transparent text-[12.5px] text-seeyue-fg-muted no-underline whitespace-nowrap overflow-hidden text-ellipsis transition-colors duration-150 hover:text-seeyue-accent data-[active=true]:text-seeyue-fg-strong data-[active=true]:border-l-seeyue-success data-[active=true]:font-medium"
-                data-active={isActive ? 'true' : undefined}
-                style={{ paddingLeft: `${indent * 12 + 10}px` }}
+                className={
+                  'block py-[3px] px-1.5 rounded text-[12px] no-underline whitespace-nowrap overflow-hidden text-ellipsis transition-colors duration-150 ' +
+                  (isActive
+                    ? 'text-seeyue-fg-strong font-medium bg-seeyue-accent-soft'
+                    : 'text-seeyue-fg-muted hover:text-seeyue-accent hover:bg-seeyue-elevated/50')
+                }
+                style={{ paddingLeft: `${indent * 12 + 6}px` }}
                 title={h.text}
               >
                 {h.text}

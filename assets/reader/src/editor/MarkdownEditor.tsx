@@ -2,14 +2,14 @@
  * Markdown 编辑器 —— 消费 Rust 后端 IR，自行渲染 DOM。
  *
  * 核心思路：
- * - 接收后端 ParsedDocument（pulldown_cmark 解析结果），渲染为 contenteditable DOM
+ * - 接收后端 ParsedDocument（pulldown-cmark 解析结果），渲染为 contenteditable DOM
  * - 编辑后从 DOM 序列化回 markdown source
- * - source 变化时 POST /api/parse 获取新 IR，增量更新 DOM
+ * - source 变化时 POST /api/parse 获取新 IR
+ * - 解析完成后做真正的增量 DOM 更新：只替换内容有变化的非活跃 block，保留光标所在 block 完全不动
  * - 前端不解析 markdown，解析全部由 Rust 后端完成
  */
 import { useEffect, useRef, useCallback } from 'react'
 import type { Block, ParsedDocument, Inline, Alignment } from '../types'
-import { RenderCache, blockKey } from './cache'
 import { resetInlineCache, renderInlines } from './inline-renderer'
 
 // ---------------------------------------------------------------------------
@@ -50,6 +50,65 @@ async function fetchParse(source: string): Promise<ParsedDocument> {
   return resp.json()
 }
 
+/** 找到包含光标的 block-level 元素（host 的直接子元素） */
+function getActiveBlockIndex(host: HTMLElement): number {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return -1
+  let node: Node | null = sel.anchorNode
+  while (node && node !== host) {
+    if (node.parentNode === host) {
+      return Array.from(host.children).indexOf(node as Element)
+    }
+    node = node.parentNode
+  }
+  return -1
+}
+
+/** 获取 block 的文本指纹（用于判断非活跃 block 是否需要更新） */
+function blockFingerprint(block: Block): string {
+  const k = block.kind
+  switch (k.type) {
+    case 'paragraph':
+      return `p:${inlineFingerprint(k.value)}`
+    case 'heading':
+      return `h${k.value.level}:${inlineFingerprint(k.value.content)}`
+    case 'code_block':
+      return `c:${k.value.lang}:${k.value.code}`
+    case 'rule':
+      return 'hr'
+    case 'html_block':
+      return `html:${k.value}`
+    case 'block_quote':
+      return `bq:${k.value.map(b => blockFingerprint(b)).join('|')}`
+    case 'list':
+      return `l:${k.value.ordered ? 'o' : 'u'}:${k.value.items.map(it => `${it.checked}:${inlineFingerprint(it.content)}`).join(',')}`
+    case 'table':
+      return `t:${k.value.rows.map(row => row.map(cell => inlineFingerprint(cell)).join('|')).join('||')}`
+    default:
+      return 'unknown'
+  }
+}
+
+function inlineFingerprint(inlines: Inline[]): string {
+  return inlines.map(inlineFingerprintOne).join('')
+}
+
+function inlineFingerprintOne(i: Inline): string {
+  switch (i.type) {
+    case 'text': return i.value
+    case 'strong': return `**${inlineFingerprint(i.value)}**`
+    case 'emphasis': return `*${inlineFingerprint(i.value)}*`
+    case 'strikethrough': return `~~${inlineFingerprint(i.value)}~~`
+    case 'code': return `\`${i.value}\``
+    case 'link': return `[${inlineFingerprint(i.value.text)}](${i.value.url})`
+    case 'image': return `![${i.value.alt}](${i.value.url})`
+    case 'soft_break': return ' '
+    case 'hard_break': return '\n'
+    case 'html': return i.value
+    default: return ''
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 主组件
 // ---------------------------------------------------------------------------
@@ -66,36 +125,19 @@ export function MarkdownEditor({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const sourceRef = useRef(initialSource)
   const docRef = useRef(initialDoc)
-  const renderCache = useRef(new RenderCache())
-  const updatingRef = useRef(false) // 防止循环更新
+  const updatingRef = useRef(false)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastParsedSource = useRef('') // 防止重复解析
+  const lastParsedSource = useRef('')
   const parseSeq = useRef(0)
-  const renderBlocksRef = useRef<(blocks: Block[], skipActive?: boolean) => void>(() => {})
+  /** 上一次渲染的 block 指纹列表 */
+  const lastFingerprints = useRef<string[]>([])
 
   const onChangeRef = useLatest(onChange)
   const onParsedRef = useLatest(onParsed)
   const onSaveRef = useLatest(onSave)
   const pathRef = useLatest(path)
   const baseDirRef = useLatest(baseDir)
-
-  const parseAndRender = useCallback((source: string, skipActive: boolean) => {
-    if (source === lastParsedSource.current) {
-      renderBlocksRef.current(docRef.current.blocks, skipActive)
-      return
-    }
-
-    const seq = ++parseSeq.current
-    lastParsedSource.current = source
-    fetchParse(source)
-      .then(doc => {
-        if (seq !== parseSeq.current) return
-        docRef.current = doc
-        onParsedRef.current(pathRef.current, doc)
-        renderBlocksRef.current(doc.blocks, skipActive)
-      })
-      .catch(() => { /* 静默失败 */ })
-  }, [onParsedRef, pathRef])
+  const syncFromDomFnRef = useRef<() => void>(() => {})
 
   // ---- DOM → Markdown 序列化 + 触发后端解析 ----
   const syncFromDom = useCallback(() => {
@@ -112,25 +154,101 @@ export function MarkdownEditor({
     // Debounce 后端解析（300ms）
     if (debounceTimer.current) clearTimeout(debounceTimer.current)
     debounceTimer.current = setTimeout(() => {
-      parseAndRender(md, true)
+      parseAndRender(md)
     }, 300)
-  }, [onChangeRef, parseAndRender, pathRef])
+  }, [onChangeRef, pathRef])
 
-  const flushParseAfterFocusChange = useCallback(() => {
-    window.setTimeout(() => {
-      const host = hostRef.current
-      if (!host) return
+  syncFromDomFnRef.current = syncFromDom
 
-      syncFromDom()
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current)
-        debounceTimer.current = null
+  // ---- parse + incremental render ----
+  const parseAndRender = useCallback((source: string) => {
+    if (source === lastParsedSource.current) return
+
+    const seq = ++parseSeq.current
+    lastParsedSource.current = source
+    fetchParse(source)
+      .then(doc => {
+        if (seq !== parseSeq.current) return
+        docRef.current = doc
+        onParsedRef.current(pathRef.current, doc)
+        applyDiff(doc.blocks)
+      })
+      .catch(() => { /* 静默失败 */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onParsedRef, pathRef])
+
+  // ---- 真正的增量 DOM 更新 ----
+  // 策略：光标所在 block 完全不动；其他 block 只在指纹变化时替换 innerHTML
+  const applyDiff = useCallback((blocks: Block[]) => {
+    const host = hostRef.current
+    if (!host) return
+
+    const activeIdx = getActiveBlockIndex(host)
+    const newFps = blocks.map(b => blockFingerprint(b))
+    const oldFps = lastFingerprints.current
+    const oldChildren = Array.from(host.children) as HTMLElement[]
+
+    const lenMatch = oldChildren.length === blocks.length && oldFps.length === newFps.length
+
+    try {
+      updatingRef.current = true
+
+      if (lenMatch) {
+        // 同数量：逐个比较指纹，只替换有变化的非活跃 block
+        for (let i = 0; i < blocks.length; i++) {
+          if (i === activeIdx) continue // 光标所在 block 不动
+          if (i < oldFps.length && oldFps[i] === newFps[i]) continue // 指纹相同，跳过
+          // 替换该 block 的 DOM
+          const newEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
+          oldChildren[i].replaceWith(newEl)
+        }
+      } else {
+        // 数量不同：需要增删 block，但保留活跃 block 不动
+        const fragment = document.createDocumentFragment()
+        for (let i = 0; i < blocks.length; i++) {
+          if (i === activeIdx && i < oldChildren.length) {
+            // 保留活跃 block 的原始引用
+            fragment.appendChild(oldChildren[i])
+          } else if (i < oldChildren.length && i < oldFps.length && oldFps[i] === newFps[i]) {
+            // 指纹相同，复用旧 DOM
+            fragment.appendChild(oldChildren[i])
+          } else {
+            // 新 block 或指纹变化
+            fragment.appendChild(createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef))
+          }
+        }
+        host.replaceChildren(fragment)
       }
+    } finally {
+      updatingRef.current = false
+    }
 
-      const skipActive = host.contains(document.activeElement)
-      parseAndRender(sourceRef.current, skipActive)
-    }, 0)
-  }, [parseAndRender, syncFromDom])
+    lastFingerprints.current = newFps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseDirRef])
+
+  // ---- 全量渲染（初始化 / 切换文件）----
+  const fullRender = useCallback((blocks: Block[]) => {
+    const host = hostRef.current
+    if (!host) return
+
+    const savedScrollTop = host.scrollTop
+
+    try {
+      updatingRef.current = true
+      host.innerHTML = ''
+
+      for (let i = 0; i < blocks.length; i++) {
+        host.appendChild(createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef))
+      }
+      lastFingerprints.current = blocks.map(b => blockFingerprint(b))
+    } finally {
+      updatingRef.current = false
+    }
+
+    host.scrollTop = savedScrollTop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseDirRef])
 
   // ---- Cmd/Ctrl+S 保存 ----
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -141,139 +259,47 @@ export function MarkdownEditor({
     }
   }, [onSaveRef, syncFromDom])
 
-  // ---- Block 渲染 ----
-  const renderBlocks = useCallback((blocks: Block[], skipActive?: boolean) => {
-    const host = hostRef.current
-    if (!host) return
-
-    // 找到当前正在编辑的 block 元素
-    const activeBlockEl = skipActive ? findActiveBlockElement(host) : null
-    const activeCacheKey = activeBlockEl?.dataset?.cacheKey ?? null
-    const activeIndex = activeBlockEl
-      ? Array.from(host.children).indexOf(activeBlockEl)
-      : -1
-
-    if (skipActive && isHostEditing(host) && !activeBlockEl) {
-      return
-    }
-
-    // 保存焦点 block 的 DOM 引用（如果有焦点）
-    let savedActiveNode: HTMLElement | null = null
-    if (activeBlockEl && activeCacheKey) {
-      savedActiveNode = activeBlockEl
-    }
-
-    try {
-      updatingRef.current = true
-
-      // 清空所有现有 DOM（焦点 block 除外）
-      const existingChildren = Array.from(host.children) as HTMLElement[]
-      for (const child of existingChildren) {
-        if (child === savedActiveNode) continue
-        child.remove()
-      }
-
-      // 清空渲染缓存
-      renderCache.current.clear()
-
-      // 重新创建所有 block 的 DOM
-      const fragment = document.createDocumentFragment()
-      for (let i = 0; i < blocks.length; i++) {
-        const block = blocks[i]
-        const key = blockKey(block, i)
-
-        // 焦点 block 保留原 DOM
-        if (
-          savedActiveNode
-          && (key === activeCacheKey || i === activeIndex)
-        ) {
-          savedActiveNode.dataset.cacheKey = key
-          renderCache.current.set(key, savedActiveNode)
-          fragment.appendChild(savedActiveNode)
-          continue
-        }
-
-        const el = createBlockElement(block, baseDirRef.current, syncFromDom)
-        el.dataset.cacheKey = key
-        renderCache.current.set(key, el)
-        fragment.appendChild(el)
-      }
-
-      host.appendChild(fragment)
-    } finally {
-      updatingRef.current = false
-    }
-  }, [baseDirRef, syncFromDom])
-
-  useEffect(() => {
-    renderBlocksRef.current = renderBlocks
-  }, [renderBlocks])
-
-  // ---- 初始化 + source/doc 变化时全量渲染 ----
+  // ---- 仅在切换文件（path 变化）时全量重建 ----
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
 
-    host.innerHTML = ''
-    renderCache.current.clear()
     resetInlineCache()
     sourceRef.current = initialSource
     docRef.current = initialDoc
     lastParsedSource.current = initialSource
 
-    renderBlocks(initialDoc.blocks)
+    fullRender(initialDoc.blocks)
     onParsedRef.current(path, initialDoc)
-  }, [path, initialSource, initialDoc, renderBlocks, onParsedRef])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path])
 
-  // ---- 键盘事件 ----
+  // ---- 输入事件 ----
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
-    host.addEventListener('keydown', handleKeyDown)
-    host.addEventListener('focusout', flushParseAfterFocusChange)
-    return () => {
-      host.removeEventListener('keydown', handleKeyDown)
-      host.removeEventListener('focusout', flushParseAfterFocusChange)
+
+    const onInput = () => {
+      syncFromDom()
     }
-  }, [flushParseAfterFocusChange, handleKeyDown])
+
+    host.addEventListener('input', onInput)
+    host.addEventListener('keydown', handleKeyDown)
+    return () => {
+      host.removeEventListener('input', onInput)
+      host.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [syncFromDom, handleKeyDown])
 
   return (
     <div
       ref={hostRef}
       className="md-editor h-full overflow-auto outline-none"
       contentEditable
-      onInput={syncFromDom}
       spellCheck={false}
       suppressContentEditableWarning
     />
   )
-}
-
-function isHostEditing(host: HTMLElement): boolean {
-  const active = document.activeElement
-  if (active instanceof Node && host.contains(active)) {
-    return true
-  }
-
-  const selection = window.getSelection()
-  const anchor = selection?.anchorNode
-  return anchor instanceof Node && host.contains(anchor)
-}
-
-function findActiveBlockElement(host: HTMLElement): HTMLElement | null {
-  const active = document.activeElement
-  if (active instanceof HTMLElement && host.contains(active)) {
-    const block = active.closest('[data-block-type]')
-    if (block instanceof HTMLElement) return block
-  }
-
-  const selection = window.getSelection()
-  const anchor = selection?.anchorNode
-  if (!(anchor instanceof Node) || !host.contains(anchor)) return null
-
-  const el = anchor instanceof HTMLElement ? anchor : anchor.parentElement
-  const block = el?.closest('[data-block-type]')
-  return block instanceof HTMLElement ? block : null
 }
 
 // ---------------------------------------------------------------------------
@@ -283,9 +309,10 @@ function findActiveBlockElement(host: HTMLElement): HTMLElement | null {
 function createBlockElement(
   block: Block,
   baseDir: string | null,
-  onEdit: () => void,
+  onEditRef: React.RefObject<() => void>,
 ): HTMLElement {
   const kind = block.kind
+  const onEdit = () => onEditRef.current?.()
 
   switch (kind.type) {
     case 'heading': {
@@ -324,7 +351,7 @@ function createBlockElement(
       el.className = 'md-block md-blockquote'
       el.dataset.blockType = 'blockquote'
       for (const inner of kind.value) {
-        el.appendChild(createBlockElement(inner, baseDir, onEdit))
+        el.appendChild(createBlockElement(inner, baseDir, onEditRef))
       }
       return el
     }
@@ -337,7 +364,6 @@ function createBlockElement(
       const el = document.createElement('div')
       el.className = 'md-block md-html-block'
       el.dataset.blockType = 'html_block'
-      // 安全渲染 HTML（移除 script）
       const sanitized = kind.value.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=/gi, ' data-removed=')
       el.innerHTML = sanitized
       return el
@@ -351,7 +377,6 @@ function createBlockElement(
     }
 
     default: {
-      // 未知 block 类型，显示为段落
       const el = document.createElement('p')
       el.className = 'md-block md-paragraph'
       el.dataset.blockType = 'paragraph'
@@ -376,7 +401,6 @@ function createTableElement(
   const { rows, alignments } = data
 
   if (rows.length > 0) {
-    // Header
     const thead = document.createElement('thead')
     const headerRow = document.createElement('tr')
     for (let c = 0; c < rows[0].length; c++) {
@@ -394,7 +418,6 @@ function createTableElement(
     thead.appendChild(headerRow)
     table.appendChild(thead)
 
-    // Body
     if (rows.length > 1) {
       const tbody = document.createElement('tbody')
       for (let r = 1; r < rows.length; r++) {
@@ -423,7 +446,6 @@ function createTableElement(
   return wrap
 }
 
-/** 表格内 Tab/Shift+Tab 跳转单元格 */
 function handleTableKeyDown(e: KeyboardEvent) {
   const td = e.target as HTMLElement
   if (e.key === 'Tab') {
@@ -466,14 +488,12 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
   wrap.dataset.blockType = 'code'
   wrap.dataset.lang = lang
 
-  // 语言标签
   const label = document.createElement('div')
   label.className = 'md-code-lang'
-  label.textContent = '```' + lang
+  label.textContent = lang || 'code'
   label.dataset.mdMarker = 'true'
   wrap.appendChild(label)
 
-  // 代码区域
   const pre = document.createElement('pre')
   pre.className = 'md-code-pre'
 
@@ -531,10 +551,6 @@ function createListElement(
 }
 
 // ---------------------------------------------------------------------------
-// Block 内容增量更新
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // DOM → Markdown 序列化
 // ---------------------------------------------------------------------------
 
@@ -548,68 +564,52 @@ function serializeDomToMarkdown(host: HTMLElement): string {
     switch (blockType) {
       case 'heading': {
         const level = Number(el.dataset.level ?? 1)
-        const prefix = '#'.repeat(level) + ' '
-        lines.push(prefix + serializeInlineContent(el))
+        lines.push('#'.repeat(level) + ' ' + serializeInlineContent(el))
         break
       }
-
       case 'paragraph': {
         lines.push(serializeInlineContent(el))
         break
       }
-
       case 'code': {
         const lang = el.dataset.lang ?? ''
         lines.push('```' + lang)
-        const codeEl = el.querySelector('.md-code-content')
-        lines.push(codeEl?.textContent ?? '')
+        lines.push(el.querySelector('.md-code-content')?.textContent ?? '')
         lines.push('```')
         break
       }
-
       case 'table': {
         const table = el.querySelector('table')
         if (table) lines.push(...serializeTable(table))
         break
       }
-
       case 'blockquote': {
-        const inner = serializeDomToMarkdown(el)
-        for (const line of inner.split('\n')) {
+        for (const line of serializeDomToMarkdown(el).split('\n')) {
           lines.push('> ' + line)
         }
         break
       }
-
       case 'list': {
         lines.push(...serializeList(el))
         break
       }
-
       case 'rule': {
         lines.push('---')
         break
       }
-
       case 'html_block': {
         lines.push(el.innerHTML)
         break
       }
-
       default:
         lines.push(el.textContent ?? '')
     }
-
-    lines.push('') // block 间空行
+    lines.push('')
   }
 
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
 }
 
-/**
- * 把 contenteditable DOM 子节点序列化回 markdown inline 文本。
- * 保留 **bold**、*italic*、`code`、[link](url)、~~strikethrough~~ 等标记。
- */
 function serializeInlineContent(el: HTMLElement): string {
   let result = ''
   for (const node of Array.from(el.childNodes)) {
@@ -628,12 +628,9 @@ function serializeInlineContent(el: HTMLElement): string {
       } else if (tag === 'CODE') {
         result += '`' + serializeInlineContent(child) + '`'
       } else if (tag === 'A') {
-        const href = child.getAttribute('href') ?? ''
-        result += '[' + serializeInlineContent(child) + '](' + href + ')'
+        result += '[' + serializeInlineContent(child) + '](' + (child.getAttribute('href') ?? '') + ')'
       } else if (tag === 'IMG') {
-        const src = child.getAttribute('src') ?? ''
-        const alt = child.getAttribute('alt') ?? ''
-        result += '![' + alt + '](' + src + ')'
+        result += '![' + (child.getAttribute('alt') ?? '') + '](' + (child.getAttribute('src') ?? '') + ')'
       } else if (tag === 'BR') {
         result += '\n'
       } else {
@@ -657,44 +654,30 @@ function serializeTable(table: HTMLTableElement): string[] {
   const result: string[] = []
   const rows = Array.from(table.querySelectorAll('tr'))
   if (rows.length === 0) return result
-
-  const headerCells = rows[0].querySelectorAll('th, td')
-  const colCount = headerCells.length
-  result.push('| ' + Array.from(headerCells).map(c => serializeInlineContent(c as HTMLElement).trim()).join(' | ') + ' |')
+  const colCount = rows[0].querySelectorAll('th, td').length
+  result.push('| ' + Array.from(rows[0].querySelectorAll('th, td')).map(c => serializeInlineContent(c as HTMLElement).trim()).join(' | ') + ' |')
   result.push('| ' + Array.from({ length: colCount }, () => '---').join(' | ') + ' |')
-
   for (let i = 1; i < rows.length; i++) {
-    const cells = rows[i].querySelectorAll('td, th')
-    result.push('| ' + Array.from(cells).map(c => serializeInlineContent(c as HTMLElement).trim()).join(' | ') + ' |')
+    result.push('| ' + Array.from(rows[i].querySelectorAll('td, th')).map(c => serializeInlineContent(c as HTMLElement).trim()).join(' | ') + ' |')
   }
-
   return result
 }
 
 function serializeList(listEl: HTMLElement): string[] {
   const result: string[] = []
   const isOl = listEl.tagName === 'OL'
-  const items = listEl.querySelectorAll(':scope > li')
   let num = 1
-
-  for (const li of Array.from(items)) {
+  for (const li of Array.from(listEl.querySelectorAll(':scope > li'))) {
     const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
     const textEl = li.querySelector('.md-list-text') ?? li
     const text = serializeInlineContent(textEl as HTMLElement)
-
-    let prefix: string
     if (checkbox) {
-      const mark = checkbox.checked ? '[x]' : '[ ]'
-      prefix = `- ${mark} `
+      result.push(`- ${checkbox.checked ? '[x]' : '[ ]'} ${text}`)
     } else if (isOl) {
-      prefix = `${num}. `
-      num++
+      result.push(`${num++}. ${text}`)
     } else {
-      prefix = '- '
+      result.push(`- ${text}`)
     }
-
-    result.push(prefix + text)
   }
-
   return result
 }

@@ -5,24 +5,19 @@
 项目里目前有两套独立的 markdown 渲染管线，互不复用，editor 这套不稳定。
 
 | 维度 | Editor 渲染 | Chat 渲染 |
-|---|---|---|
+| --- | --- | --- |
 | 入口 | `MarkdownRenderer::render_visual_line(vl, ...)` | `markdown_to_lines(md, w, theme) -> Vec<Line>` |
-| Parser | 手写最小扫描器（`find('*')`、`split('|')`） | `pulldown-cmark`（CommonMark / GFM 扩展） |
+| Parser | 手写最小扫描器（`find('*')`、`split(' | ')`） |
 | 驱动方式 | 按 `VisualLine` 逐行渲染 | 整文档一次性 |
 | 上下文 | 光标、搜索高亮、insert/normal 模式 | 无状态 |
 | 位置 | `src/tui/editor_core/renderer/*` | `src/markdown/*` |
-| 已共享 | `highlight_code_line`、`EditorTheme::from(&Theme)` |
+| 已共享 | `highlight_code_line`、`EditorTheme::from(&Theme)` |  |
 
 ### Editor 侧的根因 bug
 
-1. **表格单元格按纯文本处理**（`renderer/table.rs`）
-   `parse_table_cells -> wrap_text -> Span::styled(...)`，单元格里的 `**bold**`、`` `code` ``、链接、删除线全部失效。
-
-2. **`split('|')` 切分**
-   不处理转义 `\|`、code span 内的 `|`，cell 边界不可信。
-
-3. **inline parser 是 `find('*') / find('`')` 的最小扫描**
-   不处理 CommonMark delimiter rules、不支持多反引号 code span、不处理嵌套与转义、对中文标点边界判错。这是 `**xx**` 不稳定的直接原因。
+1. **表格单元格按纯文本处理**（`renderer/table.rs`） `parse_table_cells -> wrap_text -> Span::styled(...)`，单元格里的 `**bold**`、`code`、链接、删除线全部失效。
+2. **`split('|')` 切分** 不处理转义 `\|`、code span 内的 `|`，cell 边界不可信。
+3. **inline parser 是 `find('*') / find('`')`的最小扫描** 不处理 CommonMark delimiter rules、不支持多反引号 code span、不处理嵌套与转义、对中文标点边界判错。这是`**xx**` 不稳定的直接原因。
 
 ## 目标
 
@@ -60,6 +55,7 @@ src/markdown/
 │   ├── list.rs
 │   └── blockquote.rs
 └── block_index.rs     # source_line -> block idx / block ranges
+
 ```
 
 ## 关键抽象
@@ -93,6 +89,7 @@ struct Block {
     source: SourceRange,
     kind: BlockKind,
 }
+
 ```
 
 注意：`source line -> block` 只能回答“这行源码属于哪个 block”，**不能**回答“这行最终显示第几行”。后者必须由渲染层另建索引。
@@ -103,7 +100,7 @@ struct Block {
 
 这样：
 
-- 表格里的 `**bold**`、`` `code` ``、链接天然可用
+- 表格里的 `**bold**`、`code`、链接天然可用
 - CommonMark delimiter rules 全部由 `pulldown-cmark` 负责
 - editor / chat 不再维护两套 inline 识别逻辑
 
@@ -116,6 +113,7 @@ chat 继续走“整文档 width-aware 渲染”：
 ```rust
 parse(md) -> ParsedDocument
 render_document_wrapped(&doc, &ChatMdStyle, width) -> Vec<Line>
+
 ```
 
 chat 这一侧允许共享层决定：
@@ -147,6 +145,7 @@ editor 的共享层入口应是下面这种级别，而不是 `render_document_w
 
 ```rust
 render_block_primary_rows(&block, &EditorMdStyle, ctx) -> RenderedBlock
+
 ```
 
 其中 `RenderedBlock` 需要同时包含：
@@ -183,12 +182,14 @@ struct RenderedBlock {
 struct RenderedRowRef {
     source_line: Option<usize>,
 }
+
 ```
 
 如果 editor 需要根据逻辑行回查“该行主显示内容”，还需要额外维护：
 
 ```rust
 line_to_render_rows: Vec<Vec<(block_idx, rendered_row_idx)>>
+
 ```
 
 这才足够支持：
@@ -290,7 +291,7 @@ editor 里的文本修改都是自己驱动的，直接维护单调递增 `revis
 
 **直接修复**：
 
-- 表格里 `**bold**` / `` `code` `` / 链接不渲染
+- 表格里 `**bold**` / `code` / 链接不渲染
 - `split('|')` 切坏 cell
 
 ### Step 6：迁 heading / list / blockquote
@@ -356,7 +357,7 @@ editor 自己继续负责：
 - [x] Step 1：模块落位 / 搬目录
 - [x] **Step 2：抽 `MdStyle` trait** — 新增 `src/markdown/theme.rs` 定义 trait + `impl MdStyle for crate::theme::Theme`；parser/parser-text/parser-table 改为通过 trait method 取色；`markdown_to_lines` 签名改为 `theme: &dyn MdStyle`，5 处调用方零改动（`&Theme` 自动 unsizing coerce）；parser.rs 已彻底切断对 `chat::Theme` 的直接引用；`cargo clippy --lib --bins -D warnings` 干净，`cargo test --lib` 290 passed。
 - [x] **Step 3：parser 输出 IR，chat 改走共享 render** — `ir.rs` + `render/` 模块 + parser 纯解析 + facade；290 tests passed
-- [x] **Step 4：editor 接入共享层** — `EditorTheme` 实现 `MdStyle` trait；parser 使用 `into_offset_iter()` 填充精确 `SourceRange`；新建 `markdown_cache.rs`（全文解析 + line-to-block 映射 + 懒渲染缓存）；editor `renderer/inline.rs` 改用共享层 `render_inlines`（基于 pulldown-cmark 解析，正确处理 `**bold**`/`*italic*`/`~~strike~~`/`` `code` ``/链接的嵌套和边界）；`cargo clippy -D warnings` 干净，`cargo test --lib` 292 passed。
+- [x] **Step 4：editor 接入共享层** — `EditorTheme` 实现 `MdStyle` trait；parser 使用 `into_offset_iter()` 填充精确 `SourceRange`；新建 `markdown_cache.rs`（全文解析 + line-to-block 映射 + 懒渲染缓存）；editor `renderer/inline.rs` 改用共享层 `render_inlines`（基于 pulldown-cmark 解析，正确处理 `**bold**`/`*italic*`/`~~strike~~`/`code`/链接的嵌套和边界）；`cargo clippy -D warnings` 干净，`cargo test --lib` 292 passed。
 - [x] **Step 5：迁表格** — editor `renderer/table.rs` 改用 `parse_table_from_source()` 解析表格源码为 `TableData` IR（含内联语法支持），调用共享层 `render_table()` 一次性渲染整个表格；删除旧 `parse_table_cells`/`is_table_separator_line` 等纯文本处理代码；editor 仅在表格首行（`start_idx`）触发完整渲染，后续行返回 `vec![]`；`cargo clippy -D warnings` 干净，`cargo test --lib` 298 passed。
 - [x] **Step 6：迁 heading / list / blockquote** — 分析结论：**不需要迁移**。editor 的 heading/list/blockquote 已通过 `render_inline()` 走共享层解析内联语法（`parse_inline_text()` + `render_inlines()`）；共享层 block 渲染（含分隔线/前后空行/`|` prefix）不适合 editor 的紧凑逐行风格；强制迁移会破坏 editor 显示效果。
 - [x] **Step 7：性能验证与调优** — 在 `inline.rs` 和 `parser.rs` 添加性能测试；Release 模式下 `parse_inline_text()` 单次 1.0μs（50行帧率 20000+ fps），`parse_table_from_source()` 单次 7.7μs；总渲染开销约 50-60μs/帧，远低于 16ms（60fps）帧预算；**结论：性能完全满足需求，无需缓存优化**；`cargo clippy -D warnings` 干净，`cargo test` 300 passed。
@@ -366,8 +367,6 @@ editor 自己继续负责：
 - **性能测试方法**：在 `renderer/inline.rs` 添加 `bench_parse_inline_throughput()`，在 `parser.rs` 添加 `bench_parse_table_from_source()`
 - **测试场景**：模拟一屏 20 行 × 100 帧 = 2000 次解析（inline），5 行表格 × 1000 次 = 1000 次解析（table）
 - **Release 模式结果**：
-  - `parse_inline_text()`: 单次 1.0 μs，50 行帧率 20000+ fps
-  - `parse_table_from_source()`: 单次 7.7 μs（仅表格首行触发）
 - **结论**：总渲染开销约 50-60μs/帧，远低于 16ms（60fps）帧预算，无需缓存优化
 - **保留 `markdown_cache.rs`**：作为未来全文缓存优化的基础设施，标注 `#![allow(dead_code)]` + TODO
 
@@ -376,7 +375,7 @@ editor 自己继续负责：
 **所有 7 个步骤已完成**，Editor markdown 渲染已全部迁移到共享层：
 
 | Block 类型 | 共享层 API | 状态 |
-|-----------|-----------|-----|
+| --- | --- | --- |
 | Paragraph | `parse_inline_text()` + `render_inlines()` | ✓ |
 | Heading | `parse_inline_text()` + `render_inlines()` | ✓ |
 | List | `parse_inline_text()` + `render_inlines()` | ✓ |
@@ -388,7 +387,8 @@ editor 自己继续负责：
 | Inline | `parse_inline_text()` + `render_inlines()` | ✓ Step 4 |
 
 **修复的问题**：
-1. 表格单元格内 `**bold**` / `` `code` `` / 链接现在正确渲染
+
+1. 表格单元格内 `**bold**` / `code` / 链接现在正确渲染
 2. `split('|')` 误切 code span 内管道符的问题已修复
 3. `**bold**` 在中文 / 标点 / 嵌套场景下的不稳定渲染已修复
 
@@ -397,7 +397,6 @@ editor 自己继续负责：
 - **未引入显式 `ChatMdStyle` 包装类型**：因为 `Theme` 是顶层 `crate::theme::Theme`（不属于 chat 模块），直接 `impl MdStyle for Theme` 即可，无需 wrapper struct。这与规划中"chat 侧实现 ChatMdStyle"的语义等价，但避免一层冗余。后续 editor 侧实现 `EditorMdStyle` 时同理：要么 `impl MdStyle for EditorTheme`，要么写专用 struct，按届时需要选择。
 - **残留依赖**：`src/markdown/highlight.rs` 和 `src/markdown/theme.rs` 仍然 `use crate::tui::editor_core::EditorTheme`。Step 3 起会引入独立的 `SyntaxHighlightTheme` 抽象彻底消除该跨模块依赖。
 - **测试依赖修复**：`parser/tests.rs` 之前通过 `use super::*` 隐式继承 parser 的私有 `use Theme`；切断后改为 tests.rs 自己显式 import。
-
 
 ### Step 3 实施备注
 
@@ -434,19 +433,21 @@ editor 自己继续负责：
 - **新增 `parse_table_from_source()`**：在 `markdown/parser.rs` 添加公共函数，接收 `&[&str]` 表格源码行，利用 pulldown-cmark 解析为 `TableData` IR（单元格内容为 `Vec<Inline>`，天然支持 bold/code/emphasis 等内联语法）
 - **editor 表格渲染简化**：`render_table_rows()` 仅在表格首行（`start_idx`）时调用 `parse_table_from_source()` + 共享层 `render_table()` 一次性渲染完整表格，后续行返回 `vec![]`
 - **删除旧代码**：`parse_table_cells()`（纯文本 `split('|')` 切分）、`is_table_separator_line()` 等废弃函数已移除
-- **直接修复**：表格单元格内的 `**bold**` / `` `code` `` / 链接现在正确渲染；`split('|')` 误切 code span 内管道符的问题不复存在
+- **直接修复**：表格单元格内的 `**bold**` / `code` / 链接现在正确渲染；`split('|')` 误切 code span 内管道符的问题不复存在
 
 ---
 
 ## Step 7：折行 + 光标 + 渲染的坐标系对齐（editor）
 
 > 这一步没有引入新的 markdown 解析能力，目的是把 editor 里**折行算法 / 光标行为 / 渲染产物**三者的坐标系对齐。下面是几条关键设计，给后人改这块时少踩坑。
+> 
 
 ### 关键设计 1：光标行 vs 其它行 = 严格跟随渲染端口径
 
 editor 的 Typora 风格规则就一条：
 
 > **只有 Insert 模式 + 光标所在行**显示 markdown 源码，其它一律显示渲染产物。
+> 
 
 整个改造里所有"光标行有没有特殊处理"的地方都必须**严格跟随这一条**，否则就会出错：
 
@@ -460,10 +461,10 @@ editor 的 Typora 风格规则就一条：
 editor 这块至少要区分三个坐标系，永远不要在渲染端事后猜：
 
 | 坐标系 | 谁用 | 在 `VisualLine` 上的字段 |
-|---|---|---|
-| **源码 char 索引** | 光标、选区、鼠标定位、vim 移动 | `start_col` / `end_col` |
-| **渲染产物 char 索引** | 渲染端切 `render_inline(整行)` 的 spans | `visible_start_char` / `visible_end_char` |
-| **显示列宽** | 折行决策、对齐右边框 | `display_width`（与 `width` 比较） |
+| --- | --- | --- |
+| 源码 char 索引**** | 光标、选区、鼠标定位、vim 移动 | `start_col` / `end_col` |
+| 渲染产物 char 索引**** | 渲染端切 `render_inline(整行)` 的 spans | `visible_start_char` / `visible_end_char` |
+| 显示列宽**** | 折行决策、对齐右边框 | `display_width`（与 `width` 比较） |
 
 `wrap_engine.wrap_line_inner` 在遍历源码 char 的同时同步推进这三个量：
 
@@ -517,3 +518,4 @@ editor 这块至少要区分三个坐标系，永远不要在渲染端事后猜�
 ### 一句话总结
 
 > Step 7 的本质：**让 wrap_engine 和 renderer 用同一个"渲染产物坐标系"对话**——wrap 算出每段视觉行在渲染产物里的 char 区间，renderer 拿区间去切整行渲染产物。光标行为则严格跟随渲染端的 Insert/Normal 口径，所有"光标行特殊"的逻辑只在 Insert 模式生效，Normal 模式下整篇都是渲染产物，光标只是一个叠加。
+>

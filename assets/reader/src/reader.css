@@ -1,5 +1,5 @@
 /*
- * Reader SPA 专用样式入口（Typora SeeYue Dark 风）。
+ * Reader SPA 专用样式入口（Anthropic Light — 米白赭陶风）。
  *
  * 所有组件样式已迁移为 Tailwind CSS v4 utilities。
  * 本文件仅保留：
@@ -10,42 +10,42 @@
  *   - @keyframes
  */
 @import 'tailwindcss';
+@import './editor/editor.css';
 
 @theme {
   /* —— 背景层级（从最深到最浅） —— */
-  --color-seeyue-bg: #2e3440;
-  --color-seeyue-bg-deep: #1f232a;
-  --color-seeyue-sidebar: #2b303b;
-  --color-seeyue-sidebar-strong: #3b4252;
-  --color-seeyue-panel: #3b4252;
-  --color-seeyue-elevated: #434c5e;
+  --color-seeyue-bg: #faf6f1;
+  --color-seeyue-bg-deep: #f0ebe4;
+  --color-seeyue-sidebar: #f5f0ea;
+  --color-seeyue-sidebar-strong: #ede4d8;
+  --color-seeyue-panel: #ede4d8;
+  --color-seeyue-elevated: #e8e0d5;
 
   /* —— 边框 —— */
-  --color-seeyue-border: #3b4252;
-  --color-seeyue-border-strong: #4c566a;
-  --color-seeyue-border-dim: rgba(76, 86, 106, 0.5);
+  --color-seeyue-border: #ddd4c8;
+  --color-seeyue-border-strong: #c8bfb2;
+  --color-seeyue-border-dim: rgba(200, 191, 178, 0.5);
 
   /* —— 文本 —— */
-  --color-seeyue-fg: #d8dee9;
-  --color-seeyue-fg-strong: #eceff4;
-  --color-seeyue-fg-muted: rgba(236, 239, 244, 0.7);
-  --color-seeyue-fg-dim: rgba(236, 239, 244, 0.45);
+  --color-seeyue-fg: #3d3630;
+  --color-seeyue-fg-strong: #1a1612;
+  --color-seeyue-fg-muted: #6b5e52;
+  --color-seeyue-fg-dim: #8a7e72;
 
   /* —— 强调色 —— */
-  --color-seeyue-accent: #88c0d0;
-  --color-seeyue-accent-strong: #5e81ac;
-  --color-seeyue-accent-soft: rgba(94, 129, 172, 0.22);
-  --color-seeyue-accent-mute: rgba(136, 192, 208, 0.15);
-  --color-seeyue-success: #a3be8c;
-  --color-seeyue-warn: #d08770;
-  --color-seeyue-danger: #bf616a;
-  --color-seeyue-purple: #b48ead;
+  --color-seeyue-accent: #b4654a;
+  --color-seeyue-accent-strong: #cc785c;
+  --color-seeyue-accent-soft: rgba(204, 120, 92, 0.12);
+  --color-seeyue-accent-mute: rgba(180, 101, 74, 0.08);
+  --color-seeyue-success: #4a7a50;
+  --color-seeyue-warn: #a07830;
+  --color-seeyue-danger: #b14040;
+  --color-seeyue-purple: #7a5ea0;
 
   /* —— 代码 —— */
-  --color-seeyue-code-fg: #88c0d0;
-  --color-seeyue-code-bg: #1f232a;
-  --color-seeyue-code-border: #3b4252;
-  --color-seeyue-inline-code-bg: #24282f;
+  --color-seeyue-code-bg: #f0ebe4;
+  --color-seeyue-code-border: #ddd4c8;
+  --color-seeyue-inline-code-bg: #ede4d8;
 
   /* —— 字体栈 —— */
   --font-cjk:
@@ -81,8 +81,8 @@
   }
 
   ::selection {
-    background: rgba(94, 129, 172, 0.45);
-    color: #eceff4;
+    background: rgba(204, 120, 92, 0.25);
+    color: var(--color-seeyue-fg-strong);
   }
 
   ::-webkit-scrollbar {
@@ -93,13 +93,13 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(216, 222, 233, 0.18);
+    background: rgba(107, 94, 82, 0.15);
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(216, 222, 233, 0.3);
+    background: rgba(107, 94, 82, 0.28);
     background-clip: padding-box;
   }
 
@@ -132,20 +132,20 @@
     color: var(--color-seeyue-accent);
   }
   .seeyue-prose blockquote {
-    background: rgba(255, 255, 255, 0.02);
-    border-left-color: var(--color-seeyue-border-strong);
+    background: rgba(204, 120, 92, 0.04);
+    border-left-color: var(--color-seeyue-accent);
   }
   .seeyue-prose table tbody tr:nth-child(even) td {
-    background: rgba(255, 255, 255, 0.025);
+    background: rgba(200, 191, 178, 0.2);
   }
   .seeyue-prose :not(pre) > code {
-    color: var(--color-seeyue-code-fg);
+    color: var(--color-seeyue-purple);
     background: var(--color-seeyue-inline-code-bg);
     border: 1px solid var(--color-seeyue-code-border);
-    border-radius: 6px;
-    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    padding: 0.05em 0.35em;
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: 0.88em;
   }
   .seeyue-prose a.seeyue-link::before {
     content: '\1F517';
@@ -157,7 +157,7 @@
     font-family: var(--font-mono);
     font-size: 0.92em;
     text-decoration: underline;
-    text-decoration-color: rgba(136, 192, 208, 0.4);
+    text-decoration-color: rgba(180, 101, 74, 0.3);
     text-underline-offset: 3px;
   }
   .seeyue-prose a.seeyue-link:hover {
@@ -166,7 +166,7 @@
   .seeyue-prose hr {
     border: 0;
     border-top: 1px solid var(--color-seeyue-border);
-    opacity: 0.5;
+    opacity: 0.6;
     margin: 2.5em 0;
   }
 
@@ -183,12 +183,12 @@
     content: '';
     display: block;
     height: 28px;
-    background: var(--color-seeyue-panel);
+    background: var(--color-seeyue-code-bg);
     border-bottom: 1px solid var(--color-seeyue-code-border);
     background-image:
-      radial-gradient(circle at 14px 14px, #ff5f57 4.5px, transparent 5px),
-      radial-gradient(circle at 32px 14px, #febc2e 4.5px, transparent 5px),
-      radial-gradient(circle at 50px 14px, #28c840 4.5px, transparent 5px);
+      radial-gradient(circle at 14px 14px, #e05050 4px, transparent 4.5px),
+      radial-gradient(circle at 30px 14px, #c8a830 4px, transparent 4.5px),
+      radial-gradient(circle at 46px 14px, #50a860 4px, transparent 4.5px);
     background-repeat: no-repeat;
   }
   .seeyue-codeblock-lang {
@@ -199,7 +199,7 @@
     font-family: var(--font-mono);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--color-seeyue-fg-muted);
+    color: var(--color-seeyue-fg-dim);
     z-index: 1;
   }
 }

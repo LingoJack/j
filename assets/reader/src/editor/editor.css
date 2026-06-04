@@ -1,244 +1,192 @@
 /**
- * 自研 Markdown 编辑器样式。
+ * 自研 Markdown 编辑器样式（Anthropic Light — 米白赭陶风）。
  *
- * 所有样式使用 Tailwind v4 的 @theme 变量。
- * 仅保留 @layer components 中无法用 utility 表达的深层选择器。
+ * 使用 Tailwind v4 的 @apply + CSS 变量。
+ * 本文件由 reader.css 导入，共享同一 Tailwind 上下文。
  */
 
-/* ---- 编辑器容器 ---- */
-.md-editor {
-  padding: 24px 32px;
-  font-family: var(--font-seeyue-cjk, var(--font-seeyue-sans, sans-serif));
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--color-seeyue-fg);
-  caret-color: var(--color-seeyue-accent);
-}
+@layer components {
+  /* ---- 编辑器容器 ---- */
+  .md-editor {
+    @apply mx-auto max-w-[820px] px-12 py-8 text-[15px] leading-[1.8] text-seeyue-fg outline-none;
+    font-family: var(--font-cjk);
+    caret-color: var(--color-seeyue-accent);
+  }
 
-.md-editor:focus {
-  outline: none;
-}
+  /* ---- Block 基础 ---- */
+  .md-block {
+    @apply mb-2.5 outline-none;
+  }
 
-/* ---- Block 基础 ---- */
-.md-block {
-  margin-bottom: 12px;
-}
+  /* ---- Markdown 标识（隐藏，实现富文本渲染效果） ---- */
+  .md-marker,
+  .md-code-fence-end {
+    @apply hidden;
+  }
+  .md-marker {
+    @apply select-none;
+  }
 
-.md-block:focus {
-  outline: none;
-}
+  /* ---- Heading ---- */
+  .md-heading {
+    @apply font-bold leading-[1.35] text-seeyue-fg-strong tracking-tight;
+    margin-top: 24px;
+    margin-bottom: 10px;
 
-/* ---- Markdown 标识 ---- */
-.md-marker,
-.md-code-fence-end {
-  color: var(--color-seeyue-fg-dim);
-  font-family: var(--font-seeyue-mono, monospace);
-  font-weight: 400;
-  opacity: 0.68;
-}
+    &[data-level='1'] {
+      @apply text-[28px] border-b-2 border-seeyue-border;
+      margin-top: 0;
+      padding-bottom: 8px;
+    }
+    &[data-level='2'] {
+      @apply text-[22px] border-b border-seeyue-border;
+      margin-top: 28px;
+      padding-bottom: 6px;
+    }
+    &[data-level='3'] { @apply text-lg; }
+    &[data-level='4'] { @apply text-base; }
+    &[data-level='5'] { @apply text-[15px] text-seeyue-fg-muted; }
+    &[data-level='6'] { @apply text-sm text-seeyue-fg-dim italic; }
+  }
 
-.md-marker {
-  user-select: none;
-}
+  /* ---- Paragraph ---- */
+  .md-paragraph {
+    @apply mb-3;
+  }
 
-/* ---- Heading ---- */
-.md-heading {
-  font-weight: 600;
-  line-height: 1.35;
-  margin-top: 20px;
-  margin-bottom: 10px;
-  color: var(--color-seeyue-fg-strong);
-}
+  /* ---- Inline 元素 ---- */
+  .md-editor strong {
+    @apply font-semibold text-seeyue-fg-strong;
+  }
+  .md-editor em {
+    @apply italic text-seeyue-fg-muted;
+  }
+  .md-editor del {
+    @apply line-through opacity-55;
+  }
+  .md-editor code {
+    @apply rounded border border-seeyue-code-border bg-seeyue-inline-code-bg text-seeyue-purple;
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    padding: 2px 5px;
+  }
+  .md-editor a {
+    @apply text-seeyue-accent no-underline;
+    border-bottom: 1px solid rgba(180, 101, 74, 0.25);
+    transition: color 0.15s, border-color 0.15s;
 
-.md-heading[data-level="1"] { font-size: 26px; margin-top: 28px; }
-.md-heading[data-level="2"] { font-size: 21px; margin-top: 24px; padding-bottom: 6px; border-bottom: 1px solid var(--color-seeyue-border); }
-.md-heading[data-level="3"] { font-size: 17px; }
-.md-heading[data-level="4"] { font-size: 15px; }
-.md-heading[data-level="5"] { font-size: 14px; }
-.md-heading[data-level="6"] { font-size: 13px; color: var(--color-seeyue-fg-muted); }
+    &:hover {
+      @apply text-seeyue-accent-strong;
+      border-bottom-color: var(--color-seeyue-accent-strong);
+    }
+  }
+  .md-editor img {
+    @apply max-w-full rounded-md;
+    box-shadow: 0 2px 12px rgba(26, 22, 18, 0.08);
+  }
 
-/* ---- Paragraph ---- */
-.md-paragraph {
-  margin-bottom: 12px;
-}
+  /* ---- 代码块 ---- */
+  .md-code-wrap {
+    @apply relative overflow-hidden rounded-lg border border-seeyue-code-border bg-seeyue-code-bg;
+    margin: 16px 0;
+  }
+  .md-code-lang {
+    @apply select-none border-b border-seeyue-code-border bg-seeyue-code-bg text-[11px] uppercase tracking-wider text-seeyue-fg-dim;
+    font-family: var(--font-mono);
+    padding: 6px 16px 4px;
+    letter-spacing: 0.05em;
+  }
+  .md-code-pre {
+    @apply m-0 overflow-x-auto bg-transparent;
+    padding: 14px 20px;
+  }
+  .md-code-content {
+    @apply block whitespace-pre text-[13px] leading-[1.65] text-seeyue-fg outline-none;
+    font-family: var(--font-mono);
+  }
 
-/* ---- Inline 元素 ---- */
-.md-editor strong {
-  font-weight: 650;
-  color: var(--color-seeyue-fg-strong);
-}
+  /* ---- 表格 ---- */
+  .md-table-wrap {
+    @apply overflow-x-auto rounded-md border border-seeyue-border;
+    margin: 16px 0;
+  }
+  .md-table {
+    @apply w-full border-collapse text-[13.5px];
+  }
+  .md-table th,
+  .md-table td {
+    @apply border border-seeyue-border text-left outline-none;
+    padding: 8px 14px;
+    min-width: 60px;
+  }
+  .md-table th {
+    @apply bg-seeyue-panel font-semibold text-seeyue-fg-strong;
+  }
+  .md-table td {
+    @apply bg-seeyue-bg;
+  }
+  .md-table tr:nth-child(even) td {
+    background: rgba(200, 191, 178, 0.15);
+  }
+  .md-table td:focus,
+  .md-table th:focus {
+    @apply bg-seeyue-elevated;
+    box-shadow: inset 0 0 0 2px var(--color-seeyue-accent);
+  }
 
-.md-editor em {
-  font-style: italic;
-}
+  /* ---- 引用块 ---- */
+  .md-blockquote {
+    @apply rounded-r-md bg-seeyue-accent-mute text-seeyue-fg-muted;
+    border-left: 3px solid var(--color-seeyue-accent);
+    padding: 8px 16px;
+    margin: 16px 0;
+  }
+  .md-blockquote .md-block {
+    @apply mb-1.5;
+  }
 
-.md-editor del {
-  text-decoration: line-through;
-  opacity: 0.7;
-}
+  /* ---- 列表 ---- */
+  .md-list {
+    padding-left: 24px;
+    margin: 10px 0;
+  }
+  .md-list-item {
+    @apply mb-1 flex items-start gap-1.5;
+  }
+  .md-list-text {
+    @apply flex-1 outline-none;
+  }
+  .md-checkbox {
+    margin-top: 5px;
+    accent-color: var(--color-seeyue-success);
+  }
+  .md-task-item {
+    @apply list-none;
+    margin-left: -20px;
+  }
 
-.md-editor code {
-  font-family: var(--font-seeyue-mono, monospace);
-  font-size: 0.88em;
-  background: var(--color-seeyue-elevated);
-  padding: 2px 5px;
-  border-radius: 3px;
-  color: var(--color-seeyue-warn);
-}
+  /* ---- HR ---- */
+  .md-hr {
+    @apply border-0 bg-seeyue-border-strong;
+    height: 1px;
+    margin: 28px 0;
+  }
 
-.md-editor a {
-  color: var(--color-seeyue-accent);
-  text-decoration: none;
-  border-bottom: 1px solid rgba(136, 192, 208, 0.25);
-  transition: color 0.15s, border-color 0.15s;
-}
+  /* ---- Selection ---- */
+  .md-editor ::selection {
+    background: rgba(204, 120, 92, 0.2);
+  }
 
-.md-editor a:hover {
-  color: var(--color-seeyue-accent-strong);
-  border-bottom-color: var(--color-seeyue-accent-strong);
-}
-
-.md-editor img {
-  max-width: 100%;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-}
-
-/* ---- 代码块 ---- */
-.md-code-wrap {
-  background: var(--color-seeyue-bg-deep);
-  border: 1px solid var(--color-seeyue-border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin: 14px 0;
-}
-
-.md-code-lang {
-  padding: 6px 14px;
-  font-size: 11.5px;
-  color: var(--color-seeyue-fg-dim);
-  background: var(--color-seeyue-sidebar);
-  border-bottom: 1px solid var(--color-seeyue-border);
-  font-family: var(--font-seeyue-mono, monospace);
-  user-select: none;
-}
-
-.md-code-fence-end {
-  padding: 0 14px 8px;
-  font-size: 11.5px;
-  background: var(--color-seeyue-bg-deep);
-  user-select: none;
-}
-
-.md-code-pre {
-  margin: 0;
-  padding: 14px 18px;
-  overflow-x: auto;
-  background: transparent;
-}
-
-.md-code-content {
-  font-family: var(--font-seeyue-mono, monospace);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--color-seeyue-fg);
-  white-space: pre;
-  display: block;
-  outline: none;
-}
-
-/* ---- 表格 ---- */
-.md-table-wrap {
-  overflow-x: auto;
-  margin: 14px 0;
-}
-
-.md-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13.5px;
-}
-
-.md-table th,
-.md-table td {
-  border: 1px solid var(--color-seeyue-border);
-  padding: 8px 12px;
-  text-align: left;
-  outline: none;
-  min-width: 60px;
-}
-
-.md-table th {
-  background: var(--color-seeyue-sidebar-strong);
-  font-weight: 600;
-  color: var(--color-seeyue-fg-strong);
-}
-
-.md-table td {
-  background: var(--color-seeyue-bg);
-}
-
-.md-table tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.md-table td:focus,
-.md-table th:focus {
-  background: var(--color-seeyue-elevated);
-  box-shadow: inset 0 0 0 2px var(--color-seeyue-accent);
-}
-
-/* ---- 引用块 ---- */
-.md-blockquote {
-  border-left: 3px solid var(--color-seeyue-accent);
-  padding-left: 16px;
-  margin: 14px 0;
-  color: var(--color-seeyue-fg-muted);
-  background: rgba(136, 192, 208, 0.04);
-  border-radius: 0 6px 6px 0;
-}
-
-.md-blockquote .md-block {
-  margin-bottom: 6px;
-}
-
-/* ---- 列表 ---- */
-.md-list {
-  padding-left: 24px;
-  margin: 10px 0;
-}
-
-.md-list-item {
-  margin-bottom: 4px;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.md-list-text {
-  flex: 1;
-  outline: none;
-}
-
-.md-checkbox {
-  margin-top: 5px;
-  accent-color: var(--color-seeyue-success);
-}
-
-.md-task-item {
-  list-style: none;
-  margin-left: -20px;
-}
-
-/* ---- HR ---- */
-.md-hr {
-  border: none;
-  height: 1px;
-  background: var(--color-seeyue-border);
-  margin: 24px 0;
-}
-
-/* ---- Selection ---- */
-.md-editor ::selection {
-  background: rgba(136, 192, 208, 0.22);
+  /* ---- 嵌套 ---- */
+  .md-blockquote .md-blockquote {
+    border-left-color: var(--color-seeyue-border-strong);
+    @apply bg-transparent;
+  }
+  .md-list .md-list {
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  .md-blockquote .md-list {
+    margin: 4px 0;
+  }
 }

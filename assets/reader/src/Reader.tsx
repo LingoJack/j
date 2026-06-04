@@ -101,6 +101,8 @@ export function Reader() {
   // —— 高频内容用 ref 而不是 state，避免按键触发整树 re-render ——
   /** 每个 tab 的最新文本内容；按 path 索引 */
   const sourcesRef = useRef<Record<string, string>>({})
+  /** 每个文件的原始内容（打开/保存时快照），用于 dirty 判断 */
+  const originalSourcesRef = useRef<Record<string, string>>({})
   /** 每个 markdown tab 的最新 IR；按 path 索引 */
   const docsRef = useRef<Record<string, ParsedDocument>>({})
   /** 每个 image tab 的元信息（mime / size）；按 path 索引 */
@@ -146,7 +148,7 @@ export function Reader() {
         })) as RenderedDoc
         if (cancelled) return
 
-        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
+        ingestDoc(doc, sourcesRef, docsRef, imagesRef, originalSourcesRef)
         setTabs([docToTab(doc)])
         setActiveTabPath(doc.path)
         setLoadState({ kind: 'ready' })
@@ -203,15 +205,18 @@ export function Reader() {
 
   /**
    * 编辑器报告 source 变化。这是高频回调（按键级别）。
-   * 只把内容写进 ref；只有第一次 dirty 翻转时才碰 setState。
+   * 只把内容写进 ref；只有 dirty 翻转时才碰 setState。
+   * 对比原始 source 判断是否真的脏了：内容恢复原样时自动清除 dirty。
    */
   const handleSourceChange = useCallback(
     (path: string, source: string) => {
       sourcesRef.current[path] = source
+      const isDirty = source !== (originalSourcesRef.current[path] ?? '')
       setTabs((prev) => {
         const t = prev.find((x) => x.path === path)
-        if (!t || t.dirty) return prev // 已经 dirty，不再 setState
-        return prev.map((x) => (x.path === path ? { ...x, dirty: true } : x))
+        if (!t) return prev
+        if (t.dirty === isDirty) return prev // 状态没变化，不 setState
+        return prev.map((x) => (x.path === path ? { ...x, dirty: isDirty } : x))
       })
     },
     [],
@@ -256,7 +261,7 @@ export function Reader() {
               })
           return r.json()
         })) as RenderedDoc
-        ingestDoc(doc, sourcesRef, docsRef, imagesRef)
+        ingestDoc(doc, sourcesRef, docsRef, imagesRef, originalSourcesRef)
         setTabs((prev) => [...prev, docToTab(doc)])
         setActiveTabPath(doc.path)
       } catch (e) {
@@ -355,6 +360,7 @@ export function Reader() {
           throw new Error(body.error ?? `HTTP ${res.status}`)
         }
         sourcesRef.current[path] = source
+        originalSourcesRef.current[path] = source
         updateTab(path, { saving: 'idle', dirty: false, error: undefined })
         setToast({ message: '已保存', kind: 'success' })
       } catch (e) {
@@ -416,7 +422,7 @@ export function Reader() {
       const root = document.getElementById('reader-root')
       if (root) {
         root.innerHTML =
-          '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#88c0d0;font-family:system-ui;font-size:14px;">📖 reader 已退出，可以关闭此页面</div>'
+          '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#8a7e72;font-family:system-ui;font-size:14px;">reader 已退出，可以关闭此页面</div>'
       }
     }, 80)
   }, [])
@@ -538,11 +544,8 @@ export function Reader() {
       <div
         className="h-full grid bg-seeyue-bg text-seeyue-fg"
         style={{
-          // 5 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [5px 分割条]
-          //        [1fr 主区] [TOC（仅 markdown 显示）]
-          gridTemplateColumns: showToc
-            ? `44px ${sidebarWidth}px 5px 1fr ${tocCollapsed ? '28px' : '240px'}`
-            : `44px ${sidebarWidth}px 5px 1fr`,
+          // 4 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [5px 分割条] [1fr 主区]
+          gridTemplateColumns: `44px ${sidebarWidth}px 5px 1fr`,
         }}
       >
         {/* 最左：垂直活动栏 */}
@@ -575,8 +578,8 @@ export function Reader() {
           ariaLabel="调节侧栏宽度"
         />
 
-        {/* 中：Tab 条 + 编辑器顶栏 + 编辑区 */}
-        <main className="flex flex-col overflow-hidden">
+        {/* 中：Tab 条 + 编辑器顶栏 + 编辑区（TOC 浮于其上） */}
+        <main className="flex flex-col overflow-hidden relative">
           <TabBar
             tabs={tabs}
             activePath={activeTabPath}
@@ -591,7 +594,7 @@ export function Reader() {
               onCopyPath={() => copyPath(activeTab.path)}
             />
           )}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden relative">
             {activeTab ? (
               activeTab.kind === 'tool' ? (
                 <ToolHost toolId={activeTab.toolId ?? null} />
@@ -624,19 +627,16 @@ export function Reader() {
             ) : (
               <EmptyState />
             )}
+            {/* TOC：浮于内容区右侧，自然融入 */}
+            {showToc && (
+              <TableOfContents
+                headings={headings}
+                collapsed={tocCollapsed}
+                onToggleCollapsed={toggleToc}
+              />
+            )}
           </div>
         </main>
-
-        {/* 右：TOC（仅 markdown tab 显示） */}
-        {showToc && (
-          <aside className="border-l border-seeyue-border overflow-hidden">
-            <TableOfContents
-              headings={headings}
-              collapsed={tocCollapsed}
-              onToggleCollapsed={toggleToc}
-            />
-          </aside>
-        )}
 
         {/* 关闭确认 */}
         {closing && (
@@ -732,8 +732,10 @@ function ingestDoc(
   sourcesRef: React.RefObject<Record<string, string>>,
   docsRef: React.RefObject<Record<string, ParsedDocument>>,
   imagesRef: React.RefObject<Record<string, ImagePayload>>,
+  originalSourcesRef: React.RefObject<Record<string, string>>,
 ) {
   sourcesRef.current![doc.path] = doc.source
+  originalSourcesRef.current![doc.path] = doc.source
   if (doc.kind === 'markdown' && doc.payload) {
     docsRef.current![doc.path] = doc.payload as ParsedDocument
   } else if (doc.kind === 'image' && doc.payload) {
@@ -834,7 +836,7 @@ function EmptyState() {
         </div>
         <div className="flex items-center gap-2 justify-center">
           <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⇧</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌥</kbd>
           <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">←</kbd>
           <span>/</span>
           <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">→</kbd>

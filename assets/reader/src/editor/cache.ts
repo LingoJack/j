@@ -93,6 +93,18 @@ export class RenderCache {
     this.nodes.clear()
     this._lastKeys = []
   }
+
+  /** 保留指定的 key，移除不在列表中的缓存条目 */
+  retain(keys: string[]) {
+    const keep = new Set(keys)
+    for (const [key, node] of this.nodes) {
+      if (!keep.has(key)) {
+        node.remove()
+        this.nodes.delete(key)
+      }
+    }
+    this._lastKeys = keys
+  }
 }
 
 // ---------------------------------------------------------------------------
