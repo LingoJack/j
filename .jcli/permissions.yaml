@@ -157,4 +157,7 @@ allow:
 - Shell(git diff:*)
 - Shell(git show:*)
 - Shell(cd /Users/jacklingo/dev_custom/jcli/presentation/ppt:*)
+- Shell(cargo build:*)
+- Shell(cargo clippy:*)
+- Shell(cargo fmt:*)
 deny: []

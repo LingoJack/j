@@ -15,17 +15,26 @@ use std::borrow::Cow;
 
 // ========== 自定义 Hint 类型 ==========
 
-/// 仅用于展示的提示文本，不可被按键自动补全到输入行
-pub struct DisplayOnlyHint(String);
+/// REPL 提示类型：区分纯展示的 tip 和可补全的历史命令
+pub enum CopilotHint {
+    /// 纯展示的使用技巧，不可被按键自动补全到输入行
+    Tip(String),
+    /// 历史命令建议，可通过右箭头/End 等按键接受补全
+    History(String),
+}
 
-impl rustyline::hint::Hint for DisplayOnlyHint {
+impl rustyline::hint::Hint for CopilotHint {
     fn display(&self) -> &str {
-        &self.0
+        match self {
+            CopilotHint::Tip(s) | CopilotHint::History(s) => s,
+        }
     }
 
-    /// 返回 None，防止提示被自动补全（如右箭头接受 hint）
     fn completion(&self) -> Option<&str> {
-        None
+        match self {
+            CopilotHint::Tip(_) => None,
+            CopilotHint::History(s) => Some(s),
+        }
     }
 }
 
@@ -495,7 +504,7 @@ impl Completer for CopilotCompleter {
 /// 空行时展示随机使用技巧，有输入时回退到历史提示
 pub struct CopilotHinter {
     history_hinter: HistoryHinter,
-    current_tip: DisplayOnlyHint,
+    current_tip: String,
 }
 
 impl Default for CopilotHinter {
@@ -509,28 +518,28 @@ impl CopilotHinter {
     pub fn new() -> Self {
         Self {
             history_hinter: HistoryHinter::new(),
-            current_tip: DisplayOnlyHint(pick_random_tip()),
+            current_tip: pick_random_tip(),
         }
     }
 
     /// 轮转到下一条随机技巧（每次 prompt 前调用）
     pub fn rotate_tip(&mut self) {
-        self.current_tip = DisplayOnlyHint(pick_random_tip());
+        self.current_tip = pick_random_tip();
     }
 }
 
 impl Hinter for CopilotHinter {
-    type Hint = DisplayOnlyHint;
+    type Hint = CopilotHint;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<DisplayOnlyHint> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<CopilotHint> {
         if line.is_empty() {
-            // 克隆 tip 返回；completion() 返回 None，不会被自动补全
-            return Some(DisplayOnlyHint(self.current_tip.0.clone()));
+            // 空行时展示 tip，不可被补全
+            return Some(CopilotHint::Tip(self.current_tip.clone()));
         }
-        // 历史提示使用 String hint，需要包装转换
+        // 有输入时回退到历史命令提示，可被按键接受
         self.history_hinter
             .hint(line, pos, ctx)
-            .map(DisplayOnlyHint)
+            .map(|s| CopilotHint::History(s.to_owned()))
     }
 }
 
@@ -593,9 +602,9 @@ impl Completer for CopilotHelper {
 }
 
 impl Hinter for CopilotHelper {
-    type Hint = DisplayOnlyHint;
+    type Hint = CopilotHint;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<DisplayOnlyHint> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<CopilotHint> {
         self.hinter.hint(line, pos, ctx)
     }
 }
