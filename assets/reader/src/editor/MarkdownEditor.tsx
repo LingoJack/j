@@ -152,7 +152,7 @@ function restoreCaretTextOffset(root: HTMLElement, targetOffset: number) {
   const sel = window.getSelection()
   if (!sel) return
 
-  let remaining = targetOffset
+  let remaining = Math.max(0, targetOffset)
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   let fallback: Text | null = null
   let node = walker.nextNode()
@@ -166,7 +166,7 @@ function restoreCaretTextOffset(root: HTMLElement, targetOffset: number) {
     const len = text.textContent?.length ?? 0
     if (remaining <= len) {
       const range = document.createRange()
-      range.setStart(text, Math.max(0, remaining))
+      range.setStart(text, remaining)
       range.collapse(true)
       sel.removeAllRanges()
       sel.addRange(range)
@@ -176,13 +176,49 @@ function restoreCaretTextOffset(root: HTMLElement, targetOffset: number) {
     node = walker.nextNode()
   }
 
+  const range = document.createRange()
   if (fallback) {
-    const range = document.createRange()
     range.setStart(fallback, fallback.textContent?.length ?? 0)
-    range.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(range)
+  } else {
+    if (root.childNodes.length === 0) root.appendChild(document.createTextNode(''))
+    range.setStart(root, root.childNodes.length)
   }
+  range.collapse(true)
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+function patchActiveTextBlockInPlace(
+  el: HTMLElement,
+  block: Block,
+  baseDir: string | null
+): boolean {
+  const caretOffset = getCaretTextOffset(el)
+  if (caretOffset === null) return false
+
+  const kind = block.kind
+  try {
+    if (kind.type === 'paragraph' && el.dataset.blockType === 'paragraph') {
+      el.replaceChildren()
+      renderInlines(kind.value, el, baseDir)
+    } else if (
+      kind.type === 'heading' &&
+      el.dataset.blockType === 'heading' &&
+      el.dataset.level === String(kind.value.level)
+    ) {
+      const headingText = extractText(kind.value.content)
+      el.id = headingText ? slugify(headingText) : ''
+      el.replaceChildren(createMarkdownMarker(`${'#'.repeat(kind.value.level)} `))
+      renderInlines(kind.value.content, el, baseDir)
+    } else {
+      return false
+    }
+  } finally {
+    // replaceChildren 会移除监听器之外的子节点，不会影响 block 自身 input 监听器。
+  }
+
+  restoreCaretTextOffset(el, caretOffset)
+  return true
 }
 
 function isMarkerTextNode(node: Node): boolean {
@@ -340,56 +376,59 @@ export function MarkdownEditor({
   )
 
   // ---- 真正的增量 DOM 更新 ----
-  // 策略：按指纹只替换变化的 block；光标所在 block 也会替换并恢复光标，
-  // 这样正在编辑的 Markdown 语法（如 `code`）能在 debounce 解析后立即渲染。
+  // 策略：非活跃 block 直接替换；活跃的 paragraph/heading 在原 block 内
+  // patch 子节点并按可编辑文本偏移恢复光标，避免替换 block 本身导致 Selection 回文首。
   const applyDiff = useCallback(
     (blocks: Block[]) => {
       const host = hostRef.current
       if (!host) return
 
       const activeIdx = getActiveBlockIndex(host)
-      const activeChild =
-        activeIdx >= 0 ? (host.children[activeIdx] as HTMLElement | undefined) : undefined
-      const caretOffset = activeChild ? getCaretTextOffset(activeChild) : null
       const newFps = blocks.map((b) => blockFingerprint(b))
       const oldFps = lastFingerprints.current
       const oldChildren = Array.from(host.children) as HTMLElement[]
 
       const lenMatch = oldChildren.length === blocks.length && oldFps.length === newFps.length
-      let restoredBlock: HTMLElement | null = null
 
       try {
         updatingRef.current = true
 
         if (lenMatch) {
-          // 同数量：逐个比较指纹，只替换有变化的 block
+          // 同数量：逐个比较指纹；活跃文本 block 原地 patch，其余 block 替换。
           for (let i = 0; i < blocks.length; i++) {
             if (i < oldFps.length && oldFps[i] === newFps[i]) continue // 指纹相同，跳过
+            if (i === activeIdx) {
+              const activeEl = oldChildren[i]
+              const patched = patchActiveTextBlockInPlace(activeEl, blocks[i], baseDirRef.current)
+              if (!patched) continue
+              continue
+            }
             const newEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
             oldChildren[i].replaceWith(newEl)
-            if (i === activeIdx) restoredBlock = newEl
           }
         } else {
-          // 数量不同：重建 block 列表，但尽量复用指纹相同的旧 DOM
+          // 数量不同：重建 block 列表；尽量复用旧 DOM，活跃 block 绝不替换。
           const fragment = document.createDocumentFragment()
           for (let i = 0; i < blocks.length; i++) {
             let nextEl: HTMLElement
-            if (i < oldChildren.length && i < oldFps.length && oldFps[i] === newFps[i]) {
+            if (i === activeIdx && i < oldChildren.length) {
+              const activeEl = oldChildren[i]
+              if (patchActiveTextBlockInPlace(activeEl, blocks[i], baseDirRef.current)) {
+                nextEl = activeEl
+              } else {
+                nextEl = oldChildren[i]
+              }
+            } else if (i < oldChildren.length && i < oldFps.length && oldFps[i] === newFps[i]) {
               nextEl = oldChildren[i]
             } else {
               nextEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
             }
-            if (i === activeIdx) restoredBlock = nextEl
             fragment.appendChild(nextEl)
           }
           host.replaceChildren(fragment)
         }
       } finally {
         updatingRef.current = false
-      }
-
-      if (restoredBlock && caretOffset !== null) {
-        restoreCaretTextOffset(restoredBlock, caretOffset)
       }
 
       lastFingerprints.current = newFps

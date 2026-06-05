@@ -1,3 +1,34 @@
+# v12.10.98
+
+
+### 新功能
+
+- **自研 Markdown 编辑器**: 全新实现的富文本 Markdown 编辑器，替代 CodeMirror，基于 Rust 后端 IR 解析 + 前端增量 DOM 渲染，支持 contenteditable 所见即所得编辑
+- **编辑器代码语法高亮**: 内置轻量代码高亮 tokenizer，支持 Rust/TypeScript/Python/Go/SQL/Bash 等 10+ 语言的语法高亮显示
+- **编辑器深色代码块主题**: 代码块采用 macOS 窗口风格标题栏 + 深赭陶色背景，配合语言标签显示
+- **编辑器三级缓存**: 新增 ParseCache / RenderCache / InlineCache 三级缓存机制，加速重复内容渲染
+- **HTML Block 解析与渲染**: Markdown 解析器新增 `HtmlBlock` 类型，支持原始 HTML 块的解析、渲染和序列化
+- **`/api/parse` 接口**: Reader HTTP 服务新增实时 Markdown 解析 API，供前端编辑器 debounce 调用
+- **目录(TOC)悬浮交互重构**: TOC 从独立侧栏改为悬浮面板设计，支持 hover 展开、固定(pin) 两种模式，新增 Pin 按钮持久化
+- **Tab 切换快捷键改为 VS Code 风格**: 切换标签页快捷键从 `⌘⇧←/→` 改为 `⌘⌥←/→`（与 VS Code 一致）
+- **历史命令可补全**: REPL hinter 区分 Tip（纯展示）和 History（可按右箭头接受补全）两种提示类型
+
+### 改进
+
+- **Reader 浅色主题**: 整体配色从 Nord 深色切换为 Anthropic Light 米白赭陶风，CSS 全面迁移至 Tailwind v4 utilities
+- **编辑器增量渲染优化**: 活跃 block（光标所在段落/标题）采用原地 patch 子节点 + 偏移恢复光标，避免替换 block 导致光标回跳
+- **编辑器 dirty 检测**: 内容恢复原样时自动清除 dirty 标记，保存后同步原始 source 快照
+- **Todo 数据存储改为 JSONL**: 从单文件 JSON 改为 JSONL（每行一条），支持逐行解析和容错跳过
+- **TUI 代码块内边距**: 新增上下内边距（1行）和左右内边距（2字符），代码与边框之间不再紧贴
+- **BlockCache 内容指纹校验**: 缓存有效性检查新增内容哈希，编辑同一行数但不同内容时正确失效
+- **Linux 安装脚本修复**: 修复 `make install` 在 Linux 下的报错问题
+
+### Bug 修复
+
+- **光标恢复偏移越界**: 修复编辑器增量渲染后 `restoreCaretTextOffset` 在 offset 为负或超出范围时的崩溃
+- **TUI 编辑器滚动计算溢出**: 修复 `saturating_sub` 链中 `.max(0)` 冗余导致的潜在溢出
+</result
+
 # v12.10.95
 
 
