@@ -14,17 +14,13 @@
 
 ---
 
-### 
-
 ## Agent 工作台
 
 内置终端 Agent，支持多模型、流式输出、多步推理、工具调用、权限确认，适合直接在仓库里分析、修改、执行任务
 
 ## 别名打开
 
-`j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用
-
-### 日报周报
+`j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用日报周报
 
 `j report "完成功能开发"` 快速记录，支持整篇 Markdown 编辑、自动周数管理，以及 `reportctl push/pull` 做 Git 同步
 
@@ -36,7 +32,7 @@
 
 `j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENTS.md
 
-<summary><strong>更多功能</strong></summary>
+### 待办备忘
 
 <summary><strong>更多功能</strong></summary>
 
@@ -50,7 +46,7 @@
 
 ## 截图
 
-<br>
+<summary><strong>更多功能</strong></summary>
 
 <br>
 
@@ -165,13 +161,3 @@ j
 | serde[](https://github.com/serde-rs/serde) | 序列化框架 |
 
 ---
-
-## GUI 版本
-
-如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/jcli-gui) 提供了基于 Tauri 的桌面客户端（**目前正在研发中**），支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
-
-<summary>其他安装方式</summary>
-
----
-
-## License

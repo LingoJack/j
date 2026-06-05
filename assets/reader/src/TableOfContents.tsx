@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ChevronsRight, ListTree } from './Icon'
+import { ListTree } from './Icon'
 import type { HeadingItem } from './toc'
 
 interface Props {
   headings: HeadingItem[]
-  collapsed: boolean
-  onToggleCollapsed: () => void
+  pinned: boolean
+  onTogglePinned: () => void
 }
 
-export function TableOfContents({ headings, collapsed, onToggleCollapsed }: Props) {
+export function TableOfContents({ headings, pinned, onTogglePinned }: Props) {
   const [activeId, setActiveId] = useState<string>('')
 
   useEffect(() => {
@@ -28,40 +28,75 @@ export function TableOfContents({ headings, collapsed, onToggleCollapsed }: Prop
       if (el) observer.observe(el)
     }
     return () => observer.disconnect()
-  }, [headings, collapsed])
+  }, [headings])
 
-  // 收起态：默认只露出一个紧凑触发器；鼠标移入/键盘聚焦即临时展开，
-  // 不改变 localStorage 中的折叠偏好。
-  if (collapsed) {
+  const minLevel = headings.length > 0 ? Math.min(...headings.map((h) => h.level)) : 1
+
+  if (pinned) {
     return (
-      <div className="group absolute right-3 top-3 z-10 w-[36px] hover:w-[240px] focus-within:w-[240px] max-h-[calc(100%-24px)] transition-[width] duration-200 ease-out">
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          className="absolute right-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-seeyue-bg/90 backdrop-blur-md text-seeyue-fg-dim border border-seeyue-border-dim shadow-[0_4px_18px_rgba(26,22,18,0.10)] cursor-pointer transition-all duration-150 group-hover:opacity-0 group-focus-within:opacity-0 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated hover:border-seeyue-border-strong"
-          title="展开目录"
-          aria-label="展开目录"
-        >
-          <ListTree size={15} />
-        </button>
-        <TocPanel
-          headings={headings}
-          activeId={activeId}
-          minLevel={headings.length > 0 ? Math.min(...headings.map((h) => h.level)) : 1}
-          onToggleCollapsed={onToggleCollapsed}
-          className="pointer-events-none opacity-0 translate-x-2 scale-[0.98] group-hover:pointer-events-auto group-hover:opacity-100 group-hover:translate-x-0 group-hover:scale-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-x-0 group-focus-within:scale-100 transition-all duration-200 ease-out origin-top-right"
-        />
-      </div>
+      <TocPanel
+        headings={headings}
+        activeId={activeId}
+        minLevel={minLevel}
+        pinned={pinned}
+        onTogglePinned={onTogglePinned}
+      />
     )
   }
 
   return (
-    <TocPanel
-      headings={headings}
-      activeId={activeId}
-      minLevel={headings.length > 0 ? Math.min(...headings.map((h) => h.level)) : 1}
-      onToggleCollapsed={onToggleCollapsed}
-    />
+    <div className="group absolute right-3 top-3 z-10 w-[36px] hover:w-[240px] focus-within:w-[240px] max-h-[calc(100%-24px)] transition-[width] duration-200 ease-out">
+      <div className="absolute right-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-seeyue-bg/90 backdrop-blur-md text-seeyue-fg-dim border border-seeyue-border-dim shadow-[0_4px_18px_rgba(26,22,18,0.10)] transition-all duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+        <ListTree size={15} />
+      </div>
+      <TocPanel
+        headings={headings}
+        activeId={activeId}
+        minLevel={minLevel}
+        pinned={pinned}
+        onTogglePinned={onTogglePinned}
+        className="pointer-events-none opacity-0 translate-x-2 scale-[0.98] group-hover:pointer-events-auto group-hover:opacity-100 group-hover:translate-x-0 group-hover:scale-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-x-0 group-focus-within:scale-100 transition-all duration-200 ease-out origin-top-right"
+      />
+    </div>
+  )
+}
+
+function PinIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 4.5 19.5 9" />
+      <path d="M14 3 21 10l-3 1-4 4 1 4-1 1-5-5-4.5 4.5L8 12 3 7l1-1 4 1 4-4Z" />
+    </svg>
+  )
+}
+
+function PinButton({ pinned, onTogglePinned }: { pinned: boolean; onTogglePinned: () => void }) {
+  return (
+    <button
+      type="button"
+      className={
+        'inline-flex items-center justify-center w-6 h-6 rounded-full bg-transparent border-0 cursor-pointer transition-colors duration-150 ' +
+        (pinned
+          ? 'text-seeyue-accent bg-seeyue-accent-soft hover:text-seeyue-accent'
+          : 'text-seeyue-fg-dim hover:text-seeyue-fg-strong hover:bg-seeyue-elevated')
+      }
+      onClick={onTogglePinned}
+      title={pinned ? '取消固定目录' : '固定目录'}
+      aria-label={pinned ? '取消固定目录' : '固定目录'}
+      aria-pressed={pinned}
+    >
+      <PinIcon filled={pinned} />
+    </button>
   )
 }
 
@@ -69,13 +104,15 @@ function TocPanel({
   headings,
   activeId,
   minLevel,
-  onToggleCollapsed,
+  pinned,
+  onTogglePinned,
   className = '',
 }: {
   headings: HeadingItem[]
   activeId: string
   minLevel: number
-  onToggleCollapsed: () => void
+  pinned: boolean
+  onTogglePinned: () => void
   className?: string
 }) {
   const panelClass =
@@ -89,14 +126,7 @@ function TocPanel({
           <span className="text-[11px] font-semibold text-seeyue-fg-dim uppercase tracking-wider flex items-center gap-1.5">
             <ListTree size={12} /> Contents
           </span>
-          <button
-            type="button"
-            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
-            onClick={onToggleCollapsed}
-            title="固定展开/收起目录"
-          >
-            <ChevronsRight size={13} />
-          </button>
+          <PinButton pinned={pinned} onTogglePinned={onTogglePinned} />
         </div>
         <div className="px-3 pb-3 text-[11px] text-seeyue-fg-dim italic">暂无标题</div>
       </div>
@@ -109,14 +139,7 @@ function TocPanel({
         <span className="text-[11px] font-semibold text-seeyue-fg-dim uppercase tracking-wider flex items-center gap-1.5">
           <ListTree size={12} /> Contents
         </span>
-        <button
-          type="button"
-          className="inline-flex items-center justify-center w-6 h-6 rounded-full text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
-          onClick={onToggleCollapsed}
-          title="固定展开/收起目录"
-        >
-          <ChevronsRight size={13} />
-        </button>
+        <PinButton pinned={pinned} onTogglePinned={onTogglePinned} />
       </div>
       <ul className="flex-1 overflow-y-auto px-2 pb-2 pt-1 list-none m-0">
         {headings.map((h) => {

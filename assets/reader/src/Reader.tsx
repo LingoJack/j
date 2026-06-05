@@ -62,9 +62,9 @@ export function Reader() {
     message: string
     kind: 'error' | 'success' | 'info'
   } | null>(null)
-  /** TOC 折叠态，持久化到 localStorage */
-  const [tocCollapsed, setTocCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem('jreader.tocCollapsed') === '1'
+  /** TOC 是否固定展开；未固定时仅 hover/focus 临时展开。 */
+  const [tocPinned, setTocPinned] = useState<boolean>(() => {
+    return localStorage.getItem('jreader.tocPinned') === '1'
   })
   /**
    * 侧栏宽度（活动栏右侧那一列）—— 用户可拖动调节，持久化到 localStorage。
@@ -93,10 +93,10 @@ export function Reader() {
   /** 每个 image tab 的元信息（mime / size）；按 path 索引 */
   const imagesRef = useRef<Record<string, ImagePayload>>({})
 
-  const toggleToc = useCallback(() => {
-    setTocCollapsed((prev) => {
+  const toggleTocPinned = useCallback(() => {
+    setTocPinned((prev) => {
       const next = !prev
-      localStorage.setItem('jreader.tocCollapsed', next ? '1' : '0')
+      localStorage.setItem('jreader.tocPinned', next ? '1' : '0')
       return next
     })
   }, [])
@@ -604,8 +604,8 @@ export function Reader() {
             {showToc && (
               <TableOfContents
                 headings={headings}
-                collapsed={tocCollapsed}
-                onToggleCollapsed={toggleToc}
+                pinned={tocPinned}
+                onTogglePinned={toggleTocPinned}
               />
             )}
           </div>

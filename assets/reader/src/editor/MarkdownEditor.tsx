@@ -190,6 +190,82 @@ function isMarkerTextNode(node: Node): boolean {
   return parent?.dataset.mdMarker === 'true'
 }
 
+function isEditableTextBlock(el: HTMLElement): boolean {
+  const blockType = el.dataset.blockType
+  return blockType === 'paragraph' || blockType === 'heading'
+}
+
+function closestEditableBlock(node: Node | null, host: HTMLElement): HTMLElement | null {
+  let current: Node | null = node
+  while (current && current !== host) {
+    if (
+      current instanceof HTMLElement &&
+      current.parentElement === host &&
+      isEditableTextBlock(current)
+    ) {
+      return current
+    }
+    current = current.parentNode
+  }
+  return null
+}
+
+function createEmptyParagraph(onEditRef: React.RefObject<() => void>): HTMLElement {
+  const el = document.createElement('p')
+  el.className = 'md-block md-paragraph'
+  el.dataset.blockType = 'paragraph'
+  el.contentEditable = 'true'
+  el.appendChild(document.createTextNode(''))
+  el.addEventListener('input', () => onEditRef.current?.())
+  return el
+}
+
+function placeCaretAtStart(el: HTMLElement) {
+  const sel = window.getSelection()
+  if (!sel) return
+  if (el.childNodes.length === 0) {
+    el.appendChild(document.createTextNode(''))
+  }
+  const range = document.createRange()
+  const firstText = firstTextNode(el)
+  if (firstText) {
+    range.setStart(firstText, 0)
+  } else {
+    range.setStart(el, 0)
+  }
+  range.collapse(true)
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+function firstTextNode(root: HTMLElement): Text | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  return walker.nextNode() as Text | null
+}
+
+function handleEnterInsertParagraph(
+  e: KeyboardEvent,
+  onEditRef: React.RefObject<() => void>
+): boolean {
+  const host = e.currentTarget as HTMLElement | null
+  if (!host) return false
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false
+
+  const block = closestEditableBlock(sel.anchorNode, host)
+  if (!block) return false
+
+  const offset = getCaretTextOffset(block)
+  if (offset !== 0) return false
+
+  e.preventDefault()
+  const paragraph = createEmptyParagraph(onEditRef)
+  block.before(paragraph)
+  placeCaretAtStart(paragraph)
+  onEditRef.current?.()
+  return true
+}
+
 // ---------------------------------------------------------------------------
 // 主组件
 // ---------------------------------------------------------------------------
@@ -348,13 +424,20 @@ export function MarkdownEditor({
     [baseDirRef]
   )
 
-  // ---- Cmd/Ctrl+S 保存 ----
+  // ---- Cmd/Ctrl+S 保存 + Enter 插入段落 ----
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
         syncFromDom()
         void onSaveRef.current()
+        return
+      }
+
+      if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (handleEnterInsertParagraph(e, syncFromDomFnRef)) {
+          return
+        }
       }
     },
     [onSaveRef, syncFromDom]
