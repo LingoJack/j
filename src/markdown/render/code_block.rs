@@ -7,6 +7,10 @@ use ratatui::text::{Line, Span};
 
 /// 代码块右侧内边距（字符数），防止竖线紧贴屏幕右边缘
 const CODE_BLOCK_RIGHT_PADDING: usize = 2;
+/// 代码块内容左右内边距（字符数），代码与竖线 │ 之间的空白
+const CODE_BLOCK_INNER_PADDING_H: usize = 2;
+/// 代码块内容上下内边距（行数），代码与上下边框之间的空白行数
+const CODE_BLOCK_INNER_PADDING_V: usize = 1;
 
 /// 渲染围栏代码块（撑满可用宽度 + 自动折行 + 前后空行）
 pub fn render_code_block(
@@ -24,8 +28,8 @@ pub fn render_code_block(
         .saturating_sub(CODE_BLOCK_RIGHT_PADDING)
         .max(10);
 
-    // 代码内容可用宽度 = total_width - 4（│ + 空格 + 内容 + 空格 + │）
-    let code_inner_w = total_width.saturating_sub(4);
+    // 代码内容可用宽度 = total_width - 2(边框) - 2*INNER_PADDING_H
+    let code_inner_w = total_width.saturating_sub(2 + 2 * CODE_BLOCK_INNER_PADDING_H);
 
     // 前导空行
     lines.push(Line::from(""));
@@ -53,6 +57,11 @@ pub fn render_code_block(
         top_border_style,
     )));
 
+    // 上内边距空行
+    for _ in 0..CODE_BLOCK_INNER_PADDING_V {
+        lines.push(empty_content_line(code_inner_w, theme));
+    }
+
     // 渲染代码内容行（自动折行）
     let code_content_expanded = code.replace('\t', "    ");
     for code_line in code_content_expanded.lines() {
@@ -75,8 +84,11 @@ pub fn render_code_block(
                 Style::default().fg(theme.text_dim()).bg(theme.bg_primary()),
             ));
 
-            // 空格 padding
-            spans_vec.push(Span::styled(" ", Style::default().bg(theme.bg_primary())));
+            // 左侧内边距空格
+            spans_vec.push(Span::styled(
+                " ".repeat(CODE_BLOCK_INNER_PADDING_H),
+                Style::default().bg(theme.bg_primary()),
+            ));
 
             // 代码内容（背景使用 bg_primary）
             for hs in highlighted {
@@ -92,8 +104,11 @@ pub fn render_code_block(
                 Style::default().bg(theme.bg_primary()),
             ));
 
-            // 右侧空格 padding
-            spans_vec.push(Span::styled(" ", Style::default().bg(theme.bg_primary())));
+            // 右侧内边距空格
+            spans_vec.push(Span::styled(
+                " ".repeat(CODE_BLOCK_INNER_PADDING_H),
+                Style::default().bg(theme.bg_primary()),
+            ));
 
             // 右侧边框 │
             spans_vec.push(Span::styled(
@@ -111,6 +126,11 @@ pub fn render_code_block(
         }
     }
 
+    // 下内边距空行
+    for _ in 0..CODE_BLOCK_INNER_PADDING_V {
+        lines.push(empty_content_line(code_inner_w, theme));
+    }
+
     // 结束围栏：╰─────────────╯ 或 └─────────────┘
     let bottom_dash_count = total_width.saturating_sub(2).max(1);
     let bottom_border = format!(
@@ -126,4 +146,37 @@ pub fn render_code_block(
     lines.push(Line::from(""));
 
     lines
+}
+
+/// 生成一行只有边框和内边距空白的空行（用于上下内边距）
+fn empty_content_line(code_inner_w: usize, theme: &dyn MdStyle) -> Line<'static> {
+    let bg = theme.bg_primary();
+    let mut spans_vec = Vec::new();
+
+    // 左边框 │
+    spans_vec.push(Span::styled(
+        "│",
+        Style::default().fg(theme.text_dim()).bg(bg),
+    ));
+
+    // 内容区域全空格
+    let inner_total = code_inner_w + 2 * CODE_BLOCK_INNER_PADDING_H;
+    spans_vec.push(Span::styled(
+        " ".repeat(inner_total),
+        Style::default().bg(bg),
+    ));
+
+    // 右边框 │
+    spans_vec.push(Span::styled(
+        "│",
+        Style::default().fg(theme.text_dim()).bg(bg),
+    ));
+
+    // 右侧 padding
+    spans_vec.push(Span::styled(
+        " ".repeat(CODE_BLOCK_RIGHT_PADDING),
+        Style::default().bg(bg),
+    ));
+
+    Line::from(spans_vec)
 }

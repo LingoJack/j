@@ -202,6 +202,22 @@
     color: #8a8078;
     z-index: 1;
   }
+  .seeyue-codeblock pre {
+    margin: 0;
+    padding: 16px 22px 18px;
+    overflow-x: auto;
+    background: transparent;
+  }
+  .seeyue-codeblock pre code {
+    display: block;
+    white-space: pre;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.7;
+    font-family: var(--font-mono);
+    color: #d4c8b8;
+    background: transparent;
+  }
 }
 
 /* —— 关键帧 —— */
