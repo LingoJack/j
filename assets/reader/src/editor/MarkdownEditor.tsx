@@ -329,7 +329,7 @@ function createBlockElement(
       if (headingText) el.id = slugify(headingText)
       el.contentEditable = 'true'
       el.appendChild(createMarkdownMarker(`${'#'.repeat(kind.value.level)} `))
-      renderInlines(kind.value.content, el)
+      renderInlines(kind.value.content, el, baseDir)
       el.addEventListener('input', onEdit)
       return el
     }
@@ -339,7 +339,7 @@ function createBlockElement(
       el.className = 'md-block md-paragraph'
       el.dataset.blockType = 'paragraph'
       el.contentEditable = 'true'
-      renderInlines(kind.value, el)
+      renderInlines(kind.value, el, baseDir)
       el.addEventListener('input', onEdit)
       return el
     }
@@ -349,7 +349,7 @@ function createBlockElement(
     }
 
     case 'table': {
-      return createTableElement(kind.value, onEdit)
+      return createTableElement(kind.value, onEdit, baseDir)
     }
 
     case 'block_quote': {
@@ -363,7 +363,7 @@ function createBlockElement(
     }
 
     case 'list': {
-      return createListElement(kind.value, onEdit)
+      return createListElement(kind.value, onEdit, baseDir)
     }
 
     case 'html_block': {
@@ -396,6 +396,7 @@ function createBlockElement(
 function createTableElement(
   data: { alignments: Alignment[]; rows: Inline[][][] },
   onEdit: () => void,
+  baseDir: string | null,
 ): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'md-block md-table-wrap'
@@ -417,7 +418,7 @@ function createTableElement(
       if (align === 'center') th.style.textAlign = 'center'
       else if (align === 'right') th.style.textAlign = 'right'
       else if (align === 'left') th.style.textAlign = 'left'
-      renderInlines(rows[0][c], th)
+      renderInlines(rows[0][c], th, baseDir)
       th.addEventListener('input', onEdit)
       headerRow.appendChild(th)
     }
@@ -437,7 +438,7 @@ function createTableElement(
           if (align === 'center') td.style.textAlign = 'center'
           else if (align === 'right') td.style.textAlign = 'right'
           else if (align === 'left') td.style.textAlign = 'left'
-          renderInlines(rows[r][c], td)
+          renderInlines(rows[r][c], td, baseDir)
           td.addEventListener('input', onEdit)
           td.addEventListener('keydown', handleTableKeyDown)
           tr.appendChild(td)
@@ -522,6 +523,7 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
 function createListElement(
   data: { ordered: boolean; items: { checked: boolean | null; content: Inline[] }[] },
   onEdit: () => void,
+  baseDir: string | null,
 ): HTMLElement {
   const el = document.createElement(data.ordered ? 'ol' : 'ul')
   el.className = `md-block md-list ${data.ordered ? 'md-ol' : 'md-ul'}`
@@ -543,7 +545,7 @@ function createListElement(
     const span = document.createElement('span')
     span.className = 'md-list-text'
     span.contentEditable = 'true'
-    renderInlines(item.content, span)
+    renderInlines(item.content, span, baseDir)
     span.addEventListener('input', onEdit)
     li.appendChild(span)
     el.appendChild(li)

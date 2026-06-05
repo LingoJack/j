@@ -6,6 +6,7 @@
  */
 import type { Inline } from '../types'
 import { InlineCache } from './cache'
+import { resolveAssetUrl } from '../assetUrl'
 
 const inlineCache = new InlineCache()
 
@@ -18,23 +19,24 @@ export function resetInlineCache() {
  * 将 Inline[] 渲染为 DOM 节点并追加到 parent 中。
  * @param inlines Inline[] 数组
  * @param parent 目标父元素
+ * @param baseDir 当前文档所在目录（用于解析相对图片路径）
  */
-export function renderInlines(inlines: Inline[], parent: HTMLElement) {
+export function renderInlines(inlines: Inline[], parent: HTMLElement, baseDir: string | null = null) {
   for (const inline of inlines) {
-    parent.appendChild(renderOneInline(inline))
+    parent.appendChild(renderOneInline(inline, baseDir))
   }
 }
 
 /**
  * 创建包含所有 inline 节点的 DocumentFragment。
  */
-export function createInlineFragment(inlines: Inline[]): DocumentFragment {
+export function createInlineFragment(inlines: Inline[], baseDir: string | null = null): DocumentFragment {
   const frag = document.createDocumentFragment()
-  renderInlines(inlines, frag as unknown as HTMLElement)
+  renderInlines(inlines, frag as unknown as HTMLElement, baseDir)
   return frag
 }
 
-function renderOneInline(inline: Inline): Node {
+function renderOneInline(inline: Inline, baseDir: string | null): Node {
   switch (inline.type) {
     case 'text':
       return document.createTextNode(inline.value)
@@ -42,7 +44,7 @@ function renderOneInline(inline: Inline): Node {
     case 'strong': {
       const el = document.createElement('strong')
       el.appendChild(createMarker('**'))
-      renderInlines(inline.value, el)
+      renderInlines(inline.value, el, baseDir)
       el.appendChild(createMarker('**'))
       return el
     }
@@ -50,7 +52,7 @@ function renderOneInline(inline: Inline): Node {
     case 'emphasis': {
       const el = document.createElement('em')
       el.appendChild(createMarker('*'))
-      renderInlines(inline.value, el)
+      renderInlines(inline.value, el, baseDir)
       el.appendChild(createMarker('*'))
       return el
     }
@@ -58,7 +60,7 @@ function renderOneInline(inline: Inline): Node {
     case 'strikethrough': {
       const el = document.createElement('del')
       el.appendChild(createMarker('~~'))
-      renderInlines(inline.value, el)
+      renderInlines(inline.value, el, baseDir)
       el.appendChild(createMarker('~~'))
       return el
     }
@@ -77,14 +79,14 @@ function renderOneInline(inline: Inline): Node {
       a.target = '_blank'
       a.rel = 'noopener noreferrer'
       a.appendChild(createMarker('['))
-      renderInlines(inline.value.text, a)
+      renderInlines(inline.value.text, a, baseDir)
       a.appendChild(createMarker(`](${inline.value.url})`))
       return a
     }
 
     case 'image': {
       const img = document.createElement('img')
-      img.src = inline.value.url
+      img.src = resolveAssetUrl(inline.value.url, baseDir)
       img.alt = inline.value.alt
       img.loading = 'lazy'
       return img
