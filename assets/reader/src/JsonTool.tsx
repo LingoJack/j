@@ -47,9 +47,7 @@ type JsonValue =
 type Path = (string | number)[]
 
 export function JsonTool() {
-  const [raw, setRaw] = useState<string>(
-    () => sessionStorage.getItem(STORAGE_KEY) ?? SAMPLE,
-  )
+  const [raw, setRaw] = useState<string>(() => sessionStorage.getItem(STORAGE_KEY) ?? SAMPLE)
   const [tree, setTree] = useState<JsonValue | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** 折叠状态：path 序列化为 "a.b.0" 形式做 key */
@@ -142,7 +140,7 @@ export function JsonTool() {
       const next = updateTree(tree, path, mut)
       flushTreeToRaw(next)
     },
-    [tree, flushTreeToRaw],
+    [tree, flushTreeToRaw]
   )
 
   const toggleCollapse = useCallback((path: Path) => {
@@ -178,7 +176,7 @@ export function JsonTool() {
         parse()
       }
     },
-    [parse],
+    [parse]
   )
 
   const stats = useMemo(() => (tree ? countTree(tree) : null), [tree])
@@ -189,25 +187,47 @@ export function JsonTool() {
         <span className="text-[13px] font-medium text-seeyue-fg-strong">JSON 查看器</span>
         {stats && (
           <>
-            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="accent">
+            <span
+              className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute"
+              data-tone="accent"
+            >
               对象 {stats.objects}
             </span>
-            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="accent">
+            <span
+              className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute"
+              data-tone="accent"
+            >
               数组 {stats.arrays}
             </span>
-            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute">叶子 {stats.leaves}</span>
+            <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute">
+              叶子 {stats.leaves}
+            </span>
           </>
         )}
         {error && (
-          <span className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute" data-tone="warn" title={error}>
+          <span
+            className="font-mono text-[11.5px] px-2 py-0.5 rounded-full bg-seeyue-elevated text-seeyue-fg-muted data-[tone=add]:text-seeyue-success data-[tone=add]:bg-[rgba(163,190,140,0.14)] data-[tone=del]:text-seeyue-danger data-[tone=del]:bg-[rgba(191,97,106,0.16)] data-[tone=warn]:text-seeyue-warn data-[tone=warn]:bg-[rgba(208,135,112,0.18)] data-[tone=accent]:text-seeyue-accent data-[tone=accent]:bg-seeyue-accent-mute"
+            data-tone="warn"
+            title={error}
+          >
             ⚠ 解析错误
           </span>
         )}
         <div className="flex-1" />
-        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated" onClick={format} title="格式化（缩进 2）">
+        <button
+          type="button"
+          className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
+          onClick={format}
+          title="格式化（缩进 2）"
+        >
           格式化
         </button>
-        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated" onClick={minify} title="压缩">
+        <button
+          type="button"
+          className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
+          onClick={minify}
+          title="压缩"
+        >
           压缩
         </button>
         <button
@@ -236,7 +256,12 @@ export function JsonTool() {
         >
           <Copy size={12} /> 复制
         </button>
-        <button type="button" className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated" onClick={clear} title="清空">
+        <button
+          type="button"
+          className="px-3.5 py-1.5 text-[12.5px] font-cjk rounded-md border border-transparent cursor-pointer bg-transparent text-seeyue-fg-muted transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated"
+          onClick={clear}
+          title="清空"
+        >
           清空
         </button>
       </div>
@@ -265,7 +290,9 @@ export function JsonTool() {
           </div>
           <div className="flex-1 overflow-auto px-3 pb-4 font-mono text-[12.5px] leading-[1.65]">
             {error ? (
-              <pre className="text-seeyue-danger whitespace-pre-wrap font-mono text-[12.5px] m-0 px-2 py-2">{error}</pre>
+              <pre className="text-seeyue-danger whitespace-pre-wrap font-mono text-[12.5px] m-0 px-2 py-2">
+                {error}
+              </pre>
             ) : tree ? (
               <JsonNode
                 value={tree}
@@ -275,13 +302,19 @@ export function JsonTool() {
                 onUpdate={updateAtPath}
               />
             ) : (
-              <div className="text-seeyue-fg-dim font-cjk text-[12.5px] px-4 py-4">输入 JSON 后这里会出现树形结构</div>
+              <div className="text-seeyue-fg-dim font-cjk text-[12.5px] px-4 py-4">
+                输入 JSON 后这里会出现树形结构
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {toast && <div className="absolute right-[18px] top-16 px-3 py-1.5 bg-seeyue-elevated border border-seeyue-border-strong border-l-[3px] border-l-seeyue-success rounded-md text-xs text-seeyue-fg shadow-[0_4px_12px_rgba(0,0,0,0.3)] animate-seeyue-fade-in">{toast}</div>}
+      {toast && (
+        <div className="absolute right-[18px] top-16 px-3 py-1.5 bg-seeyue-elevated border border-seeyue-border-strong border-l-[3px] border-l-seeyue-success rounded-md text-xs text-seeyue-fg shadow-[0_4px_12px_rgba(0,0,0,0.3)] animate-seeyue-fade-in">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -310,17 +343,22 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
     const close = isObj ? '}' : ']'
     return (
       <div className="relative">
-        <div className="flex items-center gap-1 py-px cursor-default rounded-sm hover:bg-[rgba(94,129,172,0.08)]" onClick={() => onToggle(path)}>
+        <div
+          className="flex items-center gap-1 py-px cursor-default rounded-sm hover:bg-[rgba(94,129,172,0.08)]"
+          onClick={() => onToggle(path)}
+        >
           <span className="shrink-0 inline-flex items-center justify-center w-[13px] text-seeyue-fg-dim cursor-pointer">
             {len > 0 ? (
-              isCollapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />
+              isCollapsed ? (
+                <ChevronRight size={11} />
+              ) : (
+                <ChevronDown size={11} />
+              )
             ) : (
               <span style={{ display: 'inline-block', width: 11 }} />
             )}
           </span>
-          {keyLabel !== undefined && (
-            <span className="text-seeyue-accent">{keyLabel}</span>
-          )}
+          {keyLabel !== undefined && <span className="text-seeyue-accent">{keyLabel}</span>}
           {keyLabel !== undefined && <span className="text-seeyue-fg-dim mr-0.5">:</span>}
           <span className="text-seeyue-fg-muted">{open}</span>
           {isCollapsed && len > 0 && (
@@ -375,14 +413,9 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
         <span className="shrink-0 inline-flex items-center justify-center w-[13px] text-seeyue-fg-dim cursor-pointer">
           <span style={{ display: 'inline-block', width: 11 }} />
         </span>
-        {keyLabel !== undefined && (
-          <span className="text-seeyue-accent">{keyLabel}</span>
-        )}
+        {keyLabel !== undefined && <span className="text-seeyue-accent">{keyLabel}</span>}
         {keyLabel !== undefined && <span className="text-seeyue-fg-dim mr-0.5">:</span>}
-        <LeafEditor
-          value={value}
-          onCommit={(next) => onUpdate(path, () => next)}
-        />
+        <LeafEditor value={value} onCommit={(next) => onUpdate(path, () => next)} />
       </div>
     </div>
   )
@@ -596,26 +629,20 @@ function updateTree(root: JsonValue, path: Path, mut: (cur: JsonValue) => JsonVa
     return {
       kind: 'object',
       entries: root.entries.map((e) =>
-        e.key === head ? { key: e.key, value: updateTree(e.value, rest, mut) } : e,
+        e.key === head ? { key: e.key, value: updateTree(e.value, rest, mut) } : e
       ),
     }
   }
   if (root.kind === 'array' && typeof head === 'number') {
     return {
       kind: 'array',
-      items: root.items.map((it, i) =>
-        i === head ? updateTree(it, rest, mut) : it,
-      ),
+      items: root.items.map((it, i) => (i === head ? updateTree(it, rest, mut) : it)),
     }
   }
   return root
 }
 
-function walkTree(
-  v: JsonValue,
-  path: Path,
-  cb: (v: JsonValue, p: Path) => void,
-) {
+function walkTree(v: JsonValue, path: Path, cb: (v: JsonValue, p: Path) => void) {
   cb(v, path)
   if (v.kind === 'object') {
     for (const e of v.entries) walkTree(e.value, [...path, e.key], cb)

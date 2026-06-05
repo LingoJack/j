@@ -49,8 +49,7 @@ interface NodeState {
  *   active 文件用主色块 + 末尾 endLine 装饰
  */
 export function FileTree(props: Props) {
-  const { root, onChangeRoot, showHidden, onToggleHidden, activePath, onOpen, onCreateFile } =
-    props
+  const { root, onChangeRoot, showHidden, onToggleHidden, activePath, onOpen, onCreateFile } = props
   // 以路径为 key 存储每个已访问目录的状态
   const [nodes, setNodes] = useState<Record<string, NodeState>>({})
   const [filter, setFilter] = useState('')
@@ -105,7 +104,7 @@ export function FileTree(props: Props) {
         }))
       }
     },
-    [showHidden],
+    [showHidden]
   )
 
   // 切根目录或 showHidden 翻转 → 重载根目录
@@ -141,7 +140,7 @@ export function FileTree(props: Props) {
         [dir]: { ...state, expanded: !state.expanded },
       }))
     },
-    [nodes, loadDir],
+    [nodes, loadDir]
   )
 
   /**
@@ -167,7 +166,7 @@ export function FileTree(props: Props) {
         setCreatingError(String(e))
       }
     },
-    [onCreateFile, loadDir, onOpen],
+    [onCreateFile, loadDir, onOpen]
   )
 
   // 路径面包屑分段
@@ -178,7 +177,10 @@ export function FileTree(props: Props) {
     <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar shadow-[0_0_12px_rgba(0,0,0,0.3)]">
       {/* —— 顶部："文件" 标题 + 视图切换 —— */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border">
-        <button className="relative inline-flex items-center gap-1.5 px-1 pb-1.5 text-[13px] font-medium text-seeyue-fg-strong cursor-pointer bg-transparent border-0 outline-none transition-colors duration-200 after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-[-1px] after:h-[3px] after:rounded-[1.5px] after:bg-seeyue-accent-strong" data-active="true">
+        <button
+          className="relative inline-flex items-center gap-1.5 px-1 pb-1.5 text-[13px] font-medium text-seeyue-fg-strong cursor-pointer bg-transparent border-0 outline-none transition-colors duration-200 after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-[-1px] after:h-[3px] after:rounded-[1.5px] after:bg-seeyue-accent-strong"
+          data-active="true"
+        >
           <Files size={14} />
           <span>文件</span>
         </button>
@@ -222,9 +224,7 @@ export function FileTree(props: Props) {
             {i > 0 && <span className="opacity-50">/</span>}
             <span
               className={
-                i === crumbs.length - 1
-                  ? 'text-seeyue-fg-strong truncate font-medium'
-                  : 'truncate'
+                i === crumbs.length - 1 ? 'text-seeyue-fg-strong truncate font-medium' : 'truncate'
               }
             >
               {seg}
@@ -349,7 +349,13 @@ function DirNode({
   if (!state) return null
 
   return (
-    <div className={depth > 0 ? 'relative before:content-[\'\'] before:absolute before:top-0 before:bottom-0 before:w-px before:bg-[rgba(76,86,106,0.55)]' : undefined}>
+    <div
+      className={
+        depth > 0
+          ? "relative before:content-[''] before:absolute before:top-0 before:bottom-0 before:w-px before:bg-[rgba(76,86,106,0.55)]"
+          : undefined
+      }
+    >
       {state.loading && !state.entries && (
         <div
           className="py-1 text-seeyue-fg-dim text-xs flex items-center gap-1"
@@ -452,20 +458,14 @@ function EntryRow({
         <span
           className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] data-[kind=folder]:text-seeyue-fg-muted data-[kind=folder-open]:text-seeyue-purple data-[kind=markdown]:text-seeyue-accent data-[kind=text]:text-seeyue-fg-muted data-[kind=code]:text-seeyue-warn data-[kind=image]:text-seeyue-success data-[kind=generic]:text-seeyue-fg-dim group-data-[active=true]:text-seeyue-success"
           data-kind={
-            entry.is_dir
-              ? sub?.expanded
-                ? 'folder-open'
-                : 'folder'
-              : pickFileIconKind(entry.name)
+            entry.is_dir ? (sub?.expanded ? 'folder-open' : 'folder') : pickFileIconKind(entry.name)
           }
         >
-          <FileGlyph
-            name={entry.name}
-            isDir={entry.is_dir}
-            expanded={!!sub?.expanded}
-          />
+          <FileGlyph name={entry.name} isDir={entry.is_dir} expanded={!!sub?.expanded} />
         </span>
-        <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">{entry.name}</span>
+        <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">
+          {entry.name}
+        </span>
         {entry.is_dir && onRequestCreate && (
           <button
             type="button"
@@ -496,15 +496,7 @@ function EntryRow({
   )
 }
 
-function FileGlyph({
-  name,
-  isDir,
-  expanded,
-}: {
-  name: string
-  isDir: boolean
-  expanded: boolean
-}) {
+function FileGlyph({ name, isDir, expanded }: { name: string; isDir: boolean; expanded: boolean }) {
   if (isDir) {
     return expanded ? <FolderOpen size={15} /> : <FolderClosed size={15} />
   }

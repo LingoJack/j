@@ -16,11 +16,11 @@
 
 ### 
 
-Agent 工作台
+## Agent 工作台
 
 内置终端 Agent，支持多模型、流式输出、多步推理、工具调用、权限确认，适合直接在仓库里分析、修改、执行任务
 
-### 别名打开
+## 别名打开
 
 `j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用
 
@@ -175,5 +175,3 @@ j
 ---
 
 ## License
-
-[MIT](https://opensource.org/licenses/MIT)

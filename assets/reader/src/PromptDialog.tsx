@@ -66,9 +66,7 @@ export function PromptDialog({
           <Pencil size={16} /> {title}
         </h3>
         {description && (
-          <p className="m-0 mb-4 text-[13px] text-seeyue-fg-muted leading-[1.7]">
-            {description}
-          </p>
+          <p className="m-0 mb-4 text-[13px] text-seeyue-fg-muted leading-[1.7]">{description}</p>
         )}
         <input
           ref={ref}

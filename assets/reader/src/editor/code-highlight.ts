@@ -15,26 +15,75 @@
 // ---- 语言关键字表 ----
 
 const KEYWORDS: Record<string, Set<string>> = {
-  rust: new Set('fn let mut const if else match loop while for in return break continue struct enum impl trait type where pub use mod self super as ref static async await move dyn unsafe extern crate macro inline'.split(' ')),
-  typescript: new Set('function let const var if else switch case default for while do return break continue class interface type enum extends implements import export from as new throw try catch finally async await yield of in keyof readonly declare module namespace abstract static private protected public super this void'.split(' ')),
-  javascript: new Set('function let const var if else switch case default for while do return break continue class extends import export from as new throw try catch finally async await yield of in this void'.split(' ')),
-  python: new Set('def class if elif else for while return break continue import from as with try except finally raise pass lambda yield async await global nonlocal and or not in is True False None self'.split(' ')),
-  go: new Set('func package import if else switch case default for range return break continue go defer chan select type struct interface map const var iota nil error true false range'.split(' ')),
-  bash: new Set('if then else elif fi for while do done case esac in function return exit export local declare readonly set unset source alias echo read printf test true false'.split(' ')),
-  sh: new Set('if then else elif fi for while do done case esac in function return exit export local declare readonly set unset source alias echo read printf test true false'.split(' ')),
-  sql: new Set('select from where insert into update delete create table alter drop index join left right inner outer on and or not null is in like between exists group by order asc desc having limit offset set values as distinct count sum avg min max union all case when then else end primary key foreign references default constraint'.split(' ')),
+  rust: new Set(
+    'fn let mut const if else match loop while for in return break continue struct enum impl trait type where pub use mod self super as ref static async await move dyn unsafe extern crate macro inline'.split(
+      ' '
+    )
+  ),
+  typescript: new Set(
+    'function let const var if else switch case default for while do return break continue class interface type enum extends implements import export from as new throw try catch finally async await yield of in keyof readonly declare module namespace abstract static private protected public super this void'.split(
+      ' '
+    )
+  ),
+  javascript: new Set(
+    'function let const var if else switch case default for while do return break continue class extends import export from as new throw try catch finally async await yield of in this void'.split(
+      ' '
+    )
+  ),
+  python: new Set(
+    'def class if elif else for while return break continue import from as with try except finally raise pass lambda yield async await global nonlocal and or not in is True False None self'.split(
+      ' '
+    )
+  ),
+  go: new Set(
+    'func package import if else switch case default for range return break continue go defer chan select type struct interface map const var iota nil error true false range'.split(
+      ' '
+    )
+  ),
+  bash: new Set(
+    'if then else elif fi for while do done case esac in function return exit export local declare readonly set unset source alias echo read printf test true false'.split(
+      ' '
+    )
+  ),
+  sh: new Set(
+    'if then else elif fi for while do done case esac in function return exit export local declare readonly set unset source alias echo read printf test true false'.split(
+      ' '
+    )
+  ),
+  sql: new Set(
+    'select from where insert into update delete create table alter drop index join left right inner outer on and or not null is in like between exists group by order asc desc having limit offset set values as distinct count sum avg min max union all case when then else end primary key foreign references default constraint'.split(
+      ' '
+    )
+  ),
   yaml: new Set('true false null yes no'.split(' ')),
   json: new Set('true false null'.split(' ')),
   toml: new Set('true false'.split(' ')),
 }
 
 const COMMENT_PREFIX: Record<string, string> = {
-  rust: '//', typescript: '//', javascript: '//', go: '//', java: '//',
-  cpp: '//', c: '//', cs: '//', swift: '//', kotlin: '//',
-  python: '#', bash: '#', sh: '#', yaml: '#', toml: '#',
-  ruby: '#', perl: '#', r: '#',
-  sql: '--', lua: '--', haskell: '--',
-  html: '', css: '',
+  rust: '//',
+  typescript: '//',
+  javascript: '//',
+  go: '//',
+  java: '//',
+  cpp: '//',
+  c: '//',
+  cs: '//',
+  swift: '//',
+  kotlin: '//',
+  python: '#',
+  bash: '#',
+  sh: '#',
+  yaml: '#',
+  toml: '#',
+  ruby: '#',
+  perl: '#',
+  r: '#',
+  sql: '--',
+  lua: '--',
+  haskell: '--',
+  html: '',
+  css: '',
 }
 
 function normalizeLang(lang: string): string {
@@ -108,8 +157,14 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         const start = pos
         pos++
         while (pos < line.length) {
-          if (line[pos] === '\\' && pos + 1 < line.length) { pos += 2; continue }
-          if (line[pos] === '"') { pos++; break }
+          if (line[pos] === '\\' && pos + 1 < line.length) {
+            pos += 2
+            continue
+          }
+          if (line[pos] === '"') {
+            pos++
+            break
+          }
           pos++
         }
         tokens.push({ type: 'str', text: line.slice(start, pos) })
@@ -121,8 +176,14 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         const start = pos
         pos++
         while (pos < line.length) {
-          if (line[pos] === '\\' && pos + 1 < line.length) { pos += 2; continue }
-          if (line[pos] === "'") { pos++; break }
+          if (line[pos] === '\\' && pos + 1 < line.length) {
+            pos += 2
+            continue
+          }
+          if (line[pos] === "'") {
+            pos++
+            break
+          }
           pos++
         }
         tokens.push({ type: 'str', text: line.slice(start, pos) })
@@ -140,9 +201,16 @@ export function tokenizeCode(code: string, lang: string): Token[] {
       }
 
       // ---- 数字 ----
-      if (isDigit(line[pos]) || (line[pos] === '.' && pos + 1 < line.length && isDigit(line[pos + 1]))) {
+      if (
+        isDigit(line[pos]) ||
+        (line[pos] === '.' && pos + 1 < line.length && isDigit(line[pos + 1]))
+      ) {
         const start = pos
-        if (line[pos] === '0' && pos + 1 < line.length && (line[pos + 1] === 'x' || line[pos + 1] === 'X')) {
+        if (
+          line[pos] === '0' &&
+          pos + 1 < line.length &&
+          (line[pos + 1] === 'x' || line[pos + 1] === 'X')
+        ) {
           pos += 2
           while (pos < line.length && isHexDigit(line[pos])) pos++
         } else {
@@ -204,9 +272,21 @@ export function renderHighlightedCode(code: string, lang: string): DocumentFragm
 
 // ---- Helpers ----
 
-function isDigit(c: string): boolean { return c >= '0' && c <= '9' }
-function isHexDigit(c: string): boolean { return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') }
-function isAlpha(c: string): boolean { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
-function isIdentStart(c: string): boolean { return isAlpha(c) || c === '_' }
-function isIdentPart(c: string): boolean { return isAlpha(c) || isDigit(c) || c === '_' }
-function matchesLang(lang: string, ...targets: string[]): boolean { return targets.includes(lang) }
+function isDigit(c: string): boolean {
+  return c >= '0' && c <= '9'
+}
+function isHexDigit(c: string): boolean {
+  return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+function isAlpha(c: string): boolean {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+function isIdentStart(c: string): boolean {
+  return isAlpha(c) || c === '_'
+}
+function isIdentPart(c: string): boolean {
+  return isAlpha(c) || isDigit(c) || c === '_'
+}
+function matchesLang(lang: string, ...targets: string[]): boolean {
+  return targets.includes(lang)
+}

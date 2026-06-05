@@ -35,10 +35,18 @@
     &[data-level='2'] {
       @apply text-[22px] mt-7;
     }
-    &[data-level='3'] { @apply text-lg; }
-    &[data-level='4'] { @apply text-base; }
-    &[data-level='5'] { @apply text-[15px] text-seeyue-fg-muted; }
-    &[data-level='6'] { @apply text-sm text-seeyue-fg-dim italic; }
+    &[data-level='3'] {
+      @apply text-lg;
+    }
+    &[data-level='4'] {
+      @apply text-base;
+    }
+    &[data-level='5'] {
+      @apply text-[15px] text-seeyue-fg-muted;
+    }
+    &[data-level='6'] {
+      @apply text-sm text-seeyue-fg-dim italic;
+    }
   }
 
   /* ---- Paragraph ---- */
@@ -173,10 +181,22 @@
   }
 
   /* ---- 代码语法高亮（深色主题） ---- */
-  .md-code-content .hl-kw   { @apply text-[#e8a87c] font-medium; }
-  .md-code-content .hl-str  { @apply text-[#8cc084]; }
-  .md-code-content .hl-num  { @apply text-[#d4a84c]; }
-  .md-code-content .hl-cmt  { @apply text-[#6e6358] italic; }
-  .md-code-content .hl-type { @apply text-[#7cb8d4]; }
-  .md-code-content .hl-punct { @apply text-[#8a7e72]; }
+  .md-code-content .hl-kw {
+    @apply text-[#e8a87c] font-medium;
+  }
+  .md-code-content .hl-str {
+    @apply text-[#8cc084];
+  }
+  .md-code-content .hl-num {
+    @apply text-[#d4a84c];
+  }
+  .md-code-content .hl-cmt {
+    @apply text-[#6e6358] italic;
+  }
+  .md-code-content .hl-type {
+    @apply text-[#7cb8d4];
+  }
+  .md-code-content .hl-punct {
+    @apply text-[#8a7e72];
+  }
 }

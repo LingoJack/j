@@ -127,7 +127,7 @@ export class InlineCache {
   get(text: string): DocumentFragment | null {
     const h = djb2(text)
     const cached = this.fragments.get(h)
-    return cached ? cached.cloneNode(true) as DocumentFragment : null
+    return cached ? (cached.cloneNode(true) as DocumentFragment) : null
   }
 
   /** 缓存 inline fragment */

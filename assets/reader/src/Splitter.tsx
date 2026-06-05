@@ -23,14 +23,7 @@ interface Props {
   ariaLabel?: string
 }
 
-export function VerticalSplitter({
-  width,
-  min,
-  max,
-  defaultWidth,
-  onResize,
-  ariaLabel,
-}: Props) {
+export function VerticalSplitter({ width, min, max, defaultWidth, onResize, ariaLabel }: Props) {
   const startRef = useRef<{ startX: number; startW: number } | null>(null)
 
   const onPointerDown = useCallback(
@@ -59,7 +52,7 @@ export function VerticalSplitter({
       window.addEventListener('pointerup', onUp)
       window.addEventListener('pointercancel', onUp)
     },
-    [width, min, max, onResize],
+    [width, min, max, onResize]
   )
 
   const onDoubleClick = useCallback(() => {

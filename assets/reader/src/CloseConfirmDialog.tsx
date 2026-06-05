@@ -7,12 +7,7 @@ interface Props {
   onCancel: () => void
 }
 
-export function CloseConfirmDialog({
-  filename,
-  onSave,
-  onDiscard,
-  onCancel,
-}: Props) {
+export function CloseConfirmDialog({ filename, onSave, onDiscard, onCancel }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,22,27,0.55)] backdrop-blur-[4px] animate-seeyue-fade-in"

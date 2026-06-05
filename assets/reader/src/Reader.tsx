@@ -15,25 +15,10 @@ import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { VerticalSplitter } from './Splitter'
 import { MarkdownBaseDirContext } from './MarkdownIR'
-import {
-  BookOpen,
-  Copy,
-  Save,
-  Sparkles,
-} from './Icon'
-import type {
-  ImagePayload,
-  InitialResp,
-  ParsedDocument,
-  RenderedDoc,
-  Tab,
-  ToolId,
-} from './types'
+import { BookOpen, Copy, Save, Sparkles } from './Icon'
+import type { ImagePayload, InitialResp, ParsedDocument, RenderedDoc, Tab, ToolId } from './types'
 
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'error'; message: string }
-  | { kind: 'ready' }
+type LoadState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready' }
 
 /** 同时打开新文件的并发上限（防误点把内存撑爆） */
 const MAX_TABS = 32
@@ -141,7 +126,7 @@ export function Reader() {
         }
 
         const doc = (await fetch(
-          `./api/file?path=${encodeURIComponent(initial.initial_path)}`,
+          `./api/file?path=${encodeURIComponent(initial.initial_path)}`
         ).then((r) => {
           if (!r.ok) throw new Error(`file HTTP ${r.status}`)
           return r.json()
@@ -169,9 +154,7 @@ export function Reader() {
     let cancelled = false
     const tick = () => {
       if (cancelled) return
-      void fetch('./api/heartbeat', { method: 'POST', keepalive: true }).catch(
-        () => {},
-      )
+      void fetch('./api/heartbeat', { method: 'POST', keepalive: true }).catch(() => {})
     }
     tick() // 启动时先打一次，避免 60s 宽限期被白白消耗
     const id = window.setInterval(tick, 5000)
@@ -183,7 +166,7 @@ export function Reader() {
 
   const activeTab = useMemo(
     () => tabs.find((t) => t.path === activeTabPath) ?? null,
-    [tabs, activeTabPath],
+    [tabs, activeTabPath]
   )
   const anyDirty = tabs.some((t) => t.dirty)
   /** 当前文档所在目录（用于解析 markdown 里的相对图片路径） */
@@ -198,9 +181,7 @@ export function Reader() {
 
   // —— Tab 操作 ——
   const updateTab = useCallback((path: string, patch: Partial<Tab>) => {
-    setTabs((prev) =>
-      prev.map((t) => (t.path === path ? { ...t, ...patch } : t)),
-    )
+    setTabs((prev) => prev.map((t) => (t.path === path ? { ...t, ...patch } : t)))
   }, [])
 
   /**
@@ -208,31 +189,25 @@ export function Reader() {
    * 只把内容写进 ref；只有 dirty 翻转时才碰 setState。
    * 对比原始 source 判断是否真的脏了：内容恢复原样时自动清除 dirty。
    */
-  const handleSourceChange = useCallback(
-    (path: string, source: string) => {
-      sourcesRef.current[path] = source
-      const isDirty = source !== (originalSourcesRef.current[path] ?? '')
-      setTabs((prev) => {
-        const t = prev.find((x) => x.path === path)
-        if (!t) return prev
-        if (t.dirty === isDirty) return prev // 状态没变化，不 setState
-        return prev.map((x) => (x.path === path ? { ...x, dirty: isDirty } : x))
-      })
-    },
-    [],
-  )
+  const handleSourceChange = useCallback((path: string, source: string) => {
+    sourcesRef.current[path] = source
+    const isDirty = source !== (originalSourcesRef.current[path] ?? '')
+    setTabs((prev) => {
+      const t = prev.find((x) => x.path === path)
+      if (!t) return prev
+      if (t.dirty === isDirty) return prev // 状态没变化，不 setState
+      return prev.map((x) => (x.path === path ? { ...x, dirty: isDirty } : x))
+    })
+  }, [])
 
   /**
    * MilkdownEditor 内部 debounce 调 /api/parse 后回调，更新 IR。
    * 同样写 ref，再 bump docVersion 触发 TOC 重算（TOC 依赖 path + version）。
    */
-  const handleDocParsed = useCallback(
-    (path: string, doc: ParsedDocument) => {
-      docsRef.current[path] = doc
-      setDocVersion((v) => v + 1)
-    },
-    [],
-  )
+  const handleDocParsed = useCallback((path: string, doc: ParsedDocument) => {
+    docsRef.current[path] = doc
+    setDocVersion((v) => v + 1)
+  }, [])
 
   const openFile = useCallback(
     async (path: string) => {
@@ -249,9 +224,7 @@ export function Reader() {
         return
       }
       try {
-        const doc = (await fetch(
-          `./api/file?path=${encodeURIComponent(path)}`,
-        ).then((r) => {
+        const doc = (await fetch(`./api/file?path=${encodeURIComponent(path)}`).then((r) => {
           if (!r.ok)
             return r
               .json()
@@ -268,7 +241,7 @@ export function Reader() {
         setToast({ message: `打开失败：${String(e)}`, kind: 'error' })
       }
     },
-    [tabs],
+    [tabs]
   )
 
   /**
@@ -301,7 +274,7 @@ export function Reader() {
       setTabs((prev) => [...prev, tab])
       setActiveTabPath(path)
     },
-    [tabs],
+    [tabs]
   )
 
   const requestCloseTab = useCallback(
@@ -315,7 +288,7 @@ export function Reader() {
       forceCloseTab(path)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabs],
+    [tabs]
   )
 
   const forceCloseTab = useCallback(
@@ -336,7 +309,7 @@ export function Reader() {
       delete docsRef.current[path]
       delete imagesRef.current[path]
     },
-    [activeTabPath],
+    [activeTabPath]
   )
 
   const saveTab = useCallback(
@@ -368,7 +341,7 @@ export function Reader() {
         setToast({ message: `保存失败：${String(e)}`, kind: 'error' })
       }
     },
-    [tabs, updateTab],
+    [tabs, updateTab]
   )
 
   const copyPath = useCallback(async (path: string) => {
@@ -439,7 +412,7 @@ export function Reader() {
         return prev
       })
     },
-    [activeTabPath],
+    [activeTabPath]
   )
 
   // —— 全局快捷键：(⌘|⌃) S / W / ⌥← / ⌥→ / 1 / 2 ——
@@ -520,7 +493,7 @@ export function Reader() {
   const showToc = activeTab?.kind === 'markdown'
 
   /** 当前活跃工具 id（用于 Toolbox 高亮选中态） */
-  const activeToolId = activeTab?.kind === 'tool' ? activeTab.toolId ?? null : null
+  const activeToolId = activeTab?.kind === 'tool' ? (activeTab.toolId ?? null) : null
 
   // —— Loading / Error 屏 ——
   if (loadState.kind === 'loading') {
@@ -673,11 +646,7 @@ export function Reader() {
         )}
 
         {toast && (
-          <Toast
-            message={toast.message}
-            kind={toast.kind}
-            onClose={() => setToast(null)}
-          />
+          <Toast message={toast.message} kind={toast.kind} onClose={() => setToast(null)} />
         )}
       </div>
     </MarkdownBaseDirContext.Provider>
@@ -732,7 +701,7 @@ function ingestDoc(
   sourcesRef: React.RefObject<Record<string, string>>,
   docsRef: React.RefObject<Record<string, ParsedDocument>>,
   imagesRef: React.RefObject<Record<string, ImagePayload>>,
-  originalSourcesRef: React.RefObject<Record<string, string>>,
+  originalSourcesRef: React.RefObject<Record<string, string>>
 ) {
   sourcesRef.current![doc.path] = doc.source
   originalSourcesRef.current![doc.path] = doc.source
@@ -787,11 +756,18 @@ function EditorBar({
         </span>
       )}
       {editable && tab.saving === 'error' && (
-        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(191,97,106,0.18)] text-seeyue-danger" title={tab.error}>
+        <span
+          className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(191,97,106,0.18)] text-seeyue-danger"
+          title={tab.error}
+        >
           保存失败
         </span>
       )}
-      <button className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed" onClick={onCopyPath} title="复制路径">
+      <button
+        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+        onClick={onCopyPath}
+        title="复制路径"
+      >
         <Copy size={14} />
       </button>
       {editable && (
@@ -822,24 +798,44 @@ function EmptyState() {
       </div>
       <div className="grid gap-1.5 text-xs text-seeyue-fg-dim">
         <div className="flex items-center gap-2 justify-center">
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">S</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            ⌘
+          </kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            S
+          </kbd>
           <span>保存当前文件</span>
         </div>
         <div className="flex items-center gap-2 justify-center">
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">W</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            ⌘
+          </kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            W
+          </kbd>
           <span>/</span>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌃</kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">W</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            ⌃
+          </kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            W
+          </kbd>
           <span>关闭当前 Tab；空时退出 reader</span>
         </div>
         <div className="flex items-center gap-2 justify-center">
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌘</kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">⌥</kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">←</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            ⌘
+          </kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            ⌥
+          </kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            ←
+          </kbd>
           <span>/</span>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">→</kbd>
+          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+            →
+          </kbd>
           <span>切换前后 Tab</span>
         </div>
       </div>

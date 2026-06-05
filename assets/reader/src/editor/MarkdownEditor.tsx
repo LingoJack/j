@@ -82,11 +82,11 @@ function blockFingerprint(block: Block): string {
     case 'html_block':
       return `html:${k.value}`
     case 'block_quote':
-      return `bq:${k.value.map(b => blockFingerprint(b)).join('|')}`
+      return `bq:${k.value.map((b) => blockFingerprint(b)).join('|')}`
     case 'list':
-      return `l:${k.value.ordered ? 'o' : 'u'}:${k.value.items.map(it => `${it.checked}:${inlineFingerprint(it.content)}`).join(',')}`
+      return `l:${k.value.ordered ? 'o' : 'u'}:${k.value.items.map((it) => `${it.checked}:${inlineFingerprint(it.content)}`).join(',')}`
     case 'table':
-      return `t:${k.value.rows.map(row => row.map(cell => inlineFingerprint(cell)).join('|')).join('||')}`
+      return `t:${k.value.rows.map((row) => row.map((cell) => inlineFingerprint(cell)).join('|')).join('||')}`
     default:
       return 'unknown'
   }
@@ -98,18 +98,96 @@ function inlineFingerprint(inlines: Inline[]): string {
 
 function inlineFingerprintOne(i: Inline): string {
   switch (i.type) {
-    case 'text': return i.value
-    case 'strong': return `**${inlineFingerprint(i.value)}**`
-    case 'emphasis': return `*${inlineFingerprint(i.value)}*`
-    case 'strikethrough': return `~~${inlineFingerprint(i.value)}~~`
-    case 'code': return `\`${i.value}\``
-    case 'link': return `[${inlineFingerprint(i.value.text)}](${i.value.url})`
-    case 'image': return `![${i.value.alt}](${i.value.url})`
-    case 'soft_break': return ' '
-    case 'hard_break': return '\n'
-    case 'html': return i.value
-    default: return ''
+    case 'text':
+      return i.value
+    case 'strong':
+      return `**${inlineFingerprint(i.value)}**`
+    case 'emphasis':
+      return `*${inlineFingerprint(i.value)}*`
+    case 'strikethrough':
+      return `~~${inlineFingerprint(i.value)}~~`
+    case 'code':
+      return `\`${i.value}\``
+    case 'link':
+      return `[${inlineFingerprint(i.value.text)}](${i.value.url})`
+    case 'image':
+      return `![${i.value.alt}](${i.value.url})`
+    case 'soft_break':
+      return ' '
+    case 'hard_break':
+      return '\n'
+    case 'html':
+      return i.value
+    default:
+      return ''
   }
+}
+
+/** 获取当前光标在某个 block 可编辑文本中的偏移；忽略 Markdown marker。 */
+function getCaretTextOffset(root: HTMLElement): number | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return null
+  const range = sel.getRangeAt(0)
+  if (!root.contains(range.startContainer)) return null
+
+  let offset = 0
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node = walker.nextNode()
+  while (node) {
+    if (isMarkerTextNode(node)) {
+      node = walker.nextNode()
+      continue
+    }
+    if (node === range.startContainer) {
+      return offset + range.startOffset
+    }
+    offset += node.textContent?.length ?? 0
+    node = walker.nextNode()
+  }
+  return offset
+}
+
+/** 按可编辑文本偏移恢复光标；忽略 Markdown marker。 */
+function restoreCaretTextOffset(root: HTMLElement, targetOffset: number) {
+  const sel = window.getSelection()
+  if (!sel) return
+
+  let remaining = targetOffset
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let fallback: Text | null = null
+  let node = walker.nextNode()
+  while (node) {
+    if (isMarkerTextNode(node)) {
+      node = walker.nextNode()
+      continue
+    }
+    const text = node as Text
+    fallback = text
+    const len = text.textContent?.length ?? 0
+    if (remaining <= len) {
+      const range = document.createRange()
+      range.setStart(text, Math.max(0, remaining))
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+      return
+    }
+    remaining -= len
+    node = walker.nextNode()
+  }
+
+  if (fallback) {
+    const range = document.createRange()
+    range.setStart(fallback, fallback.textContent?.length ?? 0)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }
+}
+
+function isMarkerTextNode(node: Node): boolean {
+  const parent = node.parentElement
+  return parent?.dataset.mdMarker === 'true'
 }
 
 // ---------------------------------------------------------------------------
@@ -164,103 +242,123 @@ export function MarkdownEditor({
   syncFromDomFnRef.current = syncFromDom
 
   // ---- parse + incremental render ----
-  const parseAndRender = useCallback((source: string) => {
-    if (source === lastParsedSource.current) return
+  const parseAndRender = useCallback(
+    (source: string) => {
+      if (source === lastParsedSource.current) return
 
-    const seq = ++parseSeq.current
-    lastParsedSource.current = source
-    fetchParse(source)
-      .then(doc => {
-        if (seq !== parseSeq.current) return
-        docRef.current = doc
-        onParsedRef.current(pathRef.current, doc)
-        applyDiff(doc.blocks)
-      })
-      .catch(() => { /* 静默失败 */ })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onParsedRef, pathRef])
+      const seq = ++parseSeq.current
+      lastParsedSource.current = source
+      fetchParse(source)
+        .then((doc) => {
+          if (seq !== parseSeq.current) return
+          docRef.current = doc
+          onParsedRef.current(pathRef.current, doc)
+          applyDiff(doc.blocks)
+        })
+        .catch(() => {
+          /* 静默失败 */
+        })
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [onParsedRef, pathRef]
+  )
 
   // ---- 真正的增量 DOM 更新 ----
-  // 策略：光标所在 block 完全不动；其他 block 只在指纹变化时替换 innerHTML
-  const applyDiff = useCallback((blocks: Block[]) => {
-    const host = hostRef.current
-    if (!host) return
+  // 策略：按指纹只替换变化的 block；光标所在 block 也会替换并恢复光标，
+  // 这样正在编辑的 Markdown 语法（如 `code`）能在 debounce 解析后立即渲染。
+  const applyDiff = useCallback(
+    (blocks: Block[]) => {
+      const host = hostRef.current
+      if (!host) return
 
-    const activeIdx = getActiveBlockIndex(host)
-    const newFps = blocks.map(b => blockFingerprint(b))
-    const oldFps = lastFingerprints.current
-    const oldChildren = Array.from(host.children) as HTMLElement[]
+      const activeIdx = getActiveBlockIndex(host)
+      const activeChild =
+        activeIdx >= 0 ? (host.children[activeIdx] as HTMLElement | undefined) : undefined
+      const caretOffset = activeChild ? getCaretTextOffset(activeChild) : null
+      const newFps = blocks.map((b) => blockFingerprint(b))
+      const oldFps = lastFingerprints.current
+      const oldChildren = Array.from(host.children) as HTMLElement[]
 
-    const lenMatch = oldChildren.length === blocks.length && oldFps.length === newFps.length
+      const lenMatch = oldChildren.length === blocks.length && oldFps.length === newFps.length
+      let restoredBlock: HTMLElement | null = null
 
-    try {
-      updatingRef.current = true
+      try {
+        updatingRef.current = true
 
-      if (lenMatch) {
-        // 同数量：逐个比较指纹，只替换有变化的非活跃 block
-        for (let i = 0; i < blocks.length; i++) {
-          if (i === activeIdx) continue // 光标所在 block 不动
-          if (i < oldFps.length && oldFps[i] === newFps[i]) continue // 指纹相同，跳过
-          // 替换该 block 的 DOM
-          const newEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
-          oldChildren[i].replaceWith(newEl)
-        }
-      } else {
-        // 数量不同：需要增删 block，但保留活跃 block 不动
-        const fragment = document.createDocumentFragment()
-        for (let i = 0; i < blocks.length; i++) {
-          if (i === activeIdx && i < oldChildren.length) {
-            // 保留活跃 block 的原始引用
-            fragment.appendChild(oldChildren[i])
-          } else if (i < oldChildren.length && i < oldFps.length && oldFps[i] === newFps[i]) {
-            // 指纹相同，复用旧 DOM
-            fragment.appendChild(oldChildren[i])
-          } else {
-            // 新 block 或指纹变化
-            fragment.appendChild(createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef))
+        if (lenMatch) {
+          // 同数量：逐个比较指纹，只替换有变化的 block
+          for (let i = 0; i < blocks.length; i++) {
+            if (i < oldFps.length && oldFps[i] === newFps[i]) continue // 指纹相同，跳过
+            const newEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
+            oldChildren[i].replaceWith(newEl)
+            if (i === activeIdx) restoredBlock = newEl
           }
+        } else {
+          // 数量不同：重建 block 列表，但尽量复用指纹相同的旧 DOM
+          const fragment = document.createDocumentFragment()
+          for (let i = 0; i < blocks.length; i++) {
+            let nextEl: HTMLElement
+            if (i < oldChildren.length && i < oldFps.length && oldFps[i] === newFps[i]) {
+              nextEl = oldChildren[i]
+            } else {
+              nextEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
+            }
+            if (i === activeIdx) restoredBlock = nextEl
+            fragment.appendChild(nextEl)
+          }
+          host.replaceChildren(fragment)
         }
-        host.replaceChildren(fragment)
+      } finally {
+        updatingRef.current = false
       }
-    } finally {
-      updatingRef.current = false
-    }
 
-    lastFingerprints.current = newFps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseDirRef])
+      if (restoredBlock && caretOffset !== null) {
+        restoreCaretTextOffset(restoredBlock, caretOffset)
+      }
+
+      lastFingerprints.current = newFps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [baseDirRef]
+  )
 
   // ---- 全量渲染（初始化 / 切换文件）----
-  const fullRender = useCallback((blocks: Block[]) => {
-    const host = hostRef.current
-    if (!host) return
+  const fullRender = useCallback(
+    (blocks: Block[]) => {
+      const host = hostRef.current
+      if (!host) return
 
-    const savedScrollTop = host.scrollTop
+      const savedScrollTop = host.scrollTop
 
-    try {
-      updatingRef.current = true
-      host.innerHTML = ''
+      try {
+        updatingRef.current = true
+        host.innerHTML = ''
 
-      for (let i = 0; i < blocks.length; i++) {
-        host.appendChild(createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef))
+        for (let i = 0; i < blocks.length; i++) {
+          host.appendChild(createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef))
+        }
+        lastFingerprints.current = blocks.map((b) => blockFingerprint(b))
+      } finally {
+        updatingRef.current = false
       }
-      lastFingerprints.current = blocks.map(b => blockFingerprint(b))
-    } finally {
-      updatingRef.current = false
-    }
 
-    host.scrollTop = savedScrollTop
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseDirRef])
+      host.scrollTop = savedScrollTop
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [baseDirRef]
+  )
 
   // ---- Cmd/Ctrl+S 保存 ----
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-      e.preventDefault()
-      syncFromDom()
-      void onSaveRef.current()
-    }
-  }, [onSaveRef, syncFromDom])
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        syncFromDom()
+        void onSaveRef.current()
+      }
+    },
+    [onSaveRef, syncFromDom]
+  )
 
   // ---- 仅在切换文件（path 变化）时全量重建 ----
   useEffect(() => {
@@ -312,7 +410,7 @@ export function MarkdownEditor({
 function createBlockElement(
   block: Block,
   baseDir: string | null,
-  onEditRef: React.RefObject<() => void>,
+  onEditRef: React.RefObject<() => void>
 ): HTMLElement {
   const kind = block.kind
   const onEdit = () => onEditRef.current?.()
@@ -370,7 +468,9 @@ function createBlockElement(
       const el = document.createElement('div')
       el.className = 'md-block md-html-block'
       el.dataset.blockType = 'html_block'
-      const sanitized = kind.value.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=/gi, ' data-removed=')
+      const sanitized = kind.value
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+\s*=/gi, ' data-removed=')
       el.innerHTML = sanitized
       return el
     }
@@ -396,7 +496,7 @@ function createBlockElement(
 function createTableElement(
   data: { alignments: Alignment[]; rows: Inline[][][] },
   onEdit: () => void,
-  baseDir: string | null,
+  baseDir: string | null
 ): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'md-block md-table-wrap'
@@ -523,7 +623,7 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
 function createListElement(
   data: { ordered: boolean; items: { checked: boolean | null; content: Inline[] }[] },
   onEdit: () => void,
-  baseDir: string | null,
+  baseDir: string | null
 ): HTMLElement {
   const el = document.createElement(data.ordered ? 'ol' : 'ul')
   el.className = `md-block md-list ${data.ordered ? 'md-ol' : 'md-ul'}`
@@ -611,7 +711,12 @@ function serializeDomToMarkdown(host: HTMLElement): string {
     lines.push('')
   }
 
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
+  return (
+    lines
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trimEnd() + '\n'
+  )
 }
 
 function serializeInlineContent(el: HTMLElement): string {
@@ -630,16 +735,42 @@ function serializeInlineContent(el: HTMLElement): string {
       } else if (tag === 'DEL' || tag === 'S') {
         result += '~~' + serializeInlineContent(child) + '~~'
       } else if (tag === 'CODE') {
-        result += '`' + serializeInlineContent(child) + '`'
+        const text = getEditableText(child)
+        result += text ? '`' + text + '`' : ''
       } else if (tag === 'A') {
-        result += '[' + serializeInlineContent(child) + '](' + (child.getAttribute('href') ?? '') + ')'
+        result +=
+          '[' + serializeInlineContent(child) + '](' + (child.getAttribute('href') ?? '') + ')'
       } else if (tag === 'IMG') {
-        result += '![' + (child.getAttribute('alt') ?? '') + '](' + (child.getAttribute('src') ?? '') + ')'
+        result +=
+          '![' +
+          (child.getAttribute('alt') ?? '') +
+          '](' +
+          (child.dataset.originalSrc ?? child.getAttribute('src') ?? '') +
+          ')'
       } else if (tag === 'BR') {
         result += '\n'
       } else {
         result += serializeInlineContent(child)
       }
+    }
+  }
+  return result
+}
+
+function getEditableText(el: HTMLElement): string {
+  let result = ''
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.textContent ?? ''
+      continue
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue
+    const child = node as HTMLElement
+    if (child.dataset.mdMarker === 'true') continue
+    if (child.tagName === 'BR') {
+      result += '\n'
+    } else {
+      result += getEditableText(child)
     }
   }
   return result
@@ -659,10 +790,22 @@ function serializeTable(table: HTMLTableElement): string[] {
   const rows = Array.from(table.querySelectorAll('tr'))
   if (rows.length === 0) return result
   const colCount = rows[0].querySelectorAll('th, td').length
-  result.push('| ' + Array.from(rows[0].querySelectorAll('th, td')).map(c => serializeInlineContent(c as HTMLElement).trim()).join(' | ') + ' |')
+  result.push(
+    '| ' +
+      Array.from(rows[0].querySelectorAll('th, td'))
+        .map((c) => serializeInlineContent(c as HTMLElement).trim())
+        .join(' | ') +
+      ' |'
+  )
   result.push('| ' + Array.from({ length: colCount }, () => '---').join(' | ') + ' |')
   for (let i = 1; i < rows.length; i++) {
-    result.push('| ' + Array.from(rows[i].querySelectorAll('td, th')).map(c => serializeInlineContent(c as HTMLElement).trim()).join(' | ') + ' |')
+    result.push(
+      '| ' +
+        Array.from(rows[i].querySelectorAll('td, th'))
+          .map((c) => serializeInlineContent(c as HTMLElement).trim())
+          .join(' | ') +
+        ' |'
+    )
   }
   return result
 }

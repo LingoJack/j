@@ -49,11 +49,9 @@
 
   /* —— 字体栈 —— */
   --font-cjk:
-    'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei',
-    'Noto Sans CJK SC', -apple-system, BlinkMacSystemFont, system-ui,
-    sans-serif;
-  --font-mono:
-    'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC', -apple-system,
+    BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
 
   /* —— 动画 —— */
   --animate-seeyue-fade-in: seeyue-fade-in 0.18s ease;
@@ -178,7 +176,9 @@
     border: none;
     background: #2b2520;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      0 4px 16px rgba(0, 0, 0, 0.06);
   }
   .seeyue-codeblock::before {
     content: '';

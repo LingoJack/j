@@ -6,7 +6,7 @@
  */
 import type { Inline } from '../types'
 import { InlineCache } from './cache'
-import { resolveAssetUrl } from '../assetUrl'
+import { isRemoteAssetUrl, resolveAssetUrl } from '../assetUrl'
 
 const inlineCache = new InlineCache()
 
@@ -21,7 +21,11 @@ export function resetInlineCache() {
  * @param parent 目标父元素
  * @param baseDir 当前文档所在目录（用于解析相对图片路径）
  */
-export function renderInlines(inlines: Inline[], parent: HTMLElement, baseDir: string | null = null) {
+export function renderInlines(
+  inlines: Inline[],
+  parent: HTMLElement,
+  baseDir: string | null = null
+) {
   for (const inline of inlines) {
     parent.appendChild(renderOneInline(inline, baseDir))
   }
@@ -30,7 +34,10 @@ export function renderInlines(inlines: Inline[], parent: HTMLElement, baseDir: s
 /**
  * 创建包含所有 inline 节点的 DocumentFragment。
  */
-export function createInlineFragment(inlines: Inline[], baseDir: string | null = null): DocumentFragment {
+export function createInlineFragment(
+  inlines: Inline[],
+  baseDir: string | null = null
+): DocumentFragment {
   const frag = document.createDocumentFragment()
   renderInlines(inlines, frag as unknown as HTMLElement, baseDir)
   return frag
@@ -86,8 +93,13 @@ function renderOneInline(inline: Inline, baseDir: string | null): Node {
 
     case 'image': {
       const img = document.createElement('img')
-      img.src = resolveAssetUrl(inline.value.url, baseDir)
+      const originalUrl = inline.value.url
+      img.src = resolveAssetUrl(originalUrl, baseDir)
+      img.dataset.originalSrc = originalUrl
       img.alt = inline.value.alt
+      if (isRemoteAssetUrl(originalUrl)) {
+        img.referrerPolicy = 'no-referrer'
+      }
       img.loading = 'lazy'
       return img
     }

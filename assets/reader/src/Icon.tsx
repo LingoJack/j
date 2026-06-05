@@ -400,12 +400,7 @@ export function MinusSquare(props: IconBaseProps) {
  * - 常见图片 → FileImage
  * - 其它 → FileGeneric
  */
-export type FileIconKind =
-  | 'markdown'
-  | 'text'
-  | 'code'
-  | 'image'
-  | 'generic'
+export type FileIconKind = 'markdown' | 'text' | 'code' | 'image' | 'generic'
 
 const CODE_EXTS = new Set([
   'js',
@@ -450,17 +445,7 @@ const CODE_EXTS = new Set([
   'swift',
 ])
 
-const IMAGE_EXTS = new Set([
-  'png',
-  'jpg',
-  'jpeg',
-  'gif',
-  'webp',
-  'bmp',
-  'ico',
-  'avif',
-  'tiff',
-])
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'tiff'])
 
 const TEXT_EXTS = new Set(['txt', 'log', 'csv', 'tsv'])
 

@@ -59,14 +59,14 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
               style={{
                 width: 14,
                 height: 14,
-                color: isActive
-                  ? 'var(--color-seeyue-accent)'
-                  : 'var(--color-seeyue-fg-muted)',
+                color: isActive ? 'var(--color-seeyue-accent)' : 'var(--color-seeyue-fg-muted)',
               }}
             >
               <TabIcon tab={tab} />
             </span>
-            <span className="max-w-[200px] whitespace-nowrap overflow-hidden text-ellipsis">{tab.filename}</span>
+            <span className="max-w-[200px] whitespace-nowrap overflow-hidden text-ellipsis">
+              {tab.filename}
+            </span>
             <button
               type="button"
               onClick={(e) => {

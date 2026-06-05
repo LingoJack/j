@@ -14,8 +14,13 @@
  * 之前先 decode 一次，把它还原成真实路径字节；最后再统一 encodeURIComponent，
  * 否则会出现 `%25E5` 这样的双重编码，后端 canonicalize 找不到文件 → 400。
  */
+/** 原始网络图片 URL 不应在 DOM → Markdown 序列化时变成 blob/proxy URL。 */
+export function isRemoteAssetUrl(url: string): boolean {
+  return /^(https?:|data:)/i.test(url)
+}
+
 export function resolveAssetUrl(url: string, baseDir: string | null): string {
-  if (/^(https?:|data:)/i.test(url)) return url
+  if (isRemoteAssetUrl(url)) return url
   const decoded = safeDecode(url)
   if (decoded.startsWith('/')) {
     return `./api/asset?path=${encodeURIComponent(decoded)}`

@@ -30,7 +30,10 @@ const ITEMS: ItemDef[] = [
 
 export function ActivityBar({ active, onSelect }: Props) {
   return (
-    <nav className="flex flex-col items-center gap-1 py-2 bg-seeyue-bg-deep border-r border-seeyue-border" aria-label="侧栏切换">
+    <nav
+      className="flex flex-col items-center gap-1 py-2 bg-seeyue-bg-deep border-r border-seeyue-border"
+      aria-label="侧栏切换"
+    >
       {ITEMS.map(({ key, title, Icon }) => (
         <button
           key={key}

@@ -50,13 +50,14 @@ export function ImageViewer({ path, filename, payload }: Props) {
         )}
       </div>
       <div className="flex items-center gap-2 px-3.5 py-1.5 border-t border-seeyue-border text-xs text-seeyue-fg-dim font-mono bg-seeyue-bg">
-        <span className="text-seeyue-fg font-medium max-w-[40%] overflow-hidden text-ellipsis whitespace-nowrap" title={path}>
+        <span
+          className="text-seeyue-fg font-medium max-w-[40%] overflow-hidden text-ellipsis whitespace-nowrap"
+          title={path}
+        >
           {filename}
         </span>
         <span className="opacity-50">·</span>
-        <span>
-          {meta ? `${meta.w} × ${meta.h}` : '解码中…'}
-        </span>
+        <span>{meta ? `${meta.w} × ${meta.h}` : '解码中…'}</span>
         {payload && (
           <>
             <span className="opacity-50">·</span>
