@@ -8,7 +8,7 @@
 @layer components {
   /* ---- 编辑器容器 ---- */
   .md-editor {
-    @apply mx-auto max-w-[1020px] px-10 py-9 text-[15px] leading-[1.82] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
+    @apply mx-auto max-w-[920px] px-10 py-10 text-[14.5px] leading-[1.86] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
   }
 
   /* ---- Block 基础 ---- */
@@ -80,33 +80,32 @@
 
   /* ---- 代码块 ---- */
   .md-code-wrap {
-    @apply relative overflow-hidden rounded-2xl my-6 bg-[#2b2520] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_14px_34px_rgba(64,45,31,0.12)];
+    @apply relative overflow-hidden rounded-lg my-5 bg-seeyue-code-bg border border-seeyue-code-border shadow-none;
   }
 
-  /* macOS 三圆点标题栏 */
   .md-code-wrap::before {
-    @apply block h-9 bg-[#342e28] bg-[radial-gradient(circle_at_20px_18px,#ff5f57_5px,transparent_5.5px),radial-gradient(circle_at_40px_18px,#febc2e_5px,transparent_5.5px),radial-gradient(circle_at_60px_18px,#28c840_5px,transparent_5.5px)] bg-no-repeat;
+    @apply block h-8 bg-seeyue-bg-deep border-b border-seeyue-code-border;
     content: '';
   }
 
   .md-code-lang {
-    @apply absolute top-2.5 right-4 select-none text-[11px] text-[#8a8078] tracking-[0.06em] font-[family-name:var(--font-mono)];
+    @apply absolute top-2 right-4 select-none text-[11px] text-seeyue-fg-dim tracking-[0.06em] font-[family-name:var(--font-mono)];
   }
 
   .md-code-pre {
-    @apply m-0 overflow-x-auto bg-transparent px-[22px] pt-4 pb-[18px];
+    @apply m-0 overflow-x-auto bg-transparent px-[18px] pt-3.5 pb-4;
   }
 
   .md-code-content {
-    @apply block whitespace-pre text-left text-[13px] leading-[1.7] outline-none font-[family-name:var(--font-mono)] text-[#d4c8b8] bg-transparent;
+    @apply block whitespace-pre text-left text-[13px] leading-[1.75] outline-none font-[family-name:var(--font-mono)] text-seeyue-fg bg-transparent;
   }
 
   /* 覆盖 .md-editor code 对代码块内 code 的背景色污染 */
   .md-code-wrap code {
-    @apply bg-transparent p-0 rounded-none text-[#d4c8b8];
+    @apply bg-transparent p-0 rounded-none text-seeyue-fg;
   }
   .md-code-wrap pre {
-    @apply bg-transparent rounded-none text-[#d4c8b8];
+    @apply bg-transparent rounded-none text-seeyue-fg;
   }
 
   /* ---- 表格 ---- */
@@ -182,21 +181,21 @@
 
   /* ---- 代码语法高亮（深色主题） ---- */
   .md-code-content .hl-kw {
-    @apply text-[#e8a87c] font-medium;
+    @apply text-[#0550ae] font-medium;
   }
   .md-code-content .hl-str {
-    @apply text-[#8cc084];
+    @apply text-[#0a7f42];
   }
   .md-code-content .hl-num {
-    @apply text-[#d4a84c];
+    @apply text-[#953800];
   }
   .md-code-content .hl-cmt {
-    @apply text-[#6e6358] italic;
+    @apply text-seeyue-fg-dim italic;
   }
   .md-code-content .hl-type {
-    @apply text-[#7cb8d4];
+    @apply text-[#8250df];
   }
   .md-code-content .hl-punct {
-    @apply text-[#8a7e72];
+    @apply text-seeyue-fg-muted;
   }
 }

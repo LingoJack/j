@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityBar, type ActivityKey } from './ActivityBar'
+import { ActivityBar, type ActivityKey, type ReaderTheme } from './ActivityBar'
 import { FileTree } from './FileTree'
 import { Toolbox } from './Toolbox'
 import { DiffTool } from './DiffTool'
@@ -34,9 +34,16 @@ const SIDEBAR_DEFAULT = 270
 const SIDEBAR_MIN = 180
 const SIDEBAR_MAX = 560
 const SIDEBAR_LS_KEY = 'jreader.sidebarWidth'
+const THEME_LS_KEY = 'jreader.theme'
+
+function readStoredTheme(): ReaderTheme {
+  const stored = localStorage.getItem(THEME_LS_KEY)
+  return stored === 'warm' ? 'warm' : 'aliyun'
+}
 
 export function Reader() {
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' })
+  const [theme, setThemeState] = useState<ReaderTheme>(readStoredTheme)
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
   const [treeRoot, setTreeRoot] = useState<string>('')
@@ -182,6 +189,11 @@ export function Reader() {
   // —— Tab 操作 ——
   const updateTab = useCallback((path: string, patch: Partial<Tab>) => {
     setTabs((prev) => prev.map((t) => (t.path === path ? { ...t, ...patch } : t)))
+  }, [])
+
+  const setTheme = useCallback((nextTheme: ReaderTheme) => {
+    setThemeState(nextTheme)
+    localStorage.setItem(THEME_LS_KEY, nextTheme)
   }, [])
 
   /**
@@ -516,13 +528,19 @@ export function Reader() {
     <MarkdownBaseDirContext.Provider value={baseDir}>
       <div
         className="h-full grid bg-seeyue-bg text-seeyue-fg"
+        data-theme={theme}
         style={{
           // 4 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [5px 分割条] [1fr 主区]
           gridTemplateColumns: `44px ${sidebarWidth}px 5px minmax(0, 1fr)`,
         }}
       >
         {/* 最左：垂直活动栏 */}
-        <ActivityBar active={activeActivity} onSelect={selectActivity} />
+        <ActivityBar
+          active={activeActivity}
+          theme={theme}
+          onSelect={selectActivity}
+          onThemeChange={setTheme}
+        />
 
         {/* 左：侧栏（按 activeActivity 切换内容） */}
         <aside className="overflow-hidden">

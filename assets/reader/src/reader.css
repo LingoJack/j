@@ -1,5 +1,5 @@
 /*
- * Reader SPA 专用样式入口（Anthropic Light — 米白赭陶风）。
+ * Reader SPA 专用样式入口（Aliyun Light 默认主题 + Seeyue Warm 可切换主题）。
  *
  * 所有组件样式已迁移为 Tailwind CSS v4 utilities。
  * 本文件仅保留：
@@ -13,39 +13,39 @@
 @import './editor/editor.css';
 
 @theme {
-  /* —— 背景层级（从最深到最浅） —— */
-  --color-seeyue-bg: #fbf7f0;
-  --color-seeyue-bg-deep: #f2ece3;
-  --color-seeyue-sidebar: #f7f1e9;
-  --color-seeyue-sidebar-strong: #efe5d8;
-  --color-seeyue-panel: #fffaf4;
-  --color-seeyue-elevated: #eee4d8;
+  /* —— Aliyun Light：白底、轻边框、文档站风格 —— */
+  --color-seeyue-bg: #ffffff;
+  --color-seeyue-bg-deep: #f4f6f8;
+  --color-seeyue-sidebar: #f7f8fa;
+  --color-seeyue-sidebar-strong: #eef1f5;
+  --color-seeyue-panel: #ffffff;
+  --color-seeyue-elevated: #f2f4f7;
 
   /* —— 边框 —— */
-  --color-seeyue-border: rgba(178, 162, 144, 0.34);
-  --color-seeyue-border-strong: rgba(178, 162, 144, 0.56);
-  --color-seeyue-border-dim: rgba(178, 162, 144, 0.2);
+  --color-seeyue-border: #e5e7eb;
+  --color-seeyue-border-strong: #d1d5db;
+  --color-seeyue-border-dim: #eef0f3;
 
   /* —— 文本 —— */
-  --color-seeyue-fg: #3d3630;
-  --color-seeyue-fg-strong: #1a1612;
-  --color-seeyue-fg-muted: #6b5e52;
-  --color-seeyue-fg-dim: #8a7e72;
+  --color-seeyue-fg: #374151;
+  --color-seeyue-fg-strong: #111827;
+  --color-seeyue-fg-muted: #6b7280;
+  --color-seeyue-fg-dim: #9ca3af;
 
   /* —— 强调色 —— */
-  --color-seeyue-accent: #b4654a;
-  --color-seeyue-accent-strong: #cc785c;
-  --color-seeyue-accent-soft: rgba(204, 120, 92, 0.12);
-  --color-seeyue-accent-mute: rgba(180, 101, 74, 0.08);
-  --color-seeyue-success: #4a7a50;
-  --color-seeyue-warn: #a07830;
-  --color-seeyue-danger: #b14040;
-  --color-seeyue-purple: #7a5ea0;
+  --color-seeyue-accent: #ff6a00;
+  --color-seeyue-accent-strong: #e65300;
+  --color-seeyue-accent-soft: rgba(255, 106, 0, 0.1);
+  --color-seeyue-accent-mute: rgba(255, 106, 0, 0.06);
+  --color-seeyue-success: #16a34a;
+  --color-seeyue-warn: #d97706;
+  --color-seeyue-danger: #dc2626;
+  --color-seeyue-purple: #7c3aed;
 
   /* —— 代码 —— */
-  --color-seeyue-code-bg: #f5f0ea;
-  --color-seeyue-code-border: rgba(200, 191, 178, 0.4);
-  --color-seeyue-inline-code-bg: #f0ebe4;
+  --color-seeyue-code-bg: #f8fafc;
+  --color-seeyue-code-border: #e5e7eb;
+  --color-seeyue-inline-code-bg: #f3f4f6;
 
   /* —— 字体栈 —— */
   --font-cjk:
@@ -69,9 +69,7 @@
 
   body {
     margin: 0;
-    background:
-      radial-gradient(circle at 18% 0%, rgba(204, 120, 92, 0.08), transparent 32%),
-      linear-gradient(180deg, #fbf7f0 0%, #f7f1e9 100%);
+    background: var(--color-seeyue-bg);
     color: var(--color-seeyue-fg);
     font-family: var(--font-cjk);
     font-size: 15px;
@@ -117,7 +115,33 @@
   }
 }
 
-/* —— Markdown 预览正文（深层嵌套选择器，无法用 Tailwind utilities 表达） —— */
+[data-theme='warm'] {
+  --color-seeyue-bg: #fbf7f0;
+  --color-seeyue-bg-deep: #f2ece3;
+  --color-seeyue-sidebar: #f7f1e9;
+  --color-seeyue-sidebar-strong: #efe5d8;
+  --color-seeyue-panel: #fffaf4;
+  --color-seeyue-elevated: #eee4d8;
+  --color-seeyue-border: rgba(178, 162, 144, 0.34);
+  --color-seeyue-border-strong: rgba(178, 162, 144, 0.56);
+  --color-seeyue-border-dim: rgba(178, 162, 144, 0.2);
+  --color-seeyue-fg: #3d3630;
+  --color-seeyue-fg-strong: #1a1612;
+  --color-seeyue-fg-muted: #6b5e52;
+  --color-seeyue-fg-dim: #8a7e72;
+  --color-seeyue-accent: #b4654a;
+  --color-seeyue-accent-strong: #cc785c;
+  --color-seeyue-accent-soft: rgba(204, 120, 92, 0.12);
+  --color-seeyue-accent-mute: rgba(180, 101, 74, 0.08);
+  --color-seeyue-success: #4a7a50;
+  --color-seeyue-warn: #a07830;
+  --color-seeyue-danger: #b14040;
+  --color-seeyue-purple: #7a5ea0;
+  --color-seeyue-code-bg: #f7f1e9;
+  --color-seeyue-code-border: rgba(178, 162, 144, 0.34);
+  --color-seeyue-inline-code-bg: #f0ebe4;
+}
+
 @layer components {
   .seeyue-prose {
     font-family: var(--font-cjk);
