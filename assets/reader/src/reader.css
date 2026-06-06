@@ -156,20 +156,24 @@
     color: var(--color-seeyue-accent);
   }
   .seeyue-prose blockquote {
-    background: rgba(204, 120, 92, 0.04);
-    border-left-color: var(--color-seeyue-accent);
+    background: var(--color-seeyue-bg-deep);
+    border-left: 3px solid rgba(255, 106, 0, 0.42);
+    border-radius: 4px;
+    padding: 10px 16px;
+    color: var(--color-seeyue-fg);
+    box-shadow: none;
   }
   .seeyue-prose table tbody tr:nth-child(even) td {
     background: rgba(200, 191, 178, 0.2);
   }
   .seeyue-prose :not(pre) > code {
-    color: var(--color-seeyue-purple);
-    background: var(--color-seeyue-inline-code-bg);
-    border: none;
-    border-radius: 4px;
-    padding: 0.05em 0.35em;
+    color: #c2410c;
+    background: rgba(255, 106, 0, 0.075);
+    border: 1px solid rgba(255, 106, 0, 0.14);
+    border-radius: 3px;
+    padding: 1px 4px;
     font-family: var(--font-mono);
-    font-size: 0.88em;
+    font-size: 0.9em;
   }
   .seeyue-prose a.seeyue-link::before {
     content: '\1F517';
@@ -194,43 +198,36 @@
     margin: 2.5em 0;
   }
 
-  /* 代码块：深色主题 + macOS 三圆点 */
+  /* 代码块：阿里云文档式浅色容器 */
   .seeyue-codeblock {
     position: relative;
-    margin: 1.2em 0;
-    border-radius: 12px;
-    border: none;
-    background: #2b2520;
+    margin: 16px 0;
+    border-radius: 6px;
+    border: 1px solid var(--color-seeyue-code-border);
+    background: var(--color-seeyue-code-bg);
     overflow: hidden;
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.08),
-      0 4px 16px rgba(0, 0, 0, 0.06);
+    box-shadow: none;
   }
   .seeyue-codeblock::before {
     content: '';
-    display: block;
-    height: 36px;
-    background: #342e28;
-    border-bottom: none;
-    background-image:
-      radial-gradient(circle at 20px 18px, #ff5f57 5px, transparent 5.5px),
-      radial-gradient(circle at 40px 18px, #febc2e 5px, transparent 5.5px),
-      radial-gradient(circle at 60px 18px, #28c840 5px, transparent 5.5px);
-    background-repeat: no-repeat;
+    display: none;
   }
   .seeyue-codeblock-lang {
     position: absolute;
-    top: 10px;
-    right: 16px;
+    top: 8px;
+    right: 12px;
     font-size: 11px;
     font-family: var(--font-mono);
-    letter-spacing: 0.06em;
-    color: #8a8078;
+    letter-spacing: 0.04em;
+    color: var(--color-seeyue-fg-dim);
     z-index: 1;
+    background: color-mix(in srgb, var(--color-seeyue-code-bg) 86%, transparent);
+    border-radius: 2px;
+    padding: 2px 6px;
   }
   .seeyue-codeblock pre {
     margin: 0;
-    padding: 16px 22px 18px;
+    padding: 16px 20px;
     overflow-x: auto;
     background: transparent;
   }
@@ -239,9 +236,9 @@
     white-space: pre;
     text-align: left;
     font-size: 13px;
-    line-height: 1.7;
+    line-height: 1.65;
     font-family: var(--font-mono);
-    color: #d4c8b8;
+    color: var(--color-seeyue-fg-strong);
     background: transparent;
   }
 }

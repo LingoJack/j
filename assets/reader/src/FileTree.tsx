@@ -174,11 +174,11 @@ export function FileTree(props: Props) {
   const filterLower = filter.trim().toLowerCase()
 
   return (
-    <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar border-r border-seeyue-border/70 shadow-[inset_-1px_0_0_rgba(255,255,255,0.42)]">
+    <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar border-r border-seeyue-border/80">
       {/* —— 顶部："文件" 标题 + 视图切换 —— */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border">
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border/70">
         <button
-          className="relative inline-flex items-center gap-1.5 px-1 pb-1.5 text-[13px] font-medium text-seeyue-fg-strong cursor-pointer bg-transparent border-0 outline-none transition-colors duration-200 after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-[-1px] after:h-[3px] after:rounded-[1.5px] after:bg-seeyue-accent-strong"
+          className="relative inline-flex items-center gap-1.5 px-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-seeyue-fg-dim cursor-default bg-transparent border-0 outline-none"
           data-active="true"
         >
           <Files size={14} />
@@ -187,7 +187,7 @@ export function FileTree(props: Props) {
         <div className="flex-1" />
         {onCreateFile && (
           <button
-            className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
             onClick={() => {
               setCreatingError(null)
               setCreatingIn(root)
@@ -198,14 +198,14 @@ export function FileTree(props: Props) {
           </button>
         )}
         <button
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={() => setPickingRoot(true)}
           title="切换根目录"
         >
           <FolderRoot size={15} />
         </button>
         <button
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onToggleHidden}
           data-active={showHidden ? 'true' : undefined}
           title={showHidden ? '隐藏 dotfile' : '显示 dotfile'}
@@ -235,7 +235,7 @@ export function FileTree(props: Props) {
 
       {/* —— 搜索框 —— */}
       <div className="px-3 pt-2 pb-2">
-        <div className="flex items-center gap-1.5 h-7 px-2 bg-seeyue-bg-deep border border-seeyue-border-strong rounded-md text-seeyue-fg-muted transition-colors duration-150 focus-within:border-seeyue-accent">
+        <div className="flex items-center gap-1.5 h-7 px-2 bg-seeyue-bg border border-seeyue-border rounded text-seeyue-fg-muted transition-colors duration-150 focus-within:border-seeyue-accent focus-within:bg-seeyue-bg">
           <Search size={13} />
           <input
             type="text"
@@ -247,7 +247,7 @@ export function FileTree(props: Props) {
           />
           {filter && (
             <button
-              className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ width: 18, height: 18 }}
               onClick={() => setFilter('')}
               title="清除"
@@ -352,7 +352,7 @@ function DirNode({
     <div
       className={
         depth > 0
-          ? "relative before:content-[''] before:absolute before:top-0 before:bottom-0 before:w-px before:bg-[rgba(76,86,106,0.55)]"
+          ? "relative before:content-[''] before:absolute before:top-0 before:bottom-0 before:w-px before:bg-seeyue-border"
           : undefined
       }
     >
@@ -432,7 +432,7 @@ function EntryRow({
   return (
     <>
       <div
-        className="group flex items-center gap-1 w-full py-[3px] pr-1.5 text-[13px] text-seeyue-fg bg-transparent border-0 rounded text-left cursor-pointer relative transition-colors duration-150 leading-snug hover:bg-seeyue-elevated data-[active=true]:bg-seeyue-accent-strong data-[active=true]:text-seeyue-fg-strong data-[active=true]:font-semibold after:content-[''] after:absolute after:top-1/2 after:right-1.5 after:-translate-y-1/2 after:w-1 after:h-[18px] after:rounded-sm after:bg-transparent data-[active=true]:after:bg-seeyue-success data-[active=true]:hover:after:bg-seeyue-elevated"
+        className="group flex min-h-7 w-full items-center gap-1 rounded-sm border-0 bg-transparent py-[3px] pr-1.5 text-left text-[13px] leading-snug text-seeyue-fg-muted cursor-pointer relative transition-colors duration-150 hover:bg-seeyue-elevated hover:text-seeyue-fg data-[active=true]:bg-seeyue-accent-mute data-[active=true]:text-seeyue-accent data-[active=true]:font-medium before:content-[''] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r before:bg-transparent data-[active=true]:before:bg-seeyue-accent"
         data-active={isActive ? 'true' : undefined}
         style={{ paddingLeft: indent }}
         title={entry.path}
@@ -450,7 +450,7 @@ function EntryRow({
           }
         }}
       >
-        <span className="shrink-0 text-seeyue-fg-dim inline-flex items-center justify-center w-[14px] h-[14px] transition-all duration-150 group-hover:text-seeyue-success group-data-[active=true]:text-seeyue-fg-strong">
+        <span className="shrink-0 text-seeyue-fg-dim inline-flex items-center justify-center w-[14px] h-[14px] transition-colors duration-150 group-hover:text-seeyue-fg-muted group-data-[active=true]:text-seeyue-accent">
           {entry.is_dir ? (
             sub?.expanded ? (
               <ChevronDown size={12} />
@@ -460,7 +460,7 @@ function EntryRow({
           ) : null}
         </span>
         <span
-          className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] data-[kind=folder]:text-seeyue-fg-muted data-[kind=folder-open]:text-seeyue-purple data-[kind=markdown]:text-seeyue-accent data-[kind=text]:text-seeyue-fg-muted data-[kind=code]:text-seeyue-warn data-[kind=image]:text-seeyue-success data-[kind=generic]:text-seeyue-fg-dim group-data-[active=true]:text-seeyue-success"
+          className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] text-seeyue-fg-dim transition-colors duration-150 data-[kind=folder]:text-seeyue-fg-dim data-[kind=folder-open]:text-seeyue-fg-muted data-[kind=markdown]:text-seeyue-fg-muted data-[kind=text]:text-seeyue-fg-dim data-[kind=code]:text-seeyue-fg-muted data-[kind=image]:text-seeyue-fg-muted data-[kind=generic]:text-seeyue-fg-dim group-hover:text-seeyue-fg-muted group-data-[active=true]:text-seeyue-accent"
           data-kind={
             entry.is_dir ? (sub?.expanded ? 'folder-open' : 'folder') : pickFileIconKind(entry.name)
           }

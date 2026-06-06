@@ -65,7 +65,7 @@
     @apply line-through opacity-55;
   }
   .md-editor code {
-    @apply rounded bg-seeyue-inline-code-bg text-seeyue-purple px-[5px] py-[2px] font-[family-name:var(--font-mono)] text-[0.88em];
+    @apply rounded-[3px] border border-[rgba(255,106,0,0.14)] bg-[rgba(255,106,0,0.075)] px-1 py-[1px] font-[family-name:var(--font-mono)] text-[0.9em] text-[#c2410c];
   }
   .md-editor a {
     @apply text-seeyue-accent no-underline border-b border-solid border-[rgba(180,101,74,0.25)] transition-[color_0.15s,border-color_0.15s];
@@ -80,24 +80,24 @@
 
   /* ---- 代码块 ---- */
   .md-code-wrap {
-    @apply relative overflow-hidden rounded-lg my-5 bg-seeyue-code-bg border border-seeyue-code-border shadow-none;
+    @apply relative overflow-hidden rounded-md my-4 bg-seeyue-code-bg border border-seeyue-code-border shadow-none;
   }
 
   .md-code-wrap::before {
-    @apply block h-8 bg-seeyue-bg-deep border-b border-seeyue-code-border;
+    @apply hidden;
     content: '';
   }
 
   .md-code-lang {
-    @apply absolute top-2 right-4 select-none text-[11px] text-seeyue-fg-dim tracking-[0.06em] font-[family-name:var(--font-mono)];
+    @apply absolute top-2 right-3 z-[1] select-none rounded-sm bg-seeyue-code-bg/85 px-1.5 py-0.5 text-[11px] text-seeyue-fg-dim tracking-[0.04em] font-[family-name:var(--font-mono)];
   }
 
   .md-code-pre {
-    @apply m-0 overflow-x-auto bg-transparent px-[18px] pt-3.5 pb-4;
+    @apply m-0 overflow-x-auto bg-transparent px-5 py-4;
   }
 
   .md-code-content {
-    @apply block whitespace-pre text-left text-[13px] leading-[1.75] outline-none font-[family-name:var(--font-mono)] text-seeyue-fg bg-transparent;
+    @apply block whitespace-pre text-left text-[13px] leading-[1.65] outline-none font-[family-name:var(--font-mono)] text-seeyue-fg-strong bg-transparent;
   }
 
   /* 覆盖 .md-editor code 对代码块内 code 的背景色污染 */
@@ -135,24 +135,24 @@
 
   /* ---- 引用块 ---- */
   .md-blockquote {
-    @apply rounded-xl bg-seeyue-accent-mute/80 text-seeyue-fg-muted border-l-[3px] border-l-[var(--color-seeyue-accent)] px-4 py-3 my-5 shadow-[inset_0_0_0_1px_rgba(180,101,74,0.08)];
+    @apply rounded bg-seeyue-bg-deep/80 text-seeyue-fg border-l-[3px] border-l-[rgba(255,106,0,0.42)] px-4 py-2.5 my-4 shadow-none;
   }
   .md-blockquote .md-block {
-    @apply mb-1.5;
+    @apply mb-1;
   }
 
   /* ---- 列表 ---- */
   .md-list {
-    @apply pl-6 my-2.5;
+    @apply my-2.5 pl-6;
   }
   .md-list-item {
-    @apply mb-1 flex items-start gap-1.5;
+    @apply mb-1 flex items-start gap-1 leading-[1.8];
   }
   .md-list-text {
     @apply flex-1 outline-none;
   }
   .md-checkbox {
-    @apply mt-[5px] accent-[var(--color-seeyue-success)];
+    @apply mt-[7px] h-[14px] w-[14px] accent-[var(--color-seeyue-accent)];
   }
   .md-task-item {
     @apply list-none -ml-5;
@@ -173,7 +173,7 @@
     @apply bg-transparent border-l-[var(--color-seeyue-border-strong)];
   }
   .md-list .md-list {
-    @apply my-1;
+    @apply my-1 pl-5;
   }
   .md-blockquote .md-list {
     @apply my-1;
