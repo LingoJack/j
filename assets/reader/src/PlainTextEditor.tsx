@@ -82,7 +82,5 @@ export function PlainTextEditor({ path, initialSource, onChange }: Props) {
 
 function renderCodeLayer(target: HTMLElement | null, source: string, language: string) {
   if (!target) return
-  target.replaceChildren(
-    renderHighlightedCode(source.endsWith('\n') ? `${source} ` : source, language)
-  )
+  target.replaceChildren(renderHighlightedCode(source, language))
 }

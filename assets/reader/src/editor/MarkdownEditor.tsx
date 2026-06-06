@@ -711,6 +711,10 @@ function handleTableKeyDown(e: KeyboardEvent) {
 
 // ---- 代码块 ----
 
+function trimCodeBlockDisplayNewline(code: string): string {
+  return code.endsWith('\n') ? code.slice(0, -1) : code
+}
+
 function createCodeBlockElement(lang: string, code: string, onEdit: () => void): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'md-block md-code-wrap'
@@ -730,8 +734,8 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
   const codeEl = document.createElement('code')
   codeEl.className = 'md-code-content'
   codeEl.contentEditable = 'true'
-  // 使用语法高亮渲染
-  codeEl.appendChild(renderHighlightedCode(code, lang))
+  // 使用语法高亮渲染；后端 code block 常带 fence 结束前的尾随换行，展示时去掉，避免底部多一空行。
+  codeEl.appendChild(renderHighlightedCode(trimCodeBlockDisplayNewline(code), lang))
   codeEl.addEventListener('input', onEdit)
 
   pre.appendChild(codeEl)
