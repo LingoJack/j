@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { detectCodeLanguage, isCodeFile } from './codeLanguage'
+import { renderHighlightedCode } from './editor/code-highlight'
 
 interface Props {
   /** 文件路径，外层 Reader 用 key={path} 触发整体 remount */
@@ -10,34 +12,77 @@ interface Props {
 }
 
 /**
- * 极简纯文本编辑器：一个 uncontrolled `<textarea>`，无任何顶栏。
+ * 纯文本 / 代码文件编辑器。
  *
- * - 顶栏（保存按钮、未保存徽章、面包屑）都已经在 EditorBar，重复不美观，去掉。
- * - 改成 uncontrolled (defaultValue) 后，输入流不再每次按键回经 React 树，
- *   彻底避免 Reader/TabBar 等的连带 re-render —— 大文件下表现明显平滑。
+ * 文本文件保持轻量 textarea；代码文件使用 VS Code 风的 textarea + pre overlay，
+ * 后景负责 refractor 高亮，前景负责真实输入、选择和保存。
  */
 export function PlainTextEditor({ path, initialSource, onChange }: Props) {
-  const ref = useRef<HTMLTextAreaElement | null>(null)
-
-  // 让 onChange 闭包始终拿最新引用
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
+  const preRef = useRef<HTMLPreElement | null>(null)
+  const highlightRef = useRef<HTMLElement | null>(null)
+  const codeMode = isCodeFile(path)
+  const language = detectCodeLanguage(path)
 
   useEffect(() => {
-    ref.current?.focus()
+    textAreaRef.current?.focus()
   }, [])
 
+  useEffect(() => {
+    if (!codeMode) return
+    renderCodeLayer(highlightRef.current, initialSource, language)
+  }, [codeMode, initialSource, language])
+
+  if (!codeMode) {
+    return (
+      <textarea
+        ref={textAreaRef}
+        key={path}
+        className="seeyue-textarea w-full h-full px-6 py-5 overflow-y-auto"
+        spellCheck={false}
+        defaultValue={initialSource}
+        onInput={(e) => {
+          const v = (e.target as HTMLTextAreaElement).value
+          onChange(path, v)
+        }}
+      />
+    )
+  }
+
   return (
-    <textarea
-      ref={ref}
-      key={path}
-      className="seeyue-textarea w-full h-full px-6 py-5 overflow-y-auto"
-      spellCheck={false}
-      defaultValue={initialSource}
-      onInput={(e) => {
-        const v = (e.target as HTMLTextAreaElement).value
-        onChangeRef.current(path, v)
-      }}
-    />
+    <div className="seeyue-code-editor relative w-full h-full overflow-hidden bg-seeyue-bg">
+      <pre
+        ref={preRef}
+        aria-hidden="true"
+        className="seeyue-code-editor-highlight absolute inset-0 m-0 overflow-auto px-8 py-6 font-[family-name:var(--font-mono)] text-[13px] leading-[1.72] whitespace-pre tab-size-2 pointer-events-none"
+      >
+        <code ref={highlightRef} />
+      </pre>
+      <textarea
+        ref={textAreaRef}
+        key={path}
+        className="seeyue-code-editor-input absolute inset-0 w-full h-full resize-none overflow-auto border-0 bg-transparent px-8 py-6 font-[family-name:var(--font-mono)] text-[13px] leading-[1.72] whitespace-pre tab-size-2 outline-none text-transparent caret-seeyue-accent selection:bg-[rgba(22,119,255,0.18)]"
+        spellCheck={false}
+        defaultValue={initialSource}
+        onInput={(e) => {
+          const v = (e.target as HTMLTextAreaElement).value
+          renderCodeLayer(highlightRef.current, v, language)
+          onChange(path, v)
+        }}
+        onScroll={(e) => {
+          preRef.current?.scrollTo({
+            left: e.currentTarget.scrollLeft,
+            top: e.currentTarget.scrollTop,
+          })
+        }}
+      />
+    </div>
+  )
+}
+
+function renderCodeLayer(target: HTMLElement | null, source: string, language: string) {
+  if (!target) return
+  target.replaceChildren(
+    renderHighlightedCode(source.endsWith('\n') ? `${source} ` : source, language)
   )
 }

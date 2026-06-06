@@ -15,7 +15,7 @@ import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { VerticalSplitter } from './Splitter'
 import { MarkdownBaseDirContext } from './MarkdownIR'
-import { BookOpen, CopyPath, Save, Sparkles } from './Icon'
+import { ChevronRight, CopyPath, FileText, Save } from './Icon'
 import type { ImagePayload, InitialResp, ParsedDocument, RenderedDoc, Tab, ToolId } from './types'
 
 type LoadState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready' }
@@ -758,31 +758,32 @@ function EditorBar({
   // 图片是只读视图：不显示 dirty / 保存按钮（一旦触发 /api/save 会用空 source 覆盖原文件）
   const editable = tab.kind !== 'image'
   return (
-    <div className="flex items-center h-8 px-3 bg-seeyue-bg text-xs text-seeyue-fg-dim gap-2">
+    <div className="flex items-center h-8 px-2.5 bg-seeyue-bg text-xs text-seeyue-fg-dim gap-1.5 border-b border-seeyue-border-dim">
       <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden" title={tab.path}>
         {segs.map((s, i) => (
-          <span
-            key={i}
-            className={`whitespace-nowrap overflow-hidden text-ellipsis ${i === segs.length - 1 ? 'text-seeyue-fg' : ''}`}
-          >
-            {i > 0 && <span className="opacity-50"> / </span>}
-            {s}
+          <span key={i} className="inline-flex min-w-0 items-center gap-1">
+            {i > 0 && <ChevronRight size={13} className="shrink-0 opacity-45" />}
+            <span
+              className={`whitespace-nowrap overflow-hidden text-ellipsis ${i === segs.length - 1 ? 'text-seeyue-fg font-medium' : ''}`}
+            >
+              {s}
+            </span>
           </span>
         ))}
       </div>
       {editable && tab.dirty && (
-        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(208,135,112,0.18)] text-seeyue-warn">
-          ● 未保存
+        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 text-seeyue-accent">
+          <span className="h-1.5 w-1.5 rounded-full bg-current" /> 未保存
         </span>
       )}
       {editable && tab.saving === 'saving' && (
-        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-seeyue-accent-mute text-seeyue-accent">
+        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 text-seeyue-accent">
           保存中…
         </span>
       )}
       {editable && tab.saving === 'error' && (
         <span
-          className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(191,97,106,0.18)] text-seeyue-danger"
+          className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 text-seeyue-danger"
           title={tab.error}
         >
           保存失败
@@ -798,10 +799,12 @@ function EditorBar({
       </button>
       {editable && (
         <button
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated hover:border-seeyue-border disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-35 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-seeyue-fg-dim data-[dirty=true]:text-seeyue-accent data-[dirty=true]:hover:bg-seeyue-accent-mute"
           onClick={onSave}
-          title="保存（⌘S）"
-          aria-label="保存当前文件"
+          disabled={!tab.dirty || tab.saving === 'saving'}
+          data-dirty={tab.dirty ? 'true' : undefined}
+          title={tab.dirty ? '保存（⌘S）' : '无更改'}
+          aria-label={tab.dirty ? '保存当前文件' : '当前文件无更改'}
         >
           <Save size={14} />
         </button>
@@ -811,67 +814,59 @@ function EditorBar({
 }
 
 function EmptyState() {
+  const isMac = navigator.platform.toLowerCase().includes('mac')
+  const mod = isMac ? '⌘' : 'Ctrl'
+
   return (
-    <div className="h-full flex items-center justify-center p-12 text-seeyue-fg-dim text-[13px] text-center">
-      <div className="relative max-w-[520px] rounded-[28px] border border-seeyue-border-dim bg-seeyue-panel/70 px-12 py-10 shadow-[0_22px_70px_rgba(88,65,42,0.10),inset_0_1px_0_rgba(255,255,255,0.72)] overflow-hidden">
-        <div className="absolute -top-16 -right-12 h-44 w-44 rounded-full bg-seeyue-accent-soft blur-2xl" />
-        <div className="absolute -bottom-20 -left-10 h-44 w-44 rounded-full bg-[rgba(94,129,172,0.10)] blur-2xl" />
-        <div className="relative">
-          <span className="mx-auto flex items-center justify-center w-[84px] h-[84px] rounded-[26px] bg-[linear-gradient(135deg,rgba(180,101,74,0.14),rgba(214,156,126,0.08))] text-seeyue-accent mb-[18px] shadow-[inset_0_0_0_1px_rgba(180,101,74,0.18)]">
-            <BookOpen size={36} />
+    <div className="h-full bg-seeyue-bg text-seeyue-fg-dim">
+      <div className="mx-auto flex h-full max-w-[860px] flex-col justify-center px-16 pb-16">
+        <div className="mb-8 flex items-center gap-3 text-seeyue-fg-strong">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-seeyue-border bg-seeyue-panel text-seeyue-accent">
+            <FileText size={20} />
           </span>
-          <div className="text-seeyue-fg text-[15px] font-medium mb-1.5 flex items-center justify-center gap-1.5">
-            <Sparkles size={14} className="opacity-70" />
-            从左侧选一个文件开始阅读
-          </div>
-          <div className="text-seeyue-fg-muted mb-[18px] leading-[1.7]">
-            也可以直接在终端运行 <code>j read &lt;file&gt;</code> 打开指定文件。
-          </div>
-          <div className="grid gap-1.5 text-xs text-seeyue-fg-dim">
-            <div className="flex items-center gap-2 justify-center">
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                ⌘
-              </kbd>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                S
-              </kbd>
-              <span>保存当前文件</span>
-            </div>
-            <div className="flex items-center gap-2 justify-center">
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                ⌘
-              </kbd>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                W
-              </kbd>
-              <span>/</span>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                ⌃
-              </kbd>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                W
-              </kbd>
-              <span>关闭当前 Tab；空时退出 reader</span>
-            </div>
-            <div className="flex items-center gap-2 justify-center">
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                ⌘
-              </kbd>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                ⌥
-              </kbd>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                ←
-              </kbd>
-              <span>/</span>
-              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-                →
-              </kbd>
-              <span>切换前后 Tab</span>
+          <div>
+            <div className="text-[24px] font-semibold tracking-[-0.02em]">J Reader</div>
+            <div className="mt-1 text-[13px] font-normal text-seeyue-fg-muted">
+              选择左侧 Explorer 中的文件开始阅读或编辑
             </div>
           </div>
         </div>
+
+        <div className="grid max-w-[640px] gap-7 md:grid-cols-2">
+          <WelcomeSection title="开始">
+            <WelcomeAction label="从 Explorer 打开文件" hint="点击左侧文件树中的任意文档" />
+            <WelcomeAction label="打开工具面板" hint={`${mod} 2`} />
+            <WelcomeAction label="切回文件面板" hint={`${mod} 1`} />
+          </WelcomeSection>
+          <WelcomeSection title="快捷键">
+            <WelcomeAction label="保存当前文件" hint={`${mod} S`} />
+            <WelcomeAction label="关闭当前编辑器" hint={`${mod} W`} />
+            <WelcomeAction label="切换前后 Tab" hint={`${mod} Alt ←/→`} />
+          </WelcomeSection>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function WelcomeSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-seeyue-fg-dim">
+        {title}
+      </h2>
+      <div className="grid gap-1.5">{children}</div>
+    </section>
+  )
+}
+
+function WelcomeAction({ label, hint }: { label: string; hint: string }) {
+  return (
+    <div className="group flex min-h-8 items-center justify-between gap-4 rounded-md px-2 py-1.5 text-[13px] text-seeyue-fg-muted transition-colors hover:bg-seeyue-elevated hover:text-seeyue-fg">
+      <span>{label}</span>
+      <kbd className="shrink-0 rounded border border-seeyue-border bg-seeyue-panel px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[11px] text-seeyue-fg-dim shadow-[inset_0_-1px_0_var(--color-seeyue-border)]">
+        {hint}
+      </kbd>
     </div>
   )
 }

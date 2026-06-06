@@ -2,7 +2,7 @@
 
 # jcli
 
-**AI 驱动的命令行工作台** - jcli
+**AI 驱动的命令行工作台**
 
 别名打开 · Agent 工作台 · 日报周报 · 待办备忘 · Markdown 预览 · 脚本工作流
 
@@ -74,6 +74,7 @@ irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 
 ```bash
 cargo install j-cli
+
 ```
 
 <p><em>图 4：Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。</em></p>

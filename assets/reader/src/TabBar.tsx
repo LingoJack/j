@@ -47,11 +47,14 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
         return (
           <div
             key={tab.path}
-            className="inline-flex items-center gap-1.5 h-full px-3 pl-3.5 text-[13px] text-seeyue-fg-muted cursor-pointer relative border-r border-seeyue-border/60 transition-colors duration-150 select-none hover:text-seeyue-fg-strong hover:bg-seeyue-elevated/70 data-[active=true]:text-seeyue-fg-strong data-[active=true]:bg-seeyue-bg after:content-[''] after:absolute after:left-2 after:right-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent data-[active=true]:after:bg-seeyue-accent-strong before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-white/30"
+            className="group/tab inline-flex items-center gap-1.5 h-full px-3 pl-3.5 min-w-[128px] max-w-[240px] text-[13px] text-seeyue-fg-muted cursor-pointer relative border-r border-seeyue-border/70 transition-colors duration-150 select-none hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[active=true]:text-seeyue-fg-strong data-[active=true]:bg-seeyue-bg after:content-[''] after:absolute after:left-0 after:right-0 after:top-0 after:h-0.5 after:bg-transparent data-[active=true]:after:bg-seeyue-accent"
             data-active={isActive ? 'true' : undefined}
             onClick={() => onActivate(tab.path)}
-            onAuxClick={(e) => {
-              if (e.button === 1) onClose(tab.path)
+            onMouseDown={(e) => {
+              if (e.button === 1) {
+                e.preventDefault()
+                onClose(tab.path)
+              }
             }}
             title={tab.path}
           >
@@ -65,7 +68,7 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
             >
               <TabIcon tab={tab} />
             </span>
-            <span className="max-w-[200px] whitespace-nowrap overflow-hidden text-ellipsis">
+            <span className="max-w-[200px] flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
               {tab.filename}
             </span>
             <button
@@ -74,15 +77,23 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
                 e.stopPropagation()
                 onClose(tab.path)
               }}
-              className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded border-0 bg-transparent text-seeyue-fg-dim cursor-pointer transition-all duration-150 shrink-0 hover:text-seeyue-fg-strong hover:bg-[rgba(191,97,106,0.4)]${tab.dirty ? ' text-seeyue-warn hover:text-seeyue-fg-strong hover:bg-[rgba(191,97,106,0.4)]' : ''}`}
-              title={tab.dirty ? '有未保存改动 · 关闭' : '关闭'}
+              className="inline-flex items-center justify-center w-[18px] h-[18px] rounded border-0 bg-transparent text-seeyue-fg-dim cursor-pointer transition-all duration-150 shrink-0 opacity-0 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated group-hover/tab:opacity-100 data-[active=true]:opacity-100 data-[dirty=true]:opacity-0 data-[dirty=true]:group-hover/tab:opacity-100"
+              data-active={isActive ? 'true' : undefined}
+              data-dirty={tab.dirty ? 'true' : undefined}
+              title={tab.dirty ? '关闭 · 有未保存改动' : '关闭'}
+              aria-label={`关闭 ${tab.filename}`}
             >
-              {tab.dirty ? (
-                <span style={{ fontSize: 12, lineHeight: 1 }}>●</span>
-              ) : (
-                <Close size={12} />
-              )}
+              <Close size={12} />
             </button>
+            {tab.dirty && (
+              <span
+                className="pointer-events-none absolute right-3 inline-flex h-[18px] w-[18px] items-center justify-center text-seeyue-accent opacity-100 transition-opacity duration-150 group-hover/tab:opacity-0"
+                title="有未保存改动"
+                aria-hidden="true"
+              >
+                <span className="h-2 w-2 rounded-full bg-current" />
+              </span>
+            )}
           </div>
         )
       })}

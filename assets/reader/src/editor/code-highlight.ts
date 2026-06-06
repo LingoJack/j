@@ -1,18 +1,69 @@
+import { refractor } from 'refractor/core'
+import bash from 'refractor/bash'
+import css from 'refractor/css'
+import go from 'refractor/go'
+import javascript from 'refractor/javascript'
+import json from 'refractor/json'
+import jsx from 'refractor/jsx'
+import markdown from 'refractor/markdown'
+import markup from 'refractor/markup'
+import python from 'refractor/python'
+import rust from 'refractor/rust'
+import sql from 'refractor/sql'
+import toml from 'refractor/toml'
+import tsx from 'refractor/tsx'
+import typescript from 'refractor/typescript'
+import yaml from 'refractor/yaml'
+import type { Element, Root, Text } from 'hast'
+
 /**
- * 轻量代码高亮 tokenizer。
+ * Reader 代码高亮入口。
  *
- * 用正则匹配关键字、字符串、注释、数字，生成带 CSS class 的 <span> DOM。
- * 不依赖外部库，在 createCodeBlockElement 中使用。
- *
- * CSS class 映射（在 editor.css 中定义颜色）：
- *   .hl-kw   关键字
- *   .hl-str  字符串
- *   .hl-num  数字
- *   .hl-cmt  注释
- *   .hl-type 类型名
+ * 优先使用 refractor/Prism 的 AST 做语言级高亮；未知语言再回退到轻量 tokenizer，
+ * 这样 Markdown 代码块和代码文件都能获得更丰富的 token class，同时保持无语言代码块可读。
  */
 
-// ---- 语言关键字表 ----
+const LANGUAGE_REGISTRATIONS = [
+  markup,
+  css,
+  javascript,
+  typescript,
+  jsx,
+  tsx,
+  json,
+  bash,
+  rust,
+  go,
+  python,
+  sql,
+  yaml,
+  toml,
+  markdown,
+]
+
+for (const language of LANGUAGE_REGISTRATIONS) {
+  refractor.register(language)
+}
+
+const LANGUAGE_ALIASES: Record<string, string> = {
+  cjs: 'javascript',
+  htm: 'markup',
+  html: 'markup',
+  js: 'javascript',
+  jsx: 'jsx',
+  md: 'markdown',
+  mjs: 'javascript',
+  rs: 'rust',
+  sh: 'bash',
+  shell: 'bash',
+  ts: 'typescript',
+  tsx: 'tsx',
+  xml: 'markup',
+  yml: 'yaml',
+  zsh: 'bash',
+}
+
+// ---- fallback 关键字表 ----
 
 const KEYWORDS: Record<string, Set<string>> = {
   rust: new Set(
@@ -61,43 +112,38 @@ const KEYWORDS: Record<string, Set<string>> = {
 }
 
 const COMMENT_PREFIX: Record<string, string> = {
-  rust: '//',
-  typescript: '//',
-  javascript: '//',
-  go: '//',
-  java: '//',
-  cpp: '//',
-  c: '//',
-  cs: '//',
-  swift: '//',
-  kotlin: '//',
-  python: '#',
   bash: '#',
-  sh: '#',
-  yaml: '#',
-  toml: '#',
-  ruby: '#',
-  perl: '#',
-  r: '#',
-  sql: '--',
-  lua: '--',
+  c: '//',
+  cpp: '//',
+  cs: '//',
+  go: '//',
   haskell: '--',
-  html: '',
-  css: '',
+  java: '//',
+  javascript: '//',
+  kotlin: '//',
+  lua: '--',
+  perl: '#',
+  python: '#',
+  r: '#',
+  ruby: '#',
+  rust: '//',
+  sh: '#',
+  sql: '--',
+  swift: '//',
+  toml: '#',
+  typescript: '//',
+  yaml: '#',
 }
 
-function normalizeLang(lang: string): string {
-  const l = lang.toLowerCase().trim()
-  if (l === 'rs') return 'rust'
-  if (l === 'ts') return 'typescript'
-  if (l === 'js') return 'javascript'
-  if (l === 'golang') return 'go'
-  if (l === 'shell' || l === 'zsh') return 'bash'
-  if (l === 'yml') return 'yaml'
-  return l
+export function normalizeCodeLanguage(lang: string): string {
+  const normalized = lang
+    .toLowerCase()
+    .trim()
+    .replace(/^language-/, '')
+  return LANGUAGE_ALIASES[normalized] ?? normalized
 }
 
-// ---- Tokenizer ----
+// ---- fallback tokenizer ----
 
 type TokenType = 'text' | 'kw' | 'str' | 'num' | 'cmt' | 'type' | 'punct'
 
@@ -107,7 +153,7 @@ interface Token {
 }
 
 export function tokenizeCode(code: string, lang: string): Token[] {
-  const normLang = normalizeLang(lang)
+  const normLang = normalizeCodeLanguage(lang)
   const keywords = KEYWORDS[normLang]
   const commentPrefix = COMMENT_PREFIX[normLang] ?? ''
   const tokens: Token[] = []
@@ -118,41 +164,34 @@ export function tokenizeCode(code: string, lang: string): Token[] {
     let pos = 0
 
     while (pos < line.length) {
-      // ---- 多行注释 (/* ... */) ----
       if (line[pos] === '/' && pos + 1 < line.length && line[pos + 1] === '*') {
         const start = pos
         pos += 2
-        // 在单行内找结束
         const endIdx = line.indexOf('*/', pos)
         if (endIdx >= 0) {
           tokens.push({ type: 'cmt', text: line.slice(start, endIdx + 2) })
           pos = endIdx + 2
         } else {
-          // 跨行注释：取剩余所有行
           tokens.push({ type: 'cmt', text: line.slice(start) })
-          // 把后续行也吃掉直到找到 */
           for (let ni = li + 1; ni < lines.length; ni++) {
             const endI = lines[ni].indexOf('*/')
             if (endI >= 0) {
               tokens.push({ type: 'cmt', text: '\n' + lines[ni].slice(0, endI + 2) })
               break
-            } else {
-              tokens.push({ type: 'cmt', text: '\n' + lines[ni] })
             }
+            tokens.push({ type: 'cmt', text: '\n' + lines[ni] })
           }
           pos = line.length
         }
         continue
       }
 
-      // ---- 行注释 ----
       if (commentPrefix && line.slice(pos).startsWith(commentPrefix)) {
         tokens.push({ type: 'cmt', text: line.slice(pos) })
         pos = line.length
         continue
       }
 
-      // ---- 双引号字符串 ----
       if (line[pos] === '"') {
         const start = pos
         pos++
@@ -171,7 +210,6 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         continue
       }
 
-      // ---- 单引号字符串（非 Rust） ----
       if (line[pos] === "'" && !matchesLang(normLang, 'rust')) {
         const start = pos
         pos++
@@ -190,7 +228,6 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         continue
       }
 
-      // ---- 反引号字符串 ----
       if (line[pos] === '`') {
         const start = pos
         pos++
@@ -200,7 +237,6 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         continue
       }
 
-      // ---- 数字 ----
       if (
         isDigit(line[pos]) ||
         (line[pos] === '.' && pos + 1 < line.length && isDigit(line[pos + 1]))
@@ -216,18 +252,16 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         } else {
           while (pos < line.length && (isDigit(line[pos]) || line[pos] === '.')) pos++
         }
-        // 后缀 (f64, u32, i64, etc.)
         while (pos < line.length && isAlpha(line[pos])) pos++
         tokens.push({ type: 'num', text: line.slice(start, pos) })
         continue
       }
 
-      // ---- 标识符 / 关键字 ----
       if (isIdentStart(line[pos])) {
         const start = pos
         while (pos < line.length && isIdentPart(line[pos])) pos++
         const word = line.slice(start, pos)
-        if (keywords && keywords.has(word)) {
+        if (keywords?.has(word)) {
           tokens.push({ type: 'kw', text: word })
         } else if (word[0] === word[0].toUpperCase() && isAlpha(word[0])) {
           tokens.push({ type: 'type', text: word })
@@ -237,12 +271,10 @@ export function tokenizeCode(code: string, lang: string): Token[] {
         continue
       }
 
-      // ---- 其他字符 ----
       tokens.push({ type: 'punct', text: line[pos] })
       pos++
     }
 
-    // 行间换行
     if (li < lines.length - 1) {
       tokens.push({ type: 'text', text: '\n' })
     }
@@ -251,8 +283,21 @@ export function tokenizeCode(code: string, lang: string): Token[] {
   return tokens
 }
 
-/** 将 token 列表渲染为 DOM fragment */
 export function renderHighlightedCode(code: string, lang: string): DocumentFragment {
+  const normalizedLang = normalizeCodeLanguage(lang)
+
+  if (normalizedLang && refractor.registered(normalizedLang)) {
+    try {
+      return renderHastRoot(refractor.highlight(code, normalizedLang))
+    } catch {
+      // fallback below
+    }
+  }
+
+  return renderFallbackHighlightedCode(code, normalizedLang)
+}
+
+function renderFallbackHighlightedCode(code: string, lang: string): DocumentFragment {
   const tokens = tokenizeCode(code, lang)
   const frag = document.createDocumentFragment()
 
@@ -270,7 +315,29 @@ export function renderHighlightedCode(code: string, lang: string): DocumentFragm
   return frag
 }
 
-// ---- Helpers ----
+function renderHastRoot(root: Root): DocumentFragment {
+  const frag = document.createDocumentFragment()
+  for (const child of root.children) {
+    frag.appendChild(renderHastNode(child as Element | Text))
+  }
+  return frag
+}
+
+function renderHastNode(node: Element | Text): Node {
+  if (node.type === 'text') {
+    return document.createTextNode(node.value)
+  }
+
+  const el = document.createElement(node.tagName)
+  const className = node.properties?.className
+  if (Array.isArray(className)) {
+    el.className = className.join(' ')
+  }
+  for (const child of node.children) {
+    el.appendChild(renderHastNode(child as Element | Text))
+  }
+  return el
+}
 
 function isDigit(c: string): boolean {
   return c >= '0' && c <= '9'

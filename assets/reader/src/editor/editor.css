@@ -179,23 +179,116 @@
     @apply my-1;
   }
 
-  /* ---- 代码语法高亮（深色主题） ---- */
-  .md-code-content .hl-kw {
-    @apply text-[#0550ae] font-medium;
-  }
-  .md-code-content .hl-str {
-    @apply text-[#0a7f42];
-  }
-  .md-code-content .hl-num {
-    @apply text-[#953800];
-  }
-  .md-code-content .hl-cmt {
+  /* ---- 代码语法高亮（Prism/Refractor + fallback） ---- */
+  .md-code-content .token.comment,
+  .md-code-content .token.prolog,
+  .md-code-content .token.doctype,
+  .md-code-content .hl-cmt,
+  .seeyue-code-editor-highlight .token.comment,
+  .seeyue-code-editor-highlight .token.prolog,
+  .seeyue-code-editor-highlight .token.doctype,
+  .seeyue-code-editor-highlight .hl-cmt {
     @apply text-seeyue-fg-dim italic;
   }
-  .md-code-content .hl-type {
+
+  .md-code-content .token.punctuation,
+  .md-code-content .hl-punct,
+  .seeyue-code-editor-highlight .token.punctuation,
+  .seeyue-code-editor-highlight .hl-punct {
+    @apply text-seeyue-fg-muted;
+  }
+
+  .md-code-content .token.property,
+  .md-code-content .token.attr-name,
+  .md-code-content .token.variable,
+  .seeyue-code-editor-highlight .token.property,
+  .seeyue-code-editor-highlight .token.attr-name,
+  .seeyue-code-editor-highlight .token.variable {
+    @apply text-[#953800];
+  }
+
+  .md-code-content .token.tag,
+  .md-code-content .token.selector,
+  .md-code-content .token.class-name,
+  .md-code-content .hl-type,
+  .seeyue-code-editor-highlight .token.tag,
+  .seeyue-code-editor-highlight .token.selector,
+  .seeyue-code-editor-highlight .token.class-name,
+  .seeyue-code-editor-highlight .hl-type {
     @apply text-[#8250df];
   }
-  .md-code-content .hl-punct {
-    @apply text-seeyue-fg-muted;
+
+  .md-code-content .token.boolean,
+  .md-code-content .token.number,
+  .md-code-content .token.constant,
+  .md-code-content .token.symbol,
+  .md-code-content .hl-num,
+  .seeyue-code-editor-highlight .token.boolean,
+  .seeyue-code-editor-highlight .token.number,
+  .seeyue-code-editor-highlight .token.constant,
+  .seeyue-code-editor-highlight .token.symbol,
+  .seeyue-code-editor-highlight .hl-num {
+    @apply text-[#953800];
+  }
+
+  .md-code-content .token.string,
+  .md-code-content .token.char,
+  .md-code-content .token.attr-value,
+  .md-code-content .token.regex,
+  .md-code-content .hl-str,
+  .seeyue-code-editor-highlight .token.string,
+  .seeyue-code-editor-highlight .token.char,
+  .seeyue-code-editor-highlight .token.attr-value,
+  .seeyue-code-editor-highlight .token.regex,
+  .seeyue-code-editor-highlight .hl-str {
+    @apply text-[#0a7f42];
+  }
+
+  .md-code-content .token.operator,
+  .md-code-content .token.entity,
+  .md-code-content .token.url,
+  .seeyue-code-editor-highlight .token.operator,
+  .seeyue-code-editor-highlight .token.entity,
+  .seeyue-code-editor-highlight .token.url {
+    @apply text-[#0550ae];
+  }
+
+  .md-code-content .token.atrule,
+  .md-code-content .token.keyword,
+  .md-code-content .hl-kw,
+  .seeyue-code-editor-highlight .token.atrule,
+  .seeyue-code-editor-highlight .token.keyword,
+  .seeyue-code-editor-highlight .hl-kw {
+    @apply text-[#0550ae] font-medium;
+  }
+
+  .md-code-content .token.function,
+  .md-code-content .token.builtin,
+  .seeyue-code-editor-highlight .token.function,
+  .seeyue-code-editor-highlight .token.builtin {
+    @apply text-[#7a4f00];
+  }
+
+  .md-code-content .token.deleted,
+  .seeyue-code-editor-highlight .token.deleted {
+    @apply text-seeyue-danger;
+  }
+
+  .md-code-content .token.inserted,
+  .seeyue-code-editor-highlight .token.inserted {
+    @apply text-seeyue-success;
+  }
+
+  .md-code-content .token.important,
+  .seeyue-code-editor-highlight .token.important {
+    @apply font-semibold text-seeyue-danger;
+  }
+
+  .seeyue-code-editor-input {
+    -webkit-text-fill-color: transparent;
+  }
+
+  .seeyue-code-editor-input::selection {
+    -webkit-text-fill-color: transparent;
   }
 }
