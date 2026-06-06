@@ -102,7 +102,7 @@
 
   /* 覆盖 .md-editor code 对代码块内 code 的背景色污染 */
   .md-code-wrap code {
-    @apply bg-transparent p-0 rounded-none text-seeyue-fg;
+    @apply border-0 bg-transparent p-0 rounded-none text-seeyue-fg;
   }
   .md-code-wrap pre {
     @apply bg-transparent rounded-none text-seeyue-fg;
