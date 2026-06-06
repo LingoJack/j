@@ -15,7 +15,7 @@ import { extractHeadings } from './toc'
 import { Toast } from './Toast'
 import { VerticalSplitter } from './Splitter'
 import { MarkdownBaseDirContext } from './MarkdownIR'
-import { BookOpen, Copy, Save, Sparkles } from './Icon'
+import { BookOpen, CopyPath, Save, Sparkles } from './Icon'
 import type { ImagePayload, InitialResp, ParsedDocument, RenderedDoc, Tab, ToolId } from './types'
 
 type LoadState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready' }
@@ -518,7 +518,7 @@ export function Reader() {
         className="h-full grid bg-seeyue-bg text-seeyue-fg"
         style={{
           // 4 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [5px 分割条] [1fr 主区]
-          gridTemplateColumns: `44px ${sidebarWidth}px 5px 1fr`,
+          gridTemplateColumns: `44px ${sidebarWidth}px 5px minmax(0, 1fr)`,
         }}
       >
         {/* 最左：垂直活动栏 */}
@@ -567,40 +567,47 @@ export function Reader() {
               onCopyPath={() => copyPath(activeTab.path)}
             />
           )}
-          <div className="flex-1 overflow-hidden relative">
-            {activeTab ? (
-              activeTab.kind === 'tool' ? (
-                <ToolHost toolId={activeTab.toolId ?? null} />
-              ) : activeTab.kind === 'markdown' ? (
-                <MarkdownEditor
-                  key={activeTab.path}
-                  path={activeTab.path}
-                  baseDir={baseDir}
-                  initialSource={sourcesRef.current[activeTab.path] ?? ''}
-                  initialDoc={docsRef.current[activeTab.path] ?? { blocks: [] }}
-                  onChange={handleSourceChange}
-                  onParsed={handleDocParsed}
-                  onSave={() => saveTab(activeTab.path)}
-                />
-              ) : activeTab.kind === 'image' ? (
-                <ImageViewer
-                  key={activeTab.path}
-                  path={activeTab.path}
-                  filename={activeTab.filename}
-                  payload={imagesRef.current[activeTab.path] ?? null}
-                />
+          <div
+            className={
+              'flex-1 overflow-hidden relative ' +
+              (showToc && tocPinned ? 'grid grid-cols-[minmax(0,1fr)_248px] bg-seeyue-bg' : 'block')
+            }
+          >
+            <div className="h-full min-w-0 overflow-hidden relative">
+              {activeTab ? (
+                activeTab.kind === 'tool' ? (
+                  <ToolHost toolId={activeTab.toolId ?? null} />
+                ) : activeTab.kind === 'markdown' ? (
+                  <MarkdownEditor
+                    key={activeTab.path}
+                    path={activeTab.path}
+                    baseDir={baseDir}
+                    initialSource={sourcesRef.current[activeTab.path] ?? ''}
+                    initialDoc={docsRef.current[activeTab.path] ?? { blocks: [] }}
+                    onChange={handleSourceChange}
+                    onParsed={handleDocParsed}
+                    onSave={() => saveTab(activeTab.path)}
+                  />
+                ) : activeTab.kind === 'image' ? (
+                  <ImageViewer
+                    key={activeTab.path}
+                    path={activeTab.path}
+                    filename={activeTab.filename}
+                    payload={imagesRef.current[activeTab.path] ?? null}
+                  />
+                ) : (
+                  <PlainTextEditor
+                    key={activeTab.path}
+                    path={activeTab.path}
+                    initialSource={sourcesRef.current[activeTab.path] ?? ''}
+                    onChange={handleSourceChange}
+                  />
+                )
               ) : (
-                <PlainTextEditor
-                  key={activeTab.path}
-                  path={activeTab.path}
-                  initialSource={sourcesRef.current[activeTab.path] ?? ''}
-                  onChange={handleSourceChange}
-                />
-              )
-            ) : (
-              <EmptyState />
-            )}
-            {/* TOC：浮于内容区右侧，自然融入 */}
+                <EmptyState />
+              )}
+            </div>
+            {/* TOC：未固定时浮于内容区右侧；固定后成为右侧占位栏，不遮挡正文 */}
             {showToc && (
               <TableOfContents
                 headings={headings}
@@ -764,17 +771,19 @@ function EditorBar({
         </span>
       )}
       <button
-        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated hover:border-seeyue-border disabled:opacity-30 disabled:cursor-not-allowed"
         onClick={onCopyPath}
         title="复制路径"
+        aria-label="复制当前文件路径"
       >
-        <Copy size={14} />
+        <CopyPath size={14} />
       </button>
       {editable && (
         <button
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated hover:border-seeyue-border disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onSave}
           title="保存（⌘S）"
+          aria-label="保存当前文件"
         >
           <Save size={14} />
         </button>
@@ -785,58 +794,64 @@ function EditorBar({
 
 function EmptyState() {
   return (
-    <div className="h-full flex flex-col items-center justify-center p-12 text-seeyue-fg-dim text-[13px] text-center">
-      <span className="flex items-center justify-center w-[84px] h-[84px] rounded-full bg-[linear-gradient(135deg,rgba(94,129,172,0.12),rgba(163,190,140,0.08))] text-seeyue-accent mb-[18px] shadow-[inset_0_0_0_1px_rgba(94,129,172,0.25)]">
-        <BookOpen size={36} />
-      </span>
-      <div className="text-seeyue-fg text-[15px] font-medium mb-1.5 flex items-center gap-1.5">
-        <Sparkles size={14} className="opacity-70" />
-        从左侧选一个文件开始阅读
-      </div>
-      <div className="text-seeyue-fg-muted mb-[18px] leading-[1.7]">
-        也可以直接在终端运行 <code>j read &lt;file&gt;</code> 打开指定文件。
-      </div>
-      <div className="grid gap-1.5 text-xs text-seeyue-fg-dim">
-        <div className="flex items-center gap-2 justify-center">
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            ⌘
-          </kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            S
-          </kbd>
-          <span>保存当前文件</span>
-        </div>
-        <div className="flex items-center gap-2 justify-center">
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            ⌘
-          </kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            W
-          </kbd>
-          <span>/</span>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            ⌃
-          </kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            W
-          </kbd>
-          <span>关闭当前 Tab；空时退出 reader</span>
-        </div>
-        <div className="flex items-center gap-2 justify-center">
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            ⌘
-          </kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            ⌥
-          </kbd>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            ←
-          </kbd>
-          <span>/</span>
-          <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
-            →
-          </kbd>
-          <span>切换前后 Tab</span>
+    <div className="h-full flex items-center justify-center p-12 text-seeyue-fg-dim text-[13px] text-center">
+      <div className="relative max-w-[520px] rounded-[28px] border border-seeyue-border-dim bg-seeyue-panel/70 px-12 py-10 shadow-[0_22px_70px_rgba(88,65,42,0.10),inset_0_1px_0_rgba(255,255,255,0.72)] overflow-hidden">
+        <div className="absolute -top-16 -right-12 h-44 w-44 rounded-full bg-seeyue-accent-soft blur-2xl" />
+        <div className="absolute -bottom-20 -left-10 h-44 w-44 rounded-full bg-[rgba(94,129,172,0.10)] blur-2xl" />
+        <div className="relative">
+          <span className="mx-auto flex items-center justify-center w-[84px] h-[84px] rounded-[26px] bg-[linear-gradient(135deg,rgba(180,101,74,0.14),rgba(214,156,126,0.08))] text-seeyue-accent mb-[18px] shadow-[inset_0_0_0_1px_rgba(180,101,74,0.18)]">
+            <BookOpen size={36} />
+          </span>
+          <div className="text-seeyue-fg text-[15px] font-medium mb-1.5 flex items-center justify-center gap-1.5">
+            <Sparkles size={14} className="opacity-70" />
+            从左侧选一个文件开始阅读
+          </div>
+          <div className="text-seeyue-fg-muted mb-[18px] leading-[1.7]">
+            也可以直接在终端运行 <code>j read &lt;file&gt;</code> 打开指定文件。
+          </div>
+          <div className="grid gap-1.5 text-xs text-seeyue-fg-dim">
+            <div className="flex items-center gap-2 justify-center">
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                ⌘
+              </kbd>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                S
+              </kbd>
+              <span>保存当前文件</span>
+            </div>
+            <div className="flex items-center gap-2 justify-center">
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                ⌘
+              </kbd>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                W
+              </kbd>
+              <span>/</span>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                ⌃
+              </kbd>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                W
+              </kbd>
+              <span>关闭当前 Tab；空时退出 reader</span>
+            </div>
+            <div className="flex items-center gap-2 justify-center">
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                ⌘
+              </kbd>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                ⌥
+              </kbd>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                ←
+              </kbd>
+              <span>/</span>
+              <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 font-mono text-[11px] text-seeyue-fg bg-seeyue-elevated border border-seeyue-border-strong border-b-2 rounded">
+                →
+              </kbd>
+              <span>切换前后 Tab</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -14,17 +14,17 @@
 
 @theme {
   /* —— 背景层级（从最深到最浅） —— */
-  --color-seeyue-bg: #faf6f1;
-  --color-seeyue-bg-deep: #f0ebe4;
-  --color-seeyue-sidebar: #f5f0ea;
-  --color-seeyue-sidebar-strong: #ede4d8;
-  --color-seeyue-panel: #ede4d8;
-  --color-seeyue-elevated: #e8e0d5;
+  --color-seeyue-bg: #fbf7f0;
+  --color-seeyue-bg-deep: #f2ece3;
+  --color-seeyue-sidebar: #f7f1e9;
+  --color-seeyue-sidebar-strong: #efe5d8;
+  --color-seeyue-panel: #fffaf4;
+  --color-seeyue-elevated: #eee4d8;
 
   /* —— 边框 —— */
-  --color-seeyue-border: rgba(200, 191, 178, 0.35);
-  --color-seeyue-border-strong: rgba(200, 191, 178, 0.6);
-  --color-seeyue-border-dim: rgba(200, 191, 178, 0.25);
+  --color-seeyue-border: rgba(178, 162, 144, 0.34);
+  --color-seeyue-border-strong: rgba(178, 162, 144, 0.56);
+  --color-seeyue-border-dim: rgba(178, 162, 144, 0.2);
 
   /* —— 文本 —— */
   --color-seeyue-fg: #3d3630;
@@ -69,7 +69,9 @@
 
   body {
     margin: 0;
-    background: var(--color-seeyue-bg);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(204, 120, 92, 0.08), transparent 32%),
+      linear-gradient(180deg, #fbf7f0 0%, #f7f1e9 100%);
     color: var(--color-seeyue-fg);
     font-family: var(--font-cjk);
     font-size: 15px;

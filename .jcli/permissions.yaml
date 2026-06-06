@@ -161,4 +161,5 @@ allow:
 - Shell(cargo clippy:*)
 - Shell(cargo fmt:*)
 - Shell(cd /Users/jacklingo/dev_custom/jcli/assets/reader:*)
+- Shell(npm run:*)
 deny: []

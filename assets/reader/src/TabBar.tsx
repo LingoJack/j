@@ -9,8 +9,8 @@ import {
   GitCompare,
   Power,
   Toolbox as ToolboxIcon,
-  pickFileIconKind,
 } from './Icon'
+import { pickFileIconKind } from './fileIconKind'
 import type { Tab, ToolId } from './types'
 
 interface Props {
@@ -26,13 +26,14 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
   if (tabs.length === 0) {
     // 空态依然给一条「关闭 reader」入口，免得只能在编辑器里才能找到
     return (
-      <div className="flex items-center h-[38px] bg-seeyue-sidebar-strong border-b border-seeyue-border overflow-x-auto overflow-y-hidden px-2 pl-3.5 gap-2 [&::-webkit-scrollbar]:h-1">
+      <div className="flex items-center h-[38px] bg-seeyue-sidebar-strong/80 border-b border-seeyue-border/70 overflow-x-auto overflow-y-hidden px-2 pl-3.5 gap-2 [&::-webkit-scrollbar]:h-1">
         <span className="flex-1 text-xs text-seeyue-fg-dim tracking-[0.02em]">没有打开的文件</span>
         <button
           type="button"
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] hover:border-[rgba(191,97,106,0.18)] disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onQuit}
           title="关闭 reader"
+          aria-label="关闭 reader"
         >
           <Power size={14} />
         </button>
@@ -40,13 +41,13 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
     )
   }
   return (
-    <div className="flex items-stretch h-[38px] bg-seeyue-sidebar-strong border-b border-seeyue-border overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-1">
+    <div className="flex items-stretch h-[38px] bg-seeyue-sidebar-strong/80 border-b border-seeyue-border/70 overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-1">
       {tabs.map((tab) => {
         const isActive = tab.path === activePath
         return (
           <div
             key={tab.path}
-            className="inline-flex items-center gap-1.5 h-full px-3 pl-3.5 text-[13px] text-seeyue-fg-muted cursor-pointer relative border-r border-seeyue-border transition-colors duration-150 select-none hover:text-seeyue-fg-strong hover:bg-seeyue-elevated data-[active=true]:text-seeyue-fg-strong data-[active=true]:bg-seeyue-bg after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-0 after:h-0.5 after:bg-transparent data-[active=true]:after:bg-seeyue-accent-strong"
+            className="inline-flex items-center gap-1.5 h-full px-3 pl-3.5 text-[13px] text-seeyue-fg-muted cursor-pointer relative border-r border-seeyue-border/60 transition-colors duration-150 select-none hover:text-seeyue-fg-strong hover:bg-seeyue-elevated/70 data-[active=true]:text-seeyue-fg-strong data-[active=true]:bg-seeyue-bg after:content-[''] after:absolute after:left-2 after:right-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent data-[active=true]:after:bg-seeyue-accent-strong before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-white/30"
             data-active={isActive ? 'true' : undefined}
             onClick={() => onActivate(tab.path)}
             onAuxClick={(e) => {
@@ -87,9 +88,10 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
       })}
       <button
         type="button"
-        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] disabled:opacity-30 disabled:cursor-not-allowed"
+        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] hover:border-[rgba(191,97,106,0.18)] disabled:opacity-30 disabled:cursor-not-allowed"
         onClick={onQuit}
         title="关闭 reader"
+        aria-label="关闭 reader"
       >
         <Power size={14} />
       </button>

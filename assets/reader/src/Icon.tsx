@@ -222,6 +222,36 @@ export function Copy(props: IconBaseProps) {
   )
 }
 
+export function CopyPath(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <rect x="8" y="7" width="12" height="14" rx="2" />
+      <path d="M6 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+      <path d="M11 12h6" />
+      <path d="M11 16h4" />
+    </svg>
+  )
+}
+
+export function Pin(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M15 4.5 19.5 9" />
+      <path d="M14 3 21 10l-3 1-4 4 1 4-1 1-5-5-4.5 4.5L8 12 3 7l1-1 4 1 4-4Z" />
+    </svg>
+  )
+}
+
+export function PinOff(props: IconBaseProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M12.5 4.5 19.5 11l-3 1-1.8 1.8" />
+      <path d="M14 19.5 9 14.5 4.5 19.5 8 12 3 7l1-1 4 1 1.2-1.2" />
+      <path d="m3 3 18 18" />
+    </svg>
+  )
+}
+
 export function FolderRoot(props: IconBaseProps) {
   return (
     <svg {...svgProps(props)}>
@@ -390,72 +420,4 @@ export function MinusSquare(props: IconBaseProps) {
       <path d="M8 12h8" />
     </svg>
   )
-}
-
-/**
- * 根据文件名扩展名挑选合适的文件 icon。
- * - md / markdown / mdx → FileMd（蓝）
- * - txt / log → FileText
- * - 常见代码 → FileCode
- * - 常见图片 → FileImage
- * - 其它 → FileGeneric
- */
-export type FileIconKind = 'markdown' | 'text' | 'code' | 'image' | 'generic'
-
-const CODE_EXTS = new Set([
-  'js',
-  'jsx',
-  'ts',
-  'tsx',
-  'mjs',
-  'cjs',
-  'json',
-  'yml',
-  'yaml',
-  'toml',
-  'rs',
-  'go',
-  'py',
-  'rb',
-  'java',
-  'c',
-  'h',
-  'cc',
-  'cpp',
-  'hpp',
-  'cs',
-  'sh',
-  'zsh',
-  'bash',
-  'fish',
-  'ps1',
-  'sql',
-  'css',
-  'scss',
-  'sass',
-  'less',
-  'html',
-  'xml',
-  'svg',
-  'vue',
-  'svelte',
-  'lua',
-  'php',
-  'kt',
-  'swift',
-])
-
-const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'tiff'])
-
-const TEXT_EXTS = new Set(['txt', 'log', 'csv', 'tsv'])
-
-export function pickFileIconKind(name: string): FileIconKind {
-  const lower = name.toLowerCase()
-  const dot = lower.lastIndexOf('.')
-  const ext = dot >= 0 ? lower.slice(dot + 1) : ''
-  if (ext === 'md' || ext === 'markdown' || ext === 'mdx') return 'markdown'
-  if (TEXT_EXTS.has(ext)) return 'text'
-  if (CODE_EXTS.has(ext)) return 'code'
-  if (IMAGE_EXTS.has(ext)) return 'image'
-  return 'generic'
 }

@@ -16,8 +16,8 @@ import {
   FolderRoot,
   Files,
   Search,
-  pickFileIconKind,
 } from './Icon'
+import { pickFileIconKind } from './fileIconKind'
 import { PromptDialog } from './PromptDialog'
 
 interface Props {
@@ -174,7 +174,7 @@ export function FileTree(props: Props) {
   const filterLower = filter.trim().toLowerCase()
 
   return (
-    <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar shadow-[0_0_12px_rgba(0,0,0,0.3)]">
+    <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar border-r border-seeyue-border/70 shadow-[inset_-1px_0_0_rgba(255,255,255,0.42)]">
       {/* —— 顶部："文件" 标题 + 视图切换 —— */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border">
         <button
@@ -442,7 +442,11 @@ function EntryRow({
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            entry.is_dir ? onToggle(entry.path) : onOpen(entry.path)
+            if (entry.is_dir) {
+              onToggle(entry.path)
+            } else {
+              onOpen(entry.path)
+            }
           }
         }}
       >

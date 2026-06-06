@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ListTree } from './Icon'
+import { ListTree, Pin, PinOff } from './Icon'
 import type { HeadingItem } from './toc'
 
 interface Props {
@@ -61,25 +61,6 @@ export function TableOfContents({ headings, pinned, onTogglePinned }: Props) {
   )
 }
 
-function PinIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill={filled ? 'currentColor' : 'none'}
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M15 4.5 19.5 9" />
-      <path d="M14 3 21 10l-3 1-4 4 1 4-1 1-5-5-4.5 4.5L8 12 3 7l1-1 4 1 4-4Z" />
-    </svg>
-  )
-}
-
 function PinButton({ pinned, onTogglePinned }: { pinned: boolean; onTogglePinned: () => void }) {
   return (
     <button
@@ -95,7 +76,7 @@ function PinButton({ pinned, onTogglePinned }: { pinned: boolean; onTogglePinned
       aria-label={pinned ? '取消固定目录' : '固定目录'}
       aria-pressed={pinned}
     >
-      <PinIcon filled={pinned} />
+      {pinned ? <PinOff size={13} /> : <Pin size={13} />}
     </button>
   )
 }
@@ -115,9 +96,12 @@ function TocPanel({
   onTogglePinned: () => void
   className?: string
 }) {
-  const panelClass =
-    'absolute right-0 top-0 z-10 w-[220px] max-h-[calc(100vh-128px)] rounded-xl bg-seeyue-bg/90 backdrop-blur-md border border-seeyue-border-dim shadow-[0_10px_34px_rgba(26,22,18,0.13)] flex flex-col overflow-hidden ' +
-    className
+  const basePanelClass =
+    'z-10 bg-seeyue-bg/92 backdrop-blur-md border border-seeyue-border-dim flex flex-col overflow-hidden '
+  const placementClass = pinned
+    ? 'relative w-[248px] h-full max-h-none rounded-none border-y-0 border-r-0 border-l-seeyue-border bg-seeyue-sidebar/72 shadow-[inset_1px_0_0_rgba(255,255,255,0.48)] '
+    : 'absolute right-0 top-0 w-[220px] max-h-[calc(100vh-128px)] rounded-xl shadow-[0_10px_34px_rgba(26,22,18,0.13)] '
+  const panelClass = basePanelClass + placementClass + className
 
   if (headings.length === 0) {
     return (

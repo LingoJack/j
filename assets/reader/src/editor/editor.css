@@ -8,7 +8,7 @@
 @layer components {
   /* ---- 编辑器容器 ---- */
   .md-editor {
-    @apply mx-auto max-w-[1060px] px-8 py-8 text-[15px] leading-[1.8] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
+    @apply mx-auto max-w-[1020px] px-10 py-9 text-[15px] leading-[1.82] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
   }
 
   /* ---- Block 基础 ---- */
@@ -27,13 +27,13 @@
 
   /* ---- Heading ---- */
   .md-heading {
-    @apply font-bold leading-[1.35] text-seeyue-fg-strong tracking-tight mt-6 mb-2.5;
+    @apply font-bold leading-[1.32] text-seeyue-fg-strong tracking-tight mt-7 mb-3;
 
     &[data-level='1'] {
-      @apply text-[28px] mt-0;
+      @apply text-[30px] mt-0 mb-4 pb-3 border-b border-seeyue-border/60;
     }
     &[data-level='2'] {
-      @apply text-[22px] mt-7;
+      @apply text-[23px] mt-8 mb-3;
     }
     &[data-level='3'] {
       @apply text-lg;
@@ -80,7 +80,7 @@
 
   /* ---- 代码块 ---- */
   .md-code-wrap {
-    @apply relative overflow-hidden rounded-xl my-5 bg-[#2b2520] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.06)];
+    @apply relative overflow-hidden rounded-2xl my-6 bg-[#2b2520] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_14px_34px_rgba(64,45,31,0.12)];
   }
 
   /* macOS 三圆点标题栏 */
@@ -111,7 +111,7 @@
 
   /* ---- 表格 ---- */
   .md-table-wrap {
-    @apply overflow-x-auto rounded-md my-4;
+    @apply overflow-x-auto rounded-xl my-5 border border-seeyue-border-dim bg-seeyue-panel/45;
   }
   .md-table {
     @apply w-full border-collapse text-[13.5px];
@@ -136,7 +136,7 @@
 
   /* ---- 引用块 ---- */
   .md-blockquote {
-    @apply rounded-r-md bg-seeyue-accent-mute text-seeyue-fg-muted border-l-[3px] border-l-[var(--color-seeyue-accent)] px-4 py-2 my-4;
+    @apply rounded-xl bg-seeyue-accent-mute/80 text-seeyue-fg-muted border-l-[3px] border-l-[var(--color-seeyue-accent)] px-4 py-3 my-5 shadow-[inset_0_0_0_1px_rgba(180,101,74,0.08)];
   }
   .md-blockquote .md-block {
     @apply mb-1.5;
