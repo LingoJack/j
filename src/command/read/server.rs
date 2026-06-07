@@ -135,6 +135,7 @@ pub fn serve_blocking(
             .route("/api/parse", post(api_parse))
             .route("/api/save", post(api_save))
             .route("/api/create", post(api_create))
+            .route("/api/create-dir", post(api_create_dir))
             .route("/api/asset", get(api_asset))
             .route("/api/heartbeat", post(api_heartbeat))
             .route("/api/shutdown", post(api_shutdown))
@@ -464,6 +465,62 @@ async fn api_create(Json(req): Json<CreateReq>) -> Result<Json<CreateResp>, ApiE
     Ok(Json(CreateResp {
         path: canonical.display().to_string(),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// /api/create-dir — 在指定目录创建一个新文件夹
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CreateDirReq {
+    /// 父目录绝对路径（必须已存在且是目录）
+    dir: String,
+    /// 新文件夹名（不能含 `/` 或 `\`，不能为 `.` / `..`）
+    name: String,
+}
+
+#[derive(Serialize)]
+struct CreateDirResp {
+    /// 新文件夹的规范化绝对路径，前端拿到后刷新树
+    path: String,
+}
+
+async fn api_create_dir(Json(req): Json<CreateDirReq>) -> Result<Json<CreateDirResp>, ApiError> {
+    let target = create_target_path(&req.dir, &req.name, "文件夹名")?;
+    std::fs::create_dir(&target).map_err(|e| ApiError::internal(format!("创建文件夹失败：{e}")))?;
+    let canonical = std::fs::canonicalize(&target)
+        .map_err(|e| ApiError::internal(format!("解析新建文件夹路径失败：{e}")))?;
+    Ok(Json(CreateDirResp {
+        path: canonical.display().to_string(),
+    }))
+}
+
+fn create_target_path(dir: &str, name: &str, label: &str) -> Result<PathBuf, ApiError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ApiError::bad_request(format!("{label}不能为空")));
+    }
+    if name == "." || name == ".." {
+        return Err(ApiError::bad_request(format!("非法{label}")));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(ApiError::bad_request(format!("{label}不能包含路径分隔符")));
+    }
+
+    let dir = canonicalize(dir)?;
+    let dir_meta =
+        std::fs::metadata(&dir).map_err(|e| ApiError::bad_request(format!("无法读取目录：{e}")))?;
+    if !dir_meta.is_dir() {
+        return Err(ApiError::bad_request("目标不是一个目录"));
+    }
+    let target = dir.join(name);
+    if target.exists() {
+        return Err(ApiError::bad_request(format!(
+            "已存在同名文件或目录：{}",
+            target.display()
+        )));
+    }
+    Ok(target)
 }
 
 // ---------------------------------------------------------------------------

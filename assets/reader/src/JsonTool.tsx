@@ -21,7 +21,7 @@
  * - 修改 key 暂不支持（避免破坏对象 key 顺序 / 重名风险），先放叶子值修改。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Copy } from './Icon'
+import { ChevronDown, ChevronRight } from './Icon'
 
 const STORAGE_KEY = 'jreader.tool.json.text'
 const SAMPLE = `{
@@ -254,7 +254,7 @@ export function JsonTool() {
           onClick={copyAll}
           title="复制 JSON 文本"
         >
-          <Copy size={12} /> 复制
+          复制
         </button>
         <button
           type="button"
@@ -326,14 +326,15 @@ export function JsonTool() {
 interface NodeProps {
   value: JsonValue
   path: Path
-  /** 当节点是 object/array 的子项时，父级会传 keyLabel：对象 key 或 [i] */
   keyLabel?: string
+  /** 数组子项传 indexLabel，避免把索引伪装成 JSON key-value。 */
+  indexLabel?: number
   collapsed: Set<string>
   onToggle: (path: Path) => void
   onUpdate: (path: Path, mut: (cur: JsonValue) => JsonValue) => void
 }
 
-function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: NodeProps) {
+function JsonNode({ value, path, keyLabel, indexLabel, collapsed, onToggle, onUpdate }: NodeProps) {
   if (value.kind === 'object' || value.kind === 'array') {
     const isObj = value.kind === 'object'
     const items = isObj ? value.entries : value.items
@@ -358,6 +359,11 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
               <span style={{ display: 'inline-block', width: 11 }} />
             )}
           </span>
+          {indexLabel !== undefined && (
+            <span className="mr-1.5 min-w-5 rounded-sm bg-seeyue-sidebar px-1 text-center text-[10.5px] tabular-nums text-seeyue-fg-dim">
+              #{indexLabel}
+            </span>
+          )}
           {keyLabel !== undefined && <span className="text-seeyue-accent">{keyLabel}</span>}
           {keyLabel !== undefined && <span className="text-seeyue-fg-dim mr-0.5">:</span>}
           <span className="text-seeyue-fg-muted">{open}</span>
@@ -388,7 +394,7 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
                       key={i}
                       value={it}
                       path={[...path, i]}
-                      keyLabel={`[${i}]`}
+                      indexLabel={i}
                       collapsed={collapsed}
                       onToggle={onToggle}
                       onUpdate={onUpdate}
@@ -413,6 +419,11 @@ function JsonNode({ value, path, keyLabel, collapsed, onToggle, onUpdate }: Node
         <span className="shrink-0 inline-flex items-center justify-center w-[13px] text-seeyue-fg-dim cursor-pointer">
           <span style={{ display: 'inline-block', width: 11 }} />
         </span>
+        {indexLabel !== undefined && (
+          <span className="mr-1.5 min-w-5 rounded-sm bg-seeyue-sidebar px-1 text-center text-[10.5px] tabular-nums text-seeyue-fg-dim">
+            #{indexLabel}
+          </span>
+        )}
         {keyLabel !== undefined && <span className="text-seeyue-accent">{keyLabel}</span>}
         {keyLabel !== undefined && <span className="text-seeyue-fg-dim mr-0.5">:</span>}
         <LeafEditor value={value} onCommit={(next) => onUpdate(path, () => next)} />

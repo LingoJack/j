@@ -7,7 +7,6 @@ import {
   FileCode,
   FileImage,
   GitCompare,
-  Power,
   Toolbox as ToolboxIcon,
 } from './Icon'
 import { pickFileIconKind } from './fileIconKind'
@@ -18,25 +17,13 @@ interface Props {
   activePath: string | null
   onActivate: (path: string) => void
   onClose: (path: string) => void
-  /** 关闭整个 reader（会先弹确认弹窗） */
-  onQuit: () => void
 }
 
-export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props) {
+export function TabBar({ tabs, activePath, onActivate, onClose }: Props) {
   if (tabs.length === 0) {
-    // 空态依然给一条「关闭 reader」入口，免得只能在编辑器里才能找到
     return (
-      <div className="flex items-center h-[38px] bg-seeyue-sidebar-strong/80 border-b border-seeyue-border/70 overflow-x-auto overflow-y-hidden px-2 pl-3.5 gap-2 [&::-webkit-scrollbar]:h-1">
-        <span className="flex-1 text-xs text-seeyue-fg-dim tracking-[0.02em]">没有打开的文件</span>
-        <button
-          type="button"
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] hover:border-[rgba(191,97,106,0.18)] disabled:opacity-30 disabled:cursor-not-allowed"
-          onClick={onQuit}
-          title="关闭 reader"
-          aria-label="关闭 reader"
-        >
-          <Power size={14} />
-        </button>
+      <div className="flex items-center h-[38px] bg-seeyue-sidebar-strong/80 border-b border-seeyue-border/70 overflow-x-auto overflow-y-hidden px-3.5 [&::-webkit-scrollbar]:h-1">
+        <span className="text-xs text-seeyue-fg-dim tracking-[0.02em]">没有打开的文件</span>
       </div>
     )
   }
@@ -97,15 +84,6 @@ export function TabBar({ tabs, activePath, onActivate, onClose, onQuit }: Props)
           </div>
         )
       })}
-      <button
-        type="button"
-        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md text-seeyue-fg-dim bg-transparent border border-transparent cursor-pointer transition-all duration-150 ml-auto self-center mr-1.5 shrink-0 hover:text-seeyue-danger hover:bg-[rgba(191,97,106,0.12)] hover:border-[rgba(191,97,106,0.18)] disabled:opacity-30 disabled:cursor-not-allowed"
-        onClick={onQuit}
-        title="关闭 reader"
-        aria-label="关闭 reader"
-      >
-        <Power size={14} />
-      </button>
     </div>
   )
 }

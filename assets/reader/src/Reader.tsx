@@ -47,7 +47,6 @@ export function Reader() {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
   const [treeRoot, setTreeRoot] = useState<string>('')
-  const [showHidden, setShowHidden] = useState(false)
   /**
    * 左侧"活动栏"当前选中的视图。文件 / 工具箱二选一。
    * 持久化到 localStorage —— 用户上次留在工具箱，下次打开还是工具箱。
@@ -61,7 +60,7 @@ export function Reader() {
   /**
    * 关闭整个 reader 前的二次确认。痛点：dirty tab 弹窗里连按"不保存"，
    * 最后一下落到空态再触发 ⌘W 时会直接 quitReader 关掉窗口，用户措手不及。
-   * 现在所有触发 quitReader 的入口（⌘W 空态 + 顶栏 Power 按钮）都先打开这个 modal。
+   * 现在所有触发 quitReader 的入口都先打开这个 modal。
    */
   const [quitting, setQuitting] = useState(false)
   /** 错误 / 成功提示（替代 alert） */
@@ -384,6 +383,23 @@ export function Reader() {
   }, [])
 
   /**
+   * 调 /api/create-dir 在指定父目录里创建一个新文件夹，成功返回新目录绝对路径。
+   */
+  const createFolder = useCallback(async (dir: string, name: string): Promise<string> => {
+    const res = await fetch('./api/create-dir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir, name }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? `HTTP ${res.status}`)
+    }
+    const data = (await res.json()) as { path: string }
+    return data.path
+  }, [])
+
+  /**
    * 关掉整个 reader：通知服务端 shutdown + 关闭浏览器窗口。
    *
    * - app 模式（`j read` 默认）：window.close() 真的会关掉那个窗口
@@ -547,12 +563,10 @@ export function Reader() {
           {activeActivity === 'files' ? (
             <FileTree
               root={treeRoot}
-              onChangeRoot={setTreeRoot}
-              showHidden={showHidden}
-              onToggleHidden={() => setShowHidden((v) => !v)}
               activePath={activeTabPath}
               onOpen={openFile}
               onCreateFile={createFile}
+              onCreateFolder={createFolder}
             />
           ) : (
             <Toolbox activeToolId={activeToolId} onOpen={openTool} />
@@ -576,7 +590,6 @@ export function Reader() {
             activePath={activeTabPath}
             onActivate={setActiveTabPath}
             onClose={requestCloseTab}
-            onQuit={requestQuit}
           />
           {activeTab && activeTab.kind !== 'tool' && (
             <EditorBar

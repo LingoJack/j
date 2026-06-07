@@ -3,8 +3,6 @@ import type { DirEntry, ListResp } from './types'
 import {
   ChevronDown,
   ChevronRight,
-  EyeOff,
-  Eye,
   FileCode,
   FileGeneric,
   FileImage,
@@ -13,8 +11,6 @@ import {
   FilePlus,
   FolderClosed,
   FolderOpen,
-  FolderRoot,
-  Files,
   Search,
 } from './Icon'
 import { pickFileIconKind } from './fileIconKind'
@@ -22,13 +18,25 @@ import { PromptDialog } from './PromptDialog'
 
 interface Props {
   root: string
-  onChangeRoot: (path: string) => void
-  showHidden: boolean
-  onToggleHidden: () => void
   activePath: string | null
   onOpen: (path: string) => void
   /** 新建文件请求：父级把空文件创建在 dir 下，并把新建的绝对路径回传打开。 */
   onCreateFile?: (dir: string, name: string) => Promise<string>
+  /** 新建文件夹请求：父级把新目录创建在 dir 下，并返回新目录绝对路径。 */
+  onCreateFolder?: (dir: string, name: string) => Promise<string>
+}
+
+type CreateKind = 'file' | 'folder'
+
+interface CreateTarget {
+  dir: string
+  kind: CreateKind
+}
+
+interface ContextMenuState {
+  x: number
+  y: number
+  dir: string
 }
 
 /** 每个目录节点维护的状态 */
@@ -41,22 +49,21 @@ interface NodeState {
 }
 
 /**
- * Typora 风文件树。
+ * VS Code 风文件树。
  *
- * - 顶部：头部 tab（文件 / 大纲——大纲走右侧栏，这里只是装饰提示），路径面包屑
- * - 中部：搜索框 + 隐藏文件切换按钮
- * - 主体：层级文件树，文件夹折叠/展开有 caret + folder icon 双重提示，
- *   active 文件用主色块 + 末尾 endLine 装饰
+ * - 顶部保留根路径面包屑和过滤框，不额外放置操作按钮
+ * - 主体：层级文件树，文件夹折叠/展开有 caret + folder icon 双重提示
+ * - 目录行的新建文件入口仅在 hover/focus 时出现，避免常驻工具栏干扰
  */
 export function FileTree(props: Props) {
-  const { root, onChangeRoot, showHidden, onToggleHidden, activePath, onOpen, onCreateFile } = props
+  const { root, activePath, onOpen, onCreateFile, onCreateFolder } = props
   // 以路径为 key 存储每个已访问目录的状态
   const [nodes, setNodes] = useState<Record<string, NodeState>>({})
   const [filter, setFilter] = useState('')
-  const [pickingRoot, setPickingRoot] = useState(false)
-  /** 新建文件对话框：null 表示未打开；非 null 时记录目标父目录绝对路径 */
-  const [creatingIn, setCreatingIn] = useState<string | null>(null)
+  /** 新建对话框：null 表示未打开；非 null 时记录目标父目录和创建类型 */
+  const [creating, setCreating] = useState<CreateTarget | null>(null)
   const [creatingError, setCreatingError] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
   const loadDir = useCallback(
     async (dir: string) => {
@@ -73,7 +80,7 @@ export function FileTree(props: Props) {
       try {
         const params = new URLSearchParams({
           dir,
-          hidden: showHidden ? '1' : '0',
+          hidden: '0',
         })
         const res = await fetch(`./api/list?${params.toString()}`)
         if (!res.ok) {
@@ -104,17 +111,14 @@ export function FileTree(props: Props) {
         }))
       }
     },
-    [showHidden]
+    []
   )
 
-  // 切根目录或 showHidden 翻转 → 重载根目录
+  // 切根目录 → 重载根目录
   useEffect(() => {
     if (!root) return
     void loadDir(root)
-    // showHidden 变了，已展开的节点也需要刷新；这里清空缓存让 useEffect 重跑根目录，
-    // 子目录在用户重新展开时按需加载
     setNodes((prev) => {
-      // 仅保留 root，其他清掉
       return {
         [root]: prev[root] ?? {
           loading: true,
@@ -126,7 +130,7 @@ export function FileTree(props: Props) {
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [root, showHidden])
+  }, [root])
 
   const toggleDir = useCallback(
     (dir: string) => {
@@ -143,30 +147,38 @@ export function FileTree(props: Props) {
     [nodes, loadDir]
   )
 
+  const openCreateDialog = useCallback((dir: string, kind: CreateKind) => {
+    setContextMenu(null)
+    setCreatingError(null)
+    setCreating({ dir, kind })
+  }, [])
+
   /**
-   * 「新建文件」对话框确认后实际调用。
+   * 「新建」对话框确认后实际调用。
    *
    * 失败：把错误回写到 dialog 上方红字提示，dialog 不关，方便用户改名重试。
-   * 成功：刷新目标父目录的列表（让新文件出现），并通过 onOpen 直接打开它。
+   * 成功：刷新目标父目录的列表；新文件直接打开，新文件夹保持在树中可见。
    */
   const submitCreate = useCallback(
-    async (parentDir: string, name: string) => {
-      if (!onCreateFile) {
-        setCreatingError('当前环境不支持新建文件')
+    async (target: CreateTarget, name: string) => {
+      const creator = target.kind === 'file' ? onCreateFile : onCreateFolder
+      if (!creator) {
+        setCreatingError(target.kind === 'file' ? '当前环境不支持新建文件' : '当前环境不支持新建文件夹')
         return
       }
       try {
-        const newPath = await onCreateFile(parentDir, name)
-        setCreatingIn(null)
+        const newPath = await creator(target.dir, name)
+        setCreating(null)
         setCreatingError(null)
-        // 重载父目录，把新文件刷出来
-        await loadDir(parentDir)
-        onOpen(newPath)
+        await loadDir(target.dir)
+        if (target.kind === 'file') {
+          onOpen(newPath)
+        }
       } catch (e) {
         setCreatingError(String(e))
       }
     },
-    [onCreateFile, loadDir, onOpen]
+    [onCreateFile, onCreateFolder, loadDir, onOpen]
   )
 
   // 路径面包屑分段
@@ -174,46 +186,16 @@ export function FileTree(props: Props) {
   const filterLower = filter.trim().toLowerCase()
 
   return (
-    <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar border-r border-seeyue-border/80">
-      {/* —— 顶部："文件" 标题 + 视图切换 —— */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border/70">
-        <button
-          className="relative inline-flex items-center gap-1.5 px-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-seeyue-fg-dim cursor-default bg-transparent border-0 outline-none"
-          data-active="true"
-        >
-          <Files size={14} />
-          <span>文件</span>
-        </button>
-        <div className="flex-1" />
-        {onCreateFile && (
-          <button
-            className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
-            onClick={() => {
-              setCreatingError(null)
-              setCreatingIn(root)
-            }}
-            title="在当前根目录新建文件"
-          >
-            <FilePlus size={15} />
-          </button>
-        )}
-        <button
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
-          onClick={() => setPickingRoot(true)}
-          title="切换根目录"
-        >
-          <FolderRoot size={15} />
-        </button>
-        <button
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded text-seeyue-fg-dim bg-transparent border-0 cursor-pointer transition-all duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated disabled:opacity-30 disabled:cursor-not-allowed"
-          onClick={onToggleHidden}
-          data-active={showHidden ? 'true' : undefined}
-          title={showHidden ? '隐藏 dotfile' : '显示 dotfile'}
-        >
-          {showHidden ? <Eye size={15} /> : <EyeOff size={15} />}
-        </button>
-      </div>
-
+    <div
+      className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar border-r border-seeyue-border/80"
+      onContextMenu={(e) => {
+        e.preventDefault()
+        if (onCreateFile || onCreateFolder) {
+          setContextMenu({ x: e.clientX, y: e.clientY, dir: root })
+        }
+      }}
+      onClick={() => setContextMenu(null)}
+    >
       {/* —— 路径面包屑 —— */}
       <div
         className="px-3 pt-2 pb-1.5 text-[11px] text-seeyue-fg-dim flex items-center gap-1 truncate"
@@ -268,47 +250,57 @@ export function FileTree(props: Props) {
           onOpen={onOpen}
           activePath={activePath}
           filter={filterLower}
-          onRequestCreate={
-            onCreateFile
-              ? (dir) => {
-                  setCreatingError(null)
-                  setCreatingIn(dir)
-                }
-              : undefined
-          }
+          onRequestCreate={onCreateFile || onCreateFolder ? openCreateDialog : undefined}
+          onRequestMenu={onCreateFile || onCreateFolder ? setContextMenu : undefined}
         />
       </div>
 
-      {pickingRoot && (
+      {creating && (
         <PromptDialog
-          title="切换文件树根目录"
-          description="输入要展示的绝对路径："
-          initialValue={root}
-          placeholder="/Users/.../docs"
-          onCancel={() => setPickingRoot(false)}
-          onConfirm={(next) => {
-            setPickingRoot(false)
-            if (next && next !== root) onChangeRoot(next)
+          title={creating.kind === 'file' ? '新建文件' : '新建文件夹'}
+          description={`将在 ${creating.dir} 下创建${creating.kind === 'file' ? '新文件' : '新文件夹'}：`}
+          initialValue=""
+          placeholder={creating.kind === 'file' ? '例如 notes.md' : '例如 assets'}
+          confirmLabel="创建"
+          error={creatingError ?? undefined}
+          onCancel={() => {
+            setCreating(null)
+            setCreatingError(null)
+          }}
+          onConfirm={(name) => {
+            void submitCreate(creating, name)
           }}
         />
       )}
 
-      {creatingIn && (
-        <PromptDialog
-          title="新建文件"
-          description={`将在 ${creatingIn} 下创建新文件：`}
-          initialValue=""
-          placeholder="例如 notes.md"
-          confirmLabel="创建"
-          error={creatingError ?? undefined}
-          onCancel={() => {
-            setCreatingIn(null)
-            setCreatingError(null)
-          }}
-          onConfirm={(name) => {
-            void submitCreate(creatingIn, name)
-          }}
-        />
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[150px] overflow-hidden rounded-md border border-seeyue-border bg-seeyue-bg/95 py-1 text-[13px] text-seeyue-fg shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {onCreateFile && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-seeyue-fg-muted cursor-pointer hover:bg-seeyue-elevated hover:text-seeyue-fg-strong"
+              onClick={() => openCreateDialog(contextMenu.dir, 'file')}
+            >
+              <FilePlus size={14} />
+              <span>新建文件</span>
+            </button>
+          )}
+          {onCreateFolder && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-seeyue-fg-muted cursor-pointer hover:bg-seeyue-elevated hover:text-seeyue-fg-strong"
+              onClick={() => openCreateDialog(contextMenu.dir, 'folder')}
+            >
+              <FolderClosed size={14} />
+              <span>新建文件夹</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -322,7 +314,8 @@ interface DirNodeProps {
   onOpen: (path: string) => void
   activePath: string | null
   filter: string
-  onRequestCreate?: (dir: string) => void
+  onRequestCreate?: (dir: string, kind: CreateKind) => void
+  onRequestMenu?: (menu: ContextMenuState) => void
 }
 
 function DirNode({
@@ -334,6 +327,7 @@ function DirNode({
   activePath,
   filter,
   onRequestCreate,
+  onRequestMenu,
 }: DirNodeProps) {
   const state = nodes[path]
   const indent = (lvl: number) => 8 + lvl * 14
@@ -385,6 +379,7 @@ function DirNode({
             activePath={activePath}
             filter={filter}
             onRequestCreate={onRequestCreate}
+            onRequestMenu={onRequestMenu}
           />
         ))}
       {state.expanded && filter && filtered && filtered.length === 0 && (
@@ -416,6 +411,7 @@ function EntryRow({
   activePath,
   filter,
   onRequestCreate,
+  onRequestMenu,
 }: {
   entry: DirEntry
   depth: number
@@ -424,7 +420,8 @@ function EntryRow({
   onOpen: (path: string) => void
   activePath: string | null
   filter: string
-  onRequestCreate?: (dir: string) => void
+  onRequestCreate?: (dir: string, kind: CreateKind) => void
+  onRequestMenu?: (menu: ContextMenuState) => void
 }) {
   const sub = nodes[entry.path]
   const isActive = !entry.is_dir && entry.path === activePath
@@ -439,6 +436,13 @@ function EntryRow({
         role="button"
         tabIndex={0}
         onClick={() => (entry.is_dir ? onToggle(entry.path) : onOpen(entry.path))}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (onRequestMenu) {
+            onRequestMenu({ x: e.clientX, y: e.clientY, dir: entry.is_dir ? entry.path : parentDir(entry.path) })
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
@@ -475,10 +479,10 @@ function EntryRow({
             type="button"
             className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded border-0 bg-transparent text-seeyue-fg-dim cursor-pointer opacity-0 transition-all duration-150 mr-1 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-seeyue-success hover:bg-[rgba(163,190,140,0.15)] group-data-[active=true]:text-seeyue-fg-strong"
             title="在该目录新建文件"
-            onClick={(e) => {
-              e.stopPropagation()
-              onRequestCreate(entry.path)
-            }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRequestCreate(entry.path, 'file')
+              }}
           >
             <FilePlus size={12} />
           </button>
@@ -494,6 +498,7 @@ function EntryRow({
           activePath={activePath}
           filter={filter}
           onRequestCreate={onRequestCreate}
+          onRequestMenu={onRequestMenu}
         />
       )}
     </>
@@ -517,6 +522,13 @@ function FileGlyph({ name, isDir, expanded }: { name: string; isDir: boolean; ex
     default:
       return <FileGeneric size={15} />
   }
+}
+
+function parentDir(path: string): string {
+  const normalized = path.replace(/\/+$/, '')
+  const idx = normalized.lastIndexOf('/')
+  if (idx <= 0) return '/'
+  return normalized.slice(0, idx)
 }
 
 function splitPath(p: string): string[] {
