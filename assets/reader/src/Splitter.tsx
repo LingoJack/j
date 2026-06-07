@@ -61,7 +61,7 @@ export function VerticalSplitter({ width, min, max, defaultWidth, onResize, aria
 
   return (
     <div
-      className="group relative w-[5px] h-full cursor-col-resize bg-transparent select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-0.5 before:w-px before:bg-seeyue-border before:transition-colors before:duration-150 hover:before:bg-seeyue-accent active:before:bg-seeyue-accent"
+      className="group relative w-px h-full cursor-col-resize bg-seeyue-border select-none touch-none transition-colors duration-150 before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-3 before:-translate-x-1/2 before:bg-transparent hover:bg-seeyue-accent active:bg-seeyue-accent"
       role="separator"
       aria-orientation="vertical"
       aria-label={ariaLabel ?? '调节宽度'}

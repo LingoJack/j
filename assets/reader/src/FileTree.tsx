@@ -187,7 +187,7 @@ export function FileTree(props: Props) {
 
   return (
     <div
-      className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar border-r border-seeyue-border/80"
+      className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar"
       onContextMenu={(e) => {
         e.preventDefault()
         if (onCreateFile || onCreateFolder) {

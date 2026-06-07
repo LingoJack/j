@@ -546,8 +546,8 @@ export function Reader() {
         className="h-full grid bg-seeyue-bg text-seeyue-fg"
         data-theme={theme}
         style={{
-          // 4 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [5px 分割条] [1fr 主区]
-          gridTemplateColumns: `44px ${sidebarWidth}px 5px minmax(0, 1fr)`,
+          // 4 列：[44px 活动栏] [{sidebarWidth}px 侧栏面板] [1px 分隔线/拖拽条] [1fr 主区]
+          gridTemplateColumns: `44px ${sidebarWidth}px 1px minmax(0, 1fr)`,
         }}
       >
         {/* 最左：垂直活动栏 */}
