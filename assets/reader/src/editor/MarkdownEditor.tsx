@@ -1,23 +1,19 @@
-/**
- * Markdown 编辑器 —— 消费 Rust 后端 IR，自行渲染 DOM。
+/*
+ * Markdown 编辑器 —— 类 Typora 混合编辑模式。
  *
  * 核心思路：
- * - 接收后端 ParsedDocument（pulldown-cmark 解析结果），渲染为 contenteditable DOM
- * - 编辑后从 DOM 序列化回 markdown source
- * - source 变化时 POST /api/parse 获取新 IR
- * - 解析完成后做真正的增量 DOM 更新：只替换内容有变化的非活跃 block，保留光标所在 block 完全不动
- * - 前端不解析 markdown，解析全部由 Rust 后端完成
+ * - 默认显示后端解析后的 Markdown 渲染结果；
+ * - 点击某个 block 后，仅该 block 切换为 Markdown 源码 textarea；
+ * - 其它 block 继续保持渲染态；
+ * - textarea 是真实输入控件，避免 contenteditable 编辑渲染 DOM 导致内容错乱和光标跳转；
+ * - source 变化后仍通过 Rust 后端 /api/parse 解析，前端不自行解析 Markdown。
  */
-import { useEffect, useRef, useCallback } from 'react'
-import type { Block, ParsedDocument, Inline, Alignment } from '../types'
-import { resetInlineCache, renderInlines } from './inline-renderer'
-import { renderHighlightedCode } from './code-highlight'
-import { slugify } from '../slug'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Alignment, Block, Inline, ListData, ParsedDocument } from '../types'
 import { extractText } from '../MarkdownIR'
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+import { slugify } from '../slug'
+import { renderHighlightedCode } from './code-highlight'
+import { resetInlineCache, renderInlines } from './inline-renderer'
 
 interface Props {
   path: string
@@ -30,9 +26,10 @@ interface Props {
   onSave: () => void | Promise<void>
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+type LineRange = {
+  startLine: number
+  endLine: number
+}
 
 function useLatest<T>(value: T) {
   const ref = useRef(value)
@@ -53,258 +50,54 @@ async function fetchParse(source: string): Promise<ParsedDocument> {
   return resp.json()
 }
 
-/** 找到包含光标的 block-level 元素（host 的直接子元素） */
-function getActiveBlockIndex(host: HTMLElement): number {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return -1
-  let node: Node | null = sel.anchorNode
-  while (node && node !== host) {
-    if (node.parentNode === host) {
-      return Array.from(host.children).indexOf(node as Element)
+function sameRange(a: LineRange | null, b: LineRange | null): boolean {
+  if (!a || !b) return a === b
+  return a.startLine === b.startLine && a.endLine === b.endLine
+}
+
+function normalizeRange(block: Block, lineCount: number): LineRange {
+  const startLine = Math.max(0, Math.min(block.source.start_line, Math.max(0, lineCount - 1)))
+  const endLine = Math.max(startLine, Math.min(block.source.end_line, Math.max(0, lineCount - 1)))
+  return { startLine, endLine }
+}
+
+function normalizeBlockRanges(blocks: Block[], lines: string[]): LineRange[] {
+  return blocks.map((block, index) => {
+    const range = normalizeRange(block, lines.length)
+    const next = blocks[index + 1]
+    if (next) {
+      const nextRange = normalizeRange(next, lines.length)
+      if (nextRange.startLine > range.startLine && nextRange.startLine <= range.endLine) {
+        range.endLine = nextRange.startLine - 1
+      }
     }
-    node = node.parentNode
+    return trimEditableRange(block, range, lines)
+  })
+}
+
+function trimEditableRange(block: Block, range: LineRange, lines: string[]): LineRange {
+  if (block.kind.type === 'code_block') return range
+
+  while (range.endLine > range.startLine && (lines[range.endLine]?.trim() ?? '') === '') {
+    range.endLine -= 1
   }
-  return -1
+  return range
 }
 
-/** 获取 block 的文本指纹（用于判断非活跃 block 是否需要更新） */
-function blockFingerprint(block: Block): string {
-  const k = block.kind
-  switch (k.type) {
-    case 'paragraph':
-      return `p:${inlineFingerprint(k.value)}`
-    case 'heading':
-      return `h${k.value.level}:${inlineFingerprint(k.value.content)}`
-    case 'code_block':
-      return `c:${k.value.lang}:${k.value.code}`
-    case 'rule':
-      return 'hr'
-    case 'html_block':
-      return `html:${k.value}`
-    case 'block_quote':
-      return `bq:${k.value.map((b) => blockFingerprint(b)).join('|')}`
-    case 'list':
-      return `l:${k.value.ordered ? 'o' : 'u'}:${k.value.items.map((it) => `${it.checked}:${inlineFingerprint(it.content)}`).join(',')}`
-    case 'table':
-      return `t:${k.value.rows.map((row) => row.map((cell) => inlineFingerprint(cell)).join('|')).join('||')}`
-    default:
-      return 'unknown'
-  }
+function getRangeText(lines: string[], range: LineRange): string {
+  return lines.slice(range.startLine, range.endLine + 1).join('\n')
 }
 
-function inlineFingerprint(inlines: Inline[]): string {
-  return inlines.map(inlineFingerprintOne).join('')
+function replaceRangeText(source: string, range: LineRange, text: string): string {
+  const lines = source.split('\n')
+  const replacement = text.split('\n')
+  lines.splice(range.startLine, range.endLine - range.startLine + 1, ...replacement)
+  return lines.join('\n')
 }
 
-function inlineFingerprintOne(i: Inline): string {
-  switch (i.type) {
-    case 'text':
-      return i.value
-    case 'strong':
-      return `**${inlineFingerprint(i.value)}**`
-    case 'emphasis':
-      return `*${inlineFingerprint(i.value)}*`
-    case 'strikethrough':
-      return `~~${inlineFingerprint(i.value)}~~`
-    case 'code':
-      return `\`${i.value}\``
-    case 'link':
-      return `[${inlineFingerprint(i.value.text)}](${i.value.url})`
-    case 'image':
-      return `![${i.value.alt}](${i.value.url})`
-    case 'soft_break':
-      return ' '
-    case 'hard_break':
-      return '\n'
-    case 'html':
-      return i.value
-    default:
-      return ''
-  }
+function rangeLineCount(text: string): number {
+  return text.split('\n').length
 }
-
-/** 获取当前光标在某个 block 可编辑文本中的偏移；忽略 Markdown marker。 */
-function getCaretTextOffset(root: HTMLElement): number | null {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return null
-  const range = sel.getRangeAt(0)
-  if (!root.contains(range.startContainer)) return null
-
-  let offset = 0
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  let node = walker.nextNode()
-  while (node) {
-    if (isMarkerTextNode(node)) {
-      node = walker.nextNode()
-      continue
-    }
-    if (node === range.startContainer) {
-      return offset + range.startOffset
-    }
-    offset += node.textContent?.length ?? 0
-    node = walker.nextNode()
-  }
-  return offset
-}
-
-/** 按可编辑文本偏移恢复光标；忽略 Markdown marker。 */
-function restoreCaretTextOffset(root: HTMLElement, targetOffset: number) {
-  const sel = window.getSelection()
-  if (!sel) return
-
-  let remaining = Math.max(0, targetOffset)
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  let fallback: Text | null = null
-  let node = walker.nextNode()
-  while (node) {
-    if (isMarkerTextNode(node)) {
-      node = walker.nextNode()
-      continue
-    }
-    const text = node as Text
-    fallback = text
-    const len = text.textContent?.length ?? 0
-    if (remaining <= len) {
-      const range = document.createRange()
-      range.setStart(text, remaining)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
-      return
-    }
-    remaining -= len
-    node = walker.nextNode()
-  }
-
-  const range = document.createRange()
-  if (fallback) {
-    range.setStart(fallback, fallback.textContent?.length ?? 0)
-  } else {
-    if (root.childNodes.length === 0) root.appendChild(document.createTextNode(''))
-    range.setStart(root, root.childNodes.length)
-  }
-  range.collapse(true)
-  sel.removeAllRanges()
-  sel.addRange(range)
-}
-
-function patchActiveTextBlockInPlace(
-  el: HTMLElement,
-  block: Block,
-  baseDir: string | null
-): boolean {
-  const caretOffset = getCaretTextOffset(el)
-  if (caretOffset === null) return false
-
-  const kind = block.kind
-  try {
-    if (kind.type === 'paragraph' && el.dataset.blockType === 'paragraph') {
-      el.replaceChildren()
-      renderInlines(kind.value, el, baseDir)
-    } else if (
-      kind.type === 'heading' &&
-      el.dataset.blockType === 'heading' &&
-      el.dataset.level === String(kind.value.level)
-    ) {
-      const headingText = extractText(kind.value.content)
-      el.id = headingText ? slugify(headingText) : ''
-      el.replaceChildren(createMarkdownMarker(`${'#'.repeat(kind.value.level)} `))
-      renderInlines(kind.value.content, el, baseDir)
-    } else {
-      return false
-    }
-  } finally {
-    // replaceChildren 会移除监听器之外的子节点，不会影响 block 自身 input 监听器。
-  }
-
-  restoreCaretTextOffset(el, caretOffset)
-  return true
-}
-
-function isMarkerTextNode(node: Node): boolean {
-  const parent = node.parentElement
-  return parent?.dataset.mdMarker === 'true'
-}
-
-function isEditableTextBlock(el: HTMLElement): boolean {
-  const blockType = el.dataset.blockType
-  return blockType === 'paragraph' || blockType === 'heading'
-}
-
-function closestEditableBlock(node: Node | null, host: HTMLElement): HTMLElement | null {
-  let current: Node | null = node
-  while (current && current !== host) {
-    if (
-      current instanceof HTMLElement &&
-      current.parentElement === host &&
-      isEditableTextBlock(current)
-    ) {
-      return current
-    }
-    current = current.parentNode
-  }
-  return null
-}
-
-function createEmptyParagraph(onEditRef: React.RefObject<() => void>): HTMLElement {
-  const el = document.createElement('p')
-  el.className = 'md-block md-paragraph'
-  el.dataset.blockType = 'paragraph'
-  el.contentEditable = 'true'
-  el.appendChild(document.createTextNode(''))
-  el.addEventListener('input', () => onEditRef.current?.())
-  return el
-}
-
-function placeCaretAtStart(el: HTMLElement) {
-  const sel = window.getSelection()
-  if (!sel) return
-  if (el.childNodes.length === 0) {
-    el.appendChild(document.createTextNode(''))
-  }
-  const range = document.createRange()
-  const firstText = firstTextNode(el)
-  if (firstText) {
-    range.setStart(firstText, 0)
-  } else {
-    range.setStart(el, 0)
-  }
-  range.collapse(true)
-  sel.removeAllRanges()
-  sel.addRange(range)
-}
-
-function firstTextNode(root: HTMLElement): Text | null {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  return walker.nextNode() as Text | null
-}
-
-function handleEnterInsertParagraph(
-  e: KeyboardEvent,
-  onEditRef: React.RefObject<() => void>
-): boolean {
-  const host = e.currentTarget as HTMLElement | null
-  if (!host) return false
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false
-
-  const block = closestEditableBlock(sel.anchorNode, host)
-  if (!block) return false
-
-  const offset = getCaretTextOffset(block)
-  if (offset !== 0) return false
-
-  e.preventDefault()
-  const paragraph = createEmptyParagraph(onEditRef)
-  block.before(paragraph)
-  placeCaretAtStart(paragraph)
-  onEditRef.current?.()
-  return true
-}
-
-// ---------------------------------------------------------------------------
-// 主组件
-// ---------------------------------------------------------------------------
 
 export function MarkdownEditor({
   path,
@@ -319,284 +112,480 @@ export function MarkdownEditor({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const sourceRef = useRef(initialSource)
   const docRef = useRef(initialDoc)
-  const updatingRef = useRef(false)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastParsedSource = useRef('')
   const parseSeq = useRef(0)
-  /** 上一次渲染的 block 指纹列表 */
-  const lastFingerprints = useRef<string[]>([])
+  const activeRangeRef = useRef<LineRange | null>(null)
+  const [activeRange, setActiveRange] = useState<LineRange | null>(null)
 
   const onChangeRef = useLatest(onChange)
   const onParsedRef = useLatest(onParsed)
   const onSaveRef = useLatest(onSave)
   const pathRef = useLatest(path)
   const baseDirRef = useLatest(baseDir)
-  const syncFromDomFnRef = useRef<() => void>(() => {})
 
-  // ---- DOM → Markdown 序列化 + 触发后端解析 ----
-  const syncFromDom = useCallback(() => {
-    if (updatingRef.current) return
+  const setActiveRangeSafely = useCallback((next: LineRange | null) => {
+    activeRangeRef.current = next
+    setActiveRange((prev) => (sameRange(prev, next) ? prev : next))
+  }, [])
+
+  const renderDocument = useCallback(() => {
     const host = hostRef.current
     if (!host) return
 
-    const md = serializeDomToMarkdown(host)
-    if (md === sourceRef.current) return
+    const savedScrollTop = scrollRef.current?.scrollTop ?? 0
+    const lines = sourceRef.current.split('\n')
+    const active = activeRangeRef.current
+    const blocks = docRef.current.blocks
+    const ranges = normalizeBlockRanges(blocks, lines)
 
-    sourceRef.current = md
-    onChangeRef.current(pathRef.current, md)
+    resetInlineCache()
+    host.replaceChildren()
 
-    // Debounce 后端解析（300ms）
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
-    debounceTimer.current = setTimeout(() => {
-      parseAndRender(md)
-    }, 300)
-  }, [onChangeRef, pathRef])
+    let nextLine = 0
+    blocks.forEach((block, index) => {
+      const range = ranges[index]
+      if (block.kind.type === 'list') {
+        const listRanges = splitListItemRanges(range, lines, block.kind.value.items.length)
+        listRanges.forEach((listRange, itemIndex) => {
+          appendBlankLines(host, nextLine, listRange.startLine)
+          if (active && sameRange(active, listRange)) {
+            host.appendChild(
+              createSourceBlockEditor({
+                range: listRange,
+                block,
+                rawValue: getRangeText(lines, listRange),
+                onChange: (value) => {
+                  const currentRange = activeRangeRef.current ?? listRange
+                  const nextSource = replaceRangeText(sourceRef.current, currentRange, value)
+                  const nextRange = {
+                    startLine: currentRange.startLine,
+                    endLine: currentRange.startLine + rangeLineCount(value) - 1,
+                  }
+                  sourceRef.current = nextSource
+                  activeRangeRef.current = nextRange
+                  onChangeRef.current(pathRef.current, nextSource)
+                  scheduleParse(nextSource)
+                },
+                onBlur: () => {
+                  if (!sameRange(activeRangeRef.current, listRange)) return
+                  setActiveRangeSafely(null)
+                  parseAndRender(sourceRef.current)
+                },
+                onSave: () => void onSaveRef.current(),
+              })
+            )
+          } else {
+            const el = createListItemElement(block.kind.value, itemIndex, baseDirRef.current)
+            el.dataset.startLine = String(listRange.startLine)
+            el.dataset.endLine = String(listRange.endLine)
+            el.addEventListener('mousedown', (event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              setActiveRangeSafely(listRange)
+            })
+            host.appendChild(el)
+          }
+          nextLine = listRange.endLine + 1
+        })
+        return
+      }
 
-  syncFromDomFnRef.current = syncFromDom
+      appendBlankLines(host, nextLine, range.startLine)
 
-  // ---- parse + incremental render ----
+      if (active && sameRange(active, range)) {
+        host.appendChild(
+          createSourceBlockEditor({
+            range,
+            block,
+            rawValue: getRangeText(lines, range),
+            onChange: (value) => {
+              const currentRange = activeRangeRef.current ?? range
+              const nextSource = replaceRangeText(sourceRef.current, currentRange, value)
+              const nextRange = {
+                startLine: currentRange.startLine,
+                endLine: currentRange.startLine + rangeLineCount(value) - 1,
+              }
+              sourceRef.current = nextSource
+              activeRangeRef.current = nextRange
+              onChangeRef.current(pathRef.current, nextSource)
+              scheduleParse(nextSource)
+            },
+            onBlur: () => {
+              if (!sameRange(activeRangeRef.current, range)) return
+              setActiveRangeSafely(null)
+              parseAndRender(sourceRef.current)
+            },
+            onSave: () => void onSaveRef.current(),
+          })
+        )
+      } else {
+        const el = createBlockElement(block, baseDirRef.current)
+        el.dataset.startLine = String(range.startLine)
+        el.dataset.endLine = String(range.endLine)
+        el.addEventListener('mousedown', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          setActiveRangeSafely(range)
+        })
+        host.appendChild(el)
+      }
+
+      nextLine = range.endLine + 1
+    })
+    appendBlankLines(host, nextLine, lines.length)
+
+    if (scrollRef.current) scrollRef.current.scrollTop = savedScrollTop
+
+    const editor =
+      host.querySelector<HTMLElement>('.md-preferred-focus') ??
+      host.querySelector<HTMLElement>('.md-block-source-input, .md-code-source-input, .md-table-cell-input, .md-code-lang-input')
+    if (editor && document.activeElement !== editor) {
+      editor.focus()
+    }
+  }, [baseDirRef, onChangeRef, onSaveRef, pathRef, setActiveRangeSafely])
+
   const parseAndRender = useCallback(
-    (source: string) => {
-      if (source === lastParsedSource.current) return
+    (nextSource: string) => {
+      if (nextSource === lastParsedSource.current) {
+        if (!activeRangeRef.current) renderDocument()
+        return
+      }
 
       const seq = ++parseSeq.current
-      lastParsedSource.current = source
-      fetchParse(source)
+      lastParsedSource.current = nextSource
+      fetchParse(nextSource)
         .then((doc) => {
           if (seq !== parseSeq.current) return
           docRef.current = doc
           onParsedRef.current(pathRef.current, doc)
-          applyDiff(doc.blocks)
+          if (!activeRangeRef.current) renderDocument()
         })
         .catch(() => {
-          /* 静默失败 */
+          if (!activeRangeRef.current) renderDocument()
         })
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [onParsedRef, pathRef]
+    [onParsedRef, pathRef, renderDocument]
   )
 
-  // ---- 真正的增量 DOM 更新 ----
-  // 策略：非活跃 block 直接替换；活跃的 paragraph/heading 在原 block 内
-  // patch 子节点并按可编辑文本偏移恢复光标，避免替换 block 本身导致 Selection 回文首。
-  const applyDiff = useCallback(
-    (blocks: Block[]) => {
-      const host = hostRef.current
-      if (!host) return
-
-      const activeIdx = getActiveBlockIndex(host)
-      const newFps = blocks.map((b) => blockFingerprint(b))
-      const oldFps = lastFingerprints.current
-      const oldChildren = Array.from(host.children) as HTMLElement[]
-
-      const lenMatch = oldChildren.length === blocks.length && oldFps.length === newFps.length
-
-      try {
-        updatingRef.current = true
-
-        if (lenMatch) {
-          // 同数量：逐个比较指纹；活跃文本 block 原地 patch，其余 block 替换。
-          for (let i = 0; i < blocks.length; i++) {
-            if (i < oldFps.length && oldFps[i] === newFps[i]) continue // 指纹相同，跳过
-            if (i === activeIdx) {
-              const activeEl = oldChildren[i]
-              const patched = patchActiveTextBlockInPlace(activeEl, blocks[i], baseDirRef.current)
-              if (!patched) continue
-              continue
-            }
-            const newEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
-            oldChildren[i].replaceWith(newEl)
-          }
-        } else {
-          // 数量不同：重建 block 列表；尽量复用旧 DOM，活跃 block 绝不替换。
-          const fragment = document.createDocumentFragment()
-          for (let i = 0; i < blocks.length; i++) {
-            let nextEl: HTMLElement
-            if (i === activeIdx && i < oldChildren.length) {
-              const activeEl = oldChildren[i]
-              if (patchActiveTextBlockInPlace(activeEl, blocks[i], baseDirRef.current)) {
-                nextEl = activeEl
-              } else {
-                nextEl = oldChildren[i]
-              }
-            } else if (i < oldChildren.length && i < oldFps.length && oldFps[i] === newFps[i]) {
-              nextEl = oldChildren[i]
-            } else {
-              nextEl = createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef)
-            }
-            fragment.appendChild(nextEl)
-          }
-          host.replaceChildren(fragment)
-        }
-      } finally {
-        updatingRef.current = false
-      }
-
-      lastFingerprints.current = newFps
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    },
-    [baseDirRef]
-  )
-
-  // ---- 全量渲染（初始化 / 切换文件）----
-  const fullRender = useCallback(
-    (blocks: Block[]) => {
-      const host = hostRef.current
-      if (!host) return
-
-      const savedScrollTop = scrollRef.current?.scrollTop ?? 0
-
-      try {
-        updatingRef.current = true
-        host.innerHTML = ''
-
-        for (let i = 0; i < blocks.length; i++) {
-          host.appendChild(createBlockElement(blocks[i], baseDirRef.current, syncFromDomFnRef))
-        }
-        lastFingerprints.current = blocks.map((b) => blockFingerprint(b))
-      } finally {
-        updatingRef.current = false
-      }
-
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = savedScrollTop
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    },
-    [baseDirRef]
-  )
-
-  // ---- Cmd/Ctrl+S 保存 + Enter 插入段落 ----
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault()
-        syncFromDom()
-        void onSaveRef.current()
-        return
-      }
-
-      if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (handleEnterInsertParagraph(e, syncFromDomFnRef)) {
-          return
-        }
-      }
-    },
-    [onSaveRef, syncFromDom]
-  )
-
-  // ---- 仅在切换文件（path 变化）时全量重建 ----
   useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
+    renderDocument()
+  }, [activeRange, renderDocument])
 
-    resetInlineCache()
+  useEffect(() => {
     sourceRef.current = initialSource
     docRef.current = initialDoc
     lastParsedSource.current = initialSource
-
-    fullRender(initialDoc.blocks)
+    parseSeq.current += 1
+    setActiveRangeSafely(null)
+    renderDocument()
     onParsedRef.current(path, initialDoc)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path])
 
-  // ---- 输入事件 ----
   useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
-
-    const onInput = () => {
-      syncFromDom()
-    }
-
-    host.addEventListener('input', onInput)
-    host.addEventListener('keydown', handleKeyDown)
     return () => {
-      host.removeEventListener('input', onInput)
-      host.removeEventListener('keydown', handleKeyDown)
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
     }
-  }, [syncFromDom, handleKeyDown])
+  }, [])
 
   return (
-    <div
-      ref={scrollRef}
-      className="h-full overflow-y-auto overflow-x-hidden outline-none"
-    >
-      <div
-        ref={hostRef}
-        className="md-editor min-h-full outline-none"
-        contentEditable
-        spellCheck={false}
-        suppressContentEditableWarning
-      />
+    <div ref={scrollRef} className="md-editor-shell">
+      <div ref={hostRef} className="md-editor min-h-full outline-none" />
     </div>
   )
+
+  function scheduleParse(nextSource: string) {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => {
+      parseAndRender(nextSource)
+    }, 250)
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Block → DOM 渲染
-// ---------------------------------------------------------------------------
+function appendBlankLines(host: HTMLElement, fromLine: number, toLine: number) {
+  for (let line = fromLine; line < toLine; line++) {
+    const blank = document.createElement('div')
+    blank.className = 'md-block md-blank-line'
+    blank.dataset.blockType = 'blank'
+    blank.dataset.startLine = String(line)
+    blank.dataset.endLine = String(line)
+    blank.textContent = '\u00a0'
+    host.appendChild(blank)
+  }
+}
 
-function createBlockElement(
-  block: Block,
-  baseDir: string | null,
-  onEditRef: React.RefObject<() => void>
-): HTMLElement {
+type SourceBlockEditorOptions = {
+  range: LineRange
+  block: Block
+  rawValue: string
+  onChange: (value: string) => void
+  onBlur: () => void
+  onSave: () => void
+}
+
+function createSourceBlockEditor(options: SourceBlockEditorOptions): HTMLElement {
+  const kind = options.block.kind
+  if (kind.type === 'code_block') return createCodeBlockEditor(options, kind.value.lang, kind.value.code)
+  if (kind.type === 'table') return createTableBlockEditor(options, kind.value)
+  return createRawBlockEditor(options)
+}
+
+function createRawBlockEditor(options: SourceBlockEditorOptions): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'md-block md-block-source'
+  wrap.dataset.blockType = 'source'
+  wrap.dataset.startLine = String(options.range.startLine)
+  wrap.dataset.endLine = String(options.range.endLine)
+
+  const textarea = createAutoGrowTextarea('md-block-source-input', options.rawValue)
+  textarea.addEventListener('input', () => {
+    autoGrowTextarea(textarea)
+    options.onChange(textarea.value)
+  })
+  bindCommonEditorKeys(textarea, options)
+
+  wrap.appendChild(textarea)
+  return wrap
+}
+
+function createCodeBlockEditor(options: SourceBlockEditorOptions, lang: string, code: string): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'md-block md-code-source'
+  wrap.dataset.blockType = 'source_code'
+  wrap.dataset.startLine = String(options.range.startLine)
+  wrap.dataset.endLine = String(options.range.endLine)
+
+  const toolbar = document.createElement('div')
+  toolbar.className = 'md-code-source-toolbar'
+
+  const langLabel = document.createElement('label')
+  langLabel.className = 'md-code-source-label'
+
+  const langInput = document.createElement('input')
+  langInput.className = 'md-code-lang-input'
+  langInput.value = lang
+  langInput.placeholder = 'text'
+  langInput.spellcheck = false
+
+  langLabel.appendChild(langInput)
+  toolbar.appendChild(langLabel)
+
+  const textarea = createAutoGrowTextarea('md-code-source-input md-preferred-focus', trimCodeBlockDisplayNewline(code))
+  const closeEditor = () => {
+    langInput.blur()
+    textarea.blur()
+    options.onBlur()
+  }
+
+  const emit = () => {
+    options.onChange(buildCodeBlockSource(langInput.value, textarea.value))
+  }
+  langInput.addEventListener('input', emit)
+  langInput.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+      event.preventDefault()
+      options.onSave()
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeEditor()
+    }
+  })
+  textarea.addEventListener('input', () => {
+    autoGrowTextarea(textarea)
+    emit()
+  })
+  textarea.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+      event.preventDefault()
+      options.onSave()
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeEditor()
+    }
+  })
+  langInput.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!wrap.contains(document.activeElement)) options.onBlur()
+    }, 0)
+  })
+  textarea.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!wrap.contains(document.activeElement)) options.onBlur()
+    }, 0)
+  })
+
+  wrap.appendChild(toolbar)
+  wrap.appendChild(textarea)
+  return wrap
+}
+
+function createTableBlockEditor(options: SourceBlockEditorOptions, data: { alignments: Alignment[]; rows: Inline[][][] }): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'md-block md-table-source'
+  wrap.dataset.blockType = 'source_table'
+  wrap.dataset.startLine = String(options.range.startLine)
+  wrap.dataset.endLine = String(options.range.endLine)
+
+  const table = document.createElement('table')
+  table.className = 'md-table-edit-grid'
+
+  const maxCols = Math.max(data.alignments.length, ...data.rows.map((row) => row.length), 1)
+  const rows = data.rows.length > 0 ? data.rows : [[[]]]
+
+  for (let r = 0; r < rows.length; r++) {
+    const tr = document.createElement('tr')
+    for (let c = 0; c < maxCols; c++) {
+      const cell = document.createElement(r === 0 ? 'th' : 'td')
+      const textarea = createAutoGrowTextarea(
+        'md-table-cell-input md-table-cell-textarea',
+        inlinePlainText(rows[r][c] ?? [])
+      )
+      textarea.dataset.row = String(r)
+      textarea.dataset.col = String(c)
+      textarea.addEventListener('input', () => {
+        autoGrowTextarea(textarea)
+        options.onChange(buildTableSource(table, data.alignments))
+      })
+      textarea.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+          event.preventDefault()
+          options.onSave()
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          textarea.blur()
+        }
+      })
+      textarea.addEventListener('blur', () => {
+        setTimeout(() => {
+          if (!wrap.contains(document.activeElement)) options.onBlur()
+        }, 0)
+      })
+      cell.appendChild(textarea)
+      tr.appendChild(cell)
+    }
+    table.appendChild(tr)
+  }
+
+  const hint = document.createElement('div')
+  hint.className = 'md-table-source-hint'
+  hint.textContent = '编辑单元格内容；表格结构暂按当前行列保持。'
+
+  wrap.appendChild(table)
+  wrap.appendChild(hint)
+  return wrap
+}
+
+function createAutoGrowTextarea(className: string, value: string): HTMLTextAreaElement {
+  const textarea = document.createElement('textarea')
+  textarea.className = className
+  textarea.spellcheck = false
+  textarea.value = value
+  textarea.rows = Math.max(1, rangeLineCount(value))
+  requestAnimationFrame(() => autoGrowTextarea(textarea))
+  return textarea
+}
+
+function autoGrowTextarea(textarea: HTMLTextAreaElement) {
+  textarea.style.height = 'auto'
+  textarea.style.height = `${textarea.scrollHeight}px`
+}
+
+function bindCommonEditorKeys(textarea: HTMLTextAreaElement, options: SourceBlockEditorOptions) {
+  textarea.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+      event.preventDefault()
+      options.onSave()
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      textarea.blur()
+    }
+  })
+  textarea.addEventListener('blur', options.onBlur)
+}
+
+function buildCodeBlockSource(lang: string, code: string): string {
+  return `\`\`\`${lang.trim()}\n${code}\n\`\`\``
+}
+
+function inlinePlainText(inlines: Inline[]): string {
+  return extractText(inlines)
+}
+
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
+}
+
+function tableAlignMarker(align: Alignment | undefined): string {
+  if (align === 'left') return ':---'
+  if (align === 'center') return ':---:'
+  if (align === 'right') return '---:'
+  return '---'
+}
+
+function buildTableSource(table: HTMLTableElement, alignments: Alignment[]): string {
+  const rows = Array.from(table.rows).map((row) =>
+    Array.from(row.cells).map((cell) => escapeTableCell(cell.querySelector('textarea')?.value ?? ''))
+  )
+  const header = rows[0] ?? ['']
+  const divider = header.map((_, index) => tableAlignMarker(alignments[index])).join(' | ')
+  const body = rows.slice(1)
+  return [`| ${header.join(' | ')} |`, `| ${divider} |`, ...body.map((row) => `| ${row.join(' | ')} |`)].join('\n')
+}
+
+function createBlockElement(block: Block, baseDir: string | null): HTMLElement {
   const kind = block.kind
-  const onEdit = () => onEditRef.current?.()
 
   switch (kind.type) {
     case 'heading': {
       const tag = `h${kind.value.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
       const el = document.createElement(tag)
-      el.className = 'md-block md-heading'
+      el.className = 'md-block md-heading md-rendered-block'
       el.dataset.blockType = 'heading'
       el.dataset.level = String(kind.value.level)
-      // 设置 heading id，供 TOC 点击 scrollIntoView
       const headingText = extractText(kind.value.content)
       if (headingText) el.id = slugify(headingText)
-      el.contentEditable = 'true'
-      el.appendChild(createMarkdownMarker(`${'#'.repeat(kind.value.level)} `))
       renderInlines(kind.value.content, el, baseDir)
-      el.addEventListener('input', onEdit)
       return el
     }
 
     case 'paragraph': {
       const el = document.createElement('p')
-      el.className = 'md-block md-paragraph'
+      el.className = 'md-block md-paragraph md-rendered-block'
       el.dataset.blockType = 'paragraph'
-      el.contentEditable = 'true'
       renderInlines(kind.value, el, baseDir)
-      el.addEventListener('input', onEdit)
       return el
     }
 
     case 'code_block': {
-      return createCodeBlockElement(kind.value.lang, kind.value.code, onEdit)
+      return createCodeBlockElement(kind.value.lang, kind.value.code)
     }
 
     case 'table': {
-      return createTableElement(kind.value, onEdit, baseDir)
+      return createTableElement(kind.value, baseDir)
     }
 
     case 'block_quote': {
       const el = document.createElement('blockquote')
-      el.className = 'md-block md-blockquote'
+      el.className = 'md-block md-blockquote md-rendered-block'
       el.dataset.blockType = 'blockquote'
       for (const inner of kind.value) {
-        el.appendChild(createBlockElement(inner, baseDir, onEditRef))
+        el.appendChild(createBlockElement(inner, baseDir))
       }
       return el
     }
 
     case 'list': {
-      return createListElement(kind.value, onEdit, baseDir)
+      return createListElement(kind.value, baseDir)
     }
 
     case 'html_block': {
       const el = document.createElement('div')
-      el.className = 'md-block md-html-block'
+      el.className = 'md-block md-html-block md-rendered-block'
       el.dataset.blockType = 'html_block'
       const sanitized = kind.value
         .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -607,29 +596,26 @@ function createBlockElement(
 
     case 'rule': {
       const el = document.createElement('hr')
-      el.className = 'md-block md-hr'
+      el.className = 'md-block md-hr md-rendered-block'
       el.dataset.blockType = 'rule'
       return el
     }
 
     default: {
       const el = document.createElement('p')
-      el.className = 'md-block md-paragraph'
+      el.className = 'md-block md-paragraph md-rendered-block'
       el.dataset.blockType = 'paragraph'
       return el
     }
   }
 }
 
-// ---- 表格 ----
-
 function createTableElement(
   data: { alignments: Alignment[]; rows: Inline[][][] },
-  onEdit: () => void,
   baseDir: string | null
 ): HTMLElement {
   const wrap = document.createElement('div')
-  wrap.className = 'md-block md-table-wrap'
+  wrap.className = 'md-block md-table-wrap md-rendered-block'
   wrap.dataset.blockType = 'table'
 
   const table = document.createElement('table')
@@ -642,14 +628,9 @@ function createTableElement(
     const headerRow = document.createElement('tr')
     for (let c = 0; c < rows[0].length; c++) {
       const th = document.createElement('th')
-      th.contentEditable = 'true'
       th.dataset.col = String(c)
-      const align = alignments[c]
-      if (align === 'center') th.style.textAlign = 'center'
-      else if (align === 'right') th.style.textAlign = 'right'
-      else if (align === 'left') th.style.textAlign = 'left'
+      applyCellAlignment(th, alignments[c])
       renderInlines(rows[0][c], th, baseDir)
-      th.addEventListener('input', onEdit)
       headerRow.appendChild(th)
     }
     thead.appendChild(headerRow)
@@ -661,16 +642,10 @@ function createTableElement(
         const tr = document.createElement('tr')
         for (let c = 0; c < rows[r].length; c++) {
           const td = document.createElement('td')
-          td.contentEditable = 'true'
           td.dataset.col = String(c)
           td.dataset.row = String(r)
-          const align = alignments[c]
-          if (align === 'center') td.style.textAlign = 'center'
-          else if (align === 'right') td.style.textAlign = 'right'
-          else if (align === 'left') td.style.textAlign = 'left'
+          applyCellAlignment(td, alignments[c])
           renderInlines(rows[r][c], td, baseDir)
-          td.addEventListener('input', onEdit)
-          td.addEventListener('keydown', handleTableKeyDown)
           tr.appendChild(td)
         }
         tbody.appendChild(tr)
@@ -683,53 +658,22 @@ function createTableElement(
   return wrap
 }
 
-function handleTableKeyDown(e: KeyboardEvent) {
-  const td = e.target as HTMLElement
-  if (e.key === 'Tab') {
-    e.preventDefault()
-    const row = td.closest('tr')
-    if (!row) return
-    const cells = Array.from(row.querySelectorAll('td, th'))
-    const idx = cells.indexOf(td)
-    if (e.shiftKey) {
-      const prev = cells[idx - 1]
-      if (prev) (prev as HTMLElement).focus()
-      else {
-        const prevRow = row.previousElementSibling
-        if (prevRow) {
-          const prevCells = prevRow.querySelectorAll('td, th')
-          const last = prevCells[prevCells.length - 1]
-          if (last) (last as HTMLElement).focus()
-        }
-      }
-    } else {
-      const next = cells[idx + 1]
-      if (next) (next as HTMLElement).focus()
-      else {
-        const nextRow = row.nextElementSibling
-        if (nextRow) {
-          const nextCells = nextRow.querySelectorAll('td, th')
-          const first = nextCells[0]
-          if (first) (first as HTMLElement).focus()
-        }
-      }
-    }
-  }
+function applyCellAlignment(cell: HTMLElement, align: Alignment | undefined) {
+  if (align === 'center') cell.style.textAlign = 'center'
+  else if (align === 'right') cell.style.textAlign = 'right'
+  else if (align === 'left') cell.style.textAlign = 'left'
 }
-
-// ---- 代码块 ----
 
 function trimCodeBlockDisplayNewline(code: string): string {
   return code.endsWith('\n') ? code.slice(0, -1) : code
 }
 
-function createCodeBlockElement(lang: string, code: string, onEdit: () => void): HTMLElement {
+function createCodeBlockElement(lang: string, code: string): HTMLElement {
   const wrap = document.createElement('div')
-  wrap.className = 'md-block md-code-wrap'
+  wrap.className = 'md-block md-code-wrap md-rendered-block'
   wrap.dataset.blockType = 'code'
   wrap.dataset.lang = lang
 
-  // 语言标签
   const label = document.createElement('div')
   label.className = 'md-code-lang'
   label.textContent = lang || 'code'
@@ -741,10 +685,7 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
 
   const codeEl = document.createElement('code')
   codeEl.className = 'md-code-content'
-  codeEl.contentEditable = 'true'
-  // 使用语法高亮渲染；后端 code block 常带 fence 结束前的尾随换行，展示时去掉，避免底部多一空行。
   codeEl.appendChild(renderHighlightedCode(trimCodeBlockDisplayNewline(code), lang))
-  codeEl.addEventListener('input', onEdit)
 
   pre.appendChild(codeEl)
   wrap.appendChild(pre)
@@ -752,15 +693,9 @@ function createCodeBlockElement(lang: string, code: string, onEdit: () => void):
   return wrap
 }
 
-// ---- 列表 ----
-
-function createListElement(
-  data: { ordered: boolean; items: { checked: boolean | null; content: Inline[] }[] },
-  onEdit: () => void,
-  baseDir: string | null
-): HTMLElement {
+function createListElement(data: { ordered: boolean; items: { checked: boolean | null; content: Inline[] }[] }, baseDir: string | null): HTMLElement {
   const el = document.createElement(data.ordered ? 'ol' : 'ul')
-  el.className = `md-block md-list ${data.ordered ? 'md-ol' : 'md-ul'}`
+  el.className = `md-block md-list md-rendered-block ${data.ordered ? 'md-ol' : 'md-ul'}`
   el.dataset.blockType = 'list'
 
   for (const item of data.items) {
@@ -771,194 +706,16 @@ function createListElement(
       checkbox.type = 'checkbox'
       checkbox.checked = item.checked
       checkbox.className = 'md-checkbox'
-      checkbox.disabled = false
-      checkbox.addEventListener('change', onEdit)
+      checkbox.disabled = true
       li.appendChild(checkbox)
       li.classList.add('md-task-item')
     }
     const span = document.createElement('span')
     span.className = 'md-list-text'
-    span.contentEditable = 'true'
     renderInlines(item.content, span, baseDir)
-    span.addEventListener('input', onEdit)
     li.appendChild(span)
     el.appendChild(li)
   }
 
   return el
-}
-
-// ---------------------------------------------------------------------------
-// DOM → Markdown 序列化
-// ---------------------------------------------------------------------------
-
-function serializeDomToMarkdown(host: HTMLElement): string {
-  const lines: string[] = []
-
-  for (const child of Array.from(host.children)) {
-    const el = child as HTMLElement
-    const blockType = el.dataset.blockType
-
-    switch (blockType) {
-      case 'heading': {
-        const level = Number(el.dataset.level ?? 1)
-        lines.push('#'.repeat(level) + ' ' + serializeInlineContent(el))
-        break
-      }
-      case 'paragraph': {
-        lines.push(serializeInlineContent(el))
-        break
-      }
-      case 'code': {
-        const lang = el.dataset.lang ?? ''
-        lines.push('```' + lang)
-        lines.push(el.querySelector('.md-code-content')?.textContent ?? '')
-        lines.push('```')
-        break
-      }
-      case 'table': {
-        const table = el.querySelector('table')
-        if (table) lines.push(...serializeTable(table))
-        break
-      }
-      case 'blockquote': {
-        for (const line of serializeDomToMarkdown(el).split('\n')) {
-          lines.push('> ' + line)
-        }
-        break
-      }
-      case 'list': {
-        lines.push(...serializeList(el))
-        break
-      }
-      case 'rule': {
-        lines.push('---')
-        break
-      }
-      case 'html_block': {
-        lines.push(el.innerHTML)
-        break
-      }
-      default:
-        lines.push(el.textContent ?? '')
-    }
-    lines.push('')
-  }
-
-  return (
-    lines
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trimEnd() + '\n'
-  )
-}
-
-function serializeInlineContent(el: HTMLElement): string {
-  let result = ''
-  for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      result += node.textContent ?? ''
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const child = node as HTMLElement
-      if (child.dataset.mdMarker === 'true') continue
-      const tag = child.tagName
-      if (tag === 'STRONG' || tag === 'B') {
-        result += '**' + serializeInlineContent(child) + '**'
-      } else if (tag === 'EM' || tag === 'I') {
-        result += '*' + serializeInlineContent(child) + '*'
-      } else if (tag === 'DEL' || tag === 'S') {
-        result += '~~' + serializeInlineContent(child) + '~~'
-      } else if (tag === 'CODE') {
-        const text = getEditableText(child)
-        result += text ? '`' + text + '`' : ''
-      } else if (tag === 'A') {
-        result +=
-          '[' + serializeInlineContent(child) + '](' + (child.getAttribute('href') ?? '') + ')'
-      } else if (tag === 'IMG') {
-        result +=
-          '![' +
-          (child.getAttribute('alt') ?? '') +
-          '](' +
-          (child.dataset.originalSrc ?? child.getAttribute('src') ?? '') +
-          ')'
-      } else if (tag === 'BR') {
-        result += '\n'
-      } else {
-        result += serializeInlineContent(child)
-      }
-    }
-  }
-  return result
-}
-
-function getEditableText(el: HTMLElement): string {
-  let result = ''
-  for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      result += node.textContent ?? ''
-      continue
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue
-    const child = node as HTMLElement
-    if (child.dataset.mdMarker === 'true') continue
-    if (child.tagName === 'BR') {
-      result += '\n'
-    } else {
-      result += getEditableText(child)
-    }
-  }
-  return result
-}
-
-function createMarkdownMarker(text: string): HTMLElement {
-  const span = document.createElement('span')
-  span.className = 'md-marker'
-  span.dataset.mdMarker = 'true'
-  span.contentEditable = 'false'
-  span.textContent = text
-  return span
-}
-
-function serializeTable(table: HTMLTableElement): string[] {
-  const result: string[] = []
-  const rows = Array.from(table.querySelectorAll('tr'))
-  if (rows.length === 0) return result
-  const colCount = rows[0].querySelectorAll('th, td').length
-  result.push(
-    '| ' +
-      Array.from(rows[0].querySelectorAll('th, td'))
-        .map((c) => serializeInlineContent(c as HTMLElement).trim())
-        .join(' | ') +
-      ' |'
-  )
-  result.push('| ' + Array.from({ length: colCount }, () => '---').join(' | ') + ' |')
-  for (let i = 1; i < rows.length; i++) {
-    result.push(
-      '| ' +
-        Array.from(rows[i].querySelectorAll('td, th'))
-          .map((c) => serializeInlineContent(c as HTMLElement).trim())
-          .join(' | ') +
-        ' |'
-    )
-  }
-  return result
-}
-
-function serializeList(listEl: HTMLElement): string[] {
-  const result: string[] = []
-  const isOl = listEl.tagName === 'OL'
-  let num = 1
-  for (const li of Array.from(listEl.querySelectorAll(':scope > li'))) {
-    const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-    const textEl = li.querySelector('.md-list-text') ?? li
-    const text = serializeInlineContent(textEl as HTMLElement)
-    if (checkbox) {
-      result.push(`- ${checkbox.checked ? '[x]' : '[ ]'} ${text}`)
-    } else if (isOl) {
-      result.push(`${num++}. ${text}`)
-    } else {
-      result.push(`- ${text}`)
-    }
-  }
-  return result
 }

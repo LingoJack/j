@@ -6,6 +6,84 @@
  */
 
 @layer components {
+  /* ---- 混合编辑容器 ---- */
+  .md-editor-shell {
+    @apply h-full overflow-y-auto overflow-x-hidden bg-seeyue-bg;
+  }
+
+  .md-rendered-block {
+    @apply cursor-text rounded-sm transition-colors duration-100;
+  }
+
+  .md-rendered-block:hover {
+    @apply bg-[rgba(200,191,178,0.08)];
+  }
+
+  .md-block-source,
+  .md-code-source,
+  .md-table-source {
+    @apply my-3 rounded-md border border-seeyue-accent/45 bg-seeyue-bg-deep/70 shadow-[0_0_0_3px_rgba(204,120,92,0.08)];
+  }
+
+  .md-block-source-input,
+  .md-code-source-input {
+    @apply block w-full resize-none overflow-hidden border-0 bg-transparent px-4 py-3 font-[family-name:var(--font-mono)] text-[13.5px] leading-[1.72] text-seeyue-fg outline-none caret-[var(--color-seeyue-accent)] selection:bg-[rgba(204,120,92,0.2)];
+    tab-size: 2;
+  }
+
+  .md-code-source {
+    @apply bg-seeyue-code-bg border-seeyue-code-border;
+  }
+
+  .md-code-source-toolbar {
+    @apply flex items-center justify-end border-b border-seeyue-code-border px-4 py-2;
+  }
+
+  .md-code-source-label {
+    @apply flex items-center gap-2 text-xs text-seeyue-fg-dim font-[family-name:var(--font-cjk)];
+  }
+
+  .md-code-source-label::before {
+    content: '语言';
+  }
+
+  .md-code-lang-input {
+    @apply w-28 rounded border border-seeyue-code-border bg-seeyue-bg px-2 py-1 font-[family-name:var(--font-mono)] text-xs text-seeyue-fg outline-none focus:border-seeyue-accent;
+  }
+
+  .md-table-source {
+    @apply overflow-visible p-3;
+  }
+
+  .md-table-edit-grid {
+    @apply w-full table-auto border-collapse text-[13.5px];
+  }
+
+  .md-table-edit-grid th,
+  .md-table-edit-grid td {
+    @apply border border-seeyue-border-dim p-0 align-top;
+  }
+
+  .md-table-edit-grid th {
+    @apply bg-seeyue-panel/70;
+  }
+
+  .md-table-cell-input {
+    @apply block w-full min-w-[90px] resize-none overflow-hidden border-0 bg-transparent px-3 py-2 text-seeyue-fg outline-none focus:bg-seeyue-elevated focus:shadow-[inset_0_0_0_2px_var(--color-seeyue-accent)];
+  }
+
+  .md-table-cell-textarea {
+    line-height: 1.55;
+  }
+
+  .md-table-source-hint {
+    @apply mt-2 text-xs text-seeyue-fg-dim;
+  }
+
+  .md-blank-line {
+    @apply h-4 mb-0;
+  }
+
   /* ---- 编辑器容器 ---- */
   .md-editor {
     @apply mx-auto w-full max-w-[920px] px-10 py-10 text-[14.5px] leading-[1.86] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
