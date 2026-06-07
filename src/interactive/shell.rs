@@ -1,7 +1,11 @@
 use crate::config::YamlConfig;
 use crate::constants::shell;
+use crate::markdown::highlight::highlight_code_line;
+use crate::markdown::theme::MdStyle;
+use crate::theme::Theme;
 use crate::{error, info};
 use colored::Colorize;
+use ratatui::style::{Color, Modifier, Style};
 
 /// 进入交互式 shell 子进程
 pub fn enter_interactive_shell(config: &YamlConfig) {
@@ -156,6 +160,58 @@ pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
         Err(e) => {
             error!("执行命令失败: {}", e);
         }
+    }
+}
+
+/// 高亮展示 shell 命令（复用 Markdown 代码块里的 shell/bash 语法高亮）
+pub fn highlight_shell_command(cmd: &str) -> String {
+    let theme = Theme::terminal().code_syntax_theme();
+    highlight_code_line(cmd, "bash", &theme)
+        .into_iter()
+        .map(|span| span_to_ansi(&span.content, span.style))
+        .collect()
+}
+
+fn span_to_ansi(content: &str, style: Style) -> String {
+    let mut ansi = String::new();
+
+    if style.add_modifier.contains(Modifier::BOLD) {
+        ansi.push_str("\x1b[1m");
+    }
+    if style.add_modifier.contains(Modifier::ITALIC) {
+        ansi.push_str("\x1b[3m");
+    }
+    if let Some(fg) = style.fg {
+        ansi.push_str(&fg_to_ansi(fg));
+    }
+
+    if ansi.is_empty() {
+        content.to_string()
+    } else {
+        format!("{}{}\x1b[0m", ansi, content)
+    }
+}
+
+fn fg_to_ansi(color: Color) -> String {
+    match color {
+        Color::Black => "\x1b[30m".to_string(),
+        Color::Red => "\x1b[31m".to_string(),
+        Color::Green => "\x1b[32m".to_string(),
+        Color::Yellow => "\x1b[33m".to_string(),
+        Color::Blue => "\x1b[34m".to_string(),
+        Color::Magenta => "\x1b[35m".to_string(),
+        Color::Cyan => "\x1b[36m".to_string(),
+        Color::Gray | Color::White => "\x1b[37m".to_string(),
+        Color::DarkGray => "\x1b[90m".to_string(),
+        Color::LightRed => "\x1b[91m".to_string(),
+        Color::LightGreen => "\x1b[92m".to_string(),
+        Color::LightYellow => "\x1b[93m".to_string(),
+        Color::LightBlue => "\x1b[94m".to_string(),
+        Color::LightMagenta => "\x1b[95m".to_string(),
+        Color::LightCyan => "\x1b[96m".to_string(),
+        Color::Rgb(r, g, b) => format!("\x1b[38;2;{};{};{}m", r, g, b),
+        Color::Indexed(i) => format!("\x1b[38;5;{}m", i),
+        Color::Reset => "\x1b[39m".to_string(),
     }
 }
 

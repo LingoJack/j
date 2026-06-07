@@ -9,27 +9,23 @@ use std::process::Command;
 
 /// 通过别名打开应用/文件/URL
 /// args[0] = alias, args[1..] = 额外参数
-pub fn handle_open(args: &[String], config: &YamlConfig) {
+pub fn handle_open(args: &[String], config: &YamlConfig) -> bool {
     if args.is_empty() {
         error!("✖️ 请指定要打开的别名");
-        return;
+        return false;
     }
 
     let alias = &args[0];
 
     // 检查别名是否存在
     if !config.alias_exists(alias) {
-        error!(
-            "✖️ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。",
-            alias
-        );
-        return;
+        return false;
     }
 
     // 如果是浏览器
     if config.contains(section::BROWSER, alias) {
         handle_open_browser(args, config);
-        return;
+        return true;
     }
 
     // 如果是编辑器
@@ -40,23 +36,24 @@ pub fn handle_open(args: &[String], config: &YamlConfig) {
         } else {
             open_alias(alias, config);
         }
-        return;
+        return true;
     }
 
     // 如果是 VPN
     if config.contains(section::VPN, alias) {
         open_alias(alias, config);
-        return;
+        return true;
     }
 
     // 如果是自定义脚本
     if config.contains(section::SCRIPT, alias) {
         run_script(args, config);
-        return;
+        return true;
     }
 
     // 默认作为普通路径打开（支持带参数执行 CLI 工具）
     open_alias_with_args(alias, &args[1..], config);
+    true
 }
 
 /// 打开浏览器，可能带 URL 参数

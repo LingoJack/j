@@ -94,7 +94,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     let _ = rl.add_history_entry(input);
                 }
 
-                execute_interactive_command(&args, config);
+                execute_interactive_command(&args, input, config);
 
                 if let Some(start) = start {
                     let elapsed = start.elapsed();
