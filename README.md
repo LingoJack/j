@@ -14,25 +14,29 @@
 
 ---
 
-## Agent 工作台
+## 功能一览
 
-内置终端 Agent，支持多模型、流式输出、多步推理、工具调用、权限确认，适合直接在仓库里分析、修改、执行任务
+### Agent 工作台
 
-## 别名打开
+内置终端 Agent，支持多模型、流式输出、多步推理、工具调用、权限确认，适合直接在仓库里分析、修改、执行任务。
 
-`j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用日报周报
+### 别名打开
 
-`j report "完成功能开发"` 快速记录，支持整篇 Markdown 编辑、自动周数管理，以及 `reportctl push/pull` 做 Git 同步
+`j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用。
+
+### 日报周报
+
+`j report "完成功能开发"` 快速记录，支持整篇 Markdown 编辑、自动周数管理，以及 `reportctl push/pull` 做 Git 同步。
 
 ### 待办备忘
 
-`j todo` 进入全屏 TUI 管理，支持 Markdown checkbox、筛选排序、长内容预览，完成事项时还能顺手写入日报
+`j todo` 进入全屏 TUI 管理，支持 Markdown checkbox、筛选排序、长内容预览，完成事项时还能顺手写入日报。
 
 ### Markdown 终端预览
 
-`j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENTS.md
+`j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENTS.md。
 
-### 待办备忘
+<details></details>
 
 <summary><strong>更多功能</strong></summary>
 
@@ -46,57 +50,71 @@
 
 ## 截图
 
-<summary><strong>更多功能</strong></summary>
+![jcli AI 工作台截图 1](docs/pics/jcli-ai/1.png)
 
-<br>
+<p><em>图 1：AI 工作台终端界面。</em></p>
+
+![jcli AI 工作台截图 2](docs/pics/jcli-ai/2.png)
+
+<p><em>图 2：在同一终端会话中查看上下文、执行命令并持续对话。</em></p>
+
+![jcli AI 工作台截图 3](docs/pics/jcli-ai/3.png)
+
+<p><em>图 3：工具调用与结果展示。</em></p>
+
+![jcli AI 工作台截图 4](docs/pics/jcli-ai/4.png)
+
+<p><em>图 4：Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。</em></p>
+
+![jcli AI 工作台截图 5](docs/pics/jcli-ai/5.png)
+
+<p><em>图 5：终端内的长内容展示与交互。</em></p>
+
+![jcli AI 工作台截图 6](docs/pics/jcli-ai/6.png)
 
 <p><em>图 6：别名列表视图。统一管理应用、脚本和路径入口，配合 `j &lt;alias&gt;` 形成很轻的个人命令工作流。</em></p>
 
-### 
+---
 
-### 安装
+## 安装
 
 **macOS / Linux：**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
-
 ```
 
 **Windows (PowerShell)：**
 
 ```powershell
 irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
-
 ```
 
 **从 crates.io 安装：**
 
 ```bash
 cargo install j-cli
-
 ```
-
-<p><em>图 4：Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。</em></p>
-
-<p><br></p>
 
 **从源码编译：**
 
 ```bash
 git clone https://github.com/LingoJack/jcli.git
-cd j && cargo install --path .
-
+cd jcli
+cargo install --path .
 ```
 
 **完整版（CDP 浏览器自动化，需本地安装 Chrome）：**
 
 ```bash
 cargo install j-cli --features browser_cdp
-
 ```
 
-### 上手使用
+---
+
+```bash
+cargo install j-cli --features browser_cdp
+```
 
 ```bash
 # 注册别名
@@ -124,12 +142,11 @@ j chat "你好"             # 快速提问
 
 # 交互模式（Tab 补全 + 历史建议）
 j
-
 ```
 
 ---
 
-### 安装
+## 常用命令
 
 | 命令 | 说明 |
 | --- | --- |
@@ -159,5 +176,3 @@ j
 | rustyline[](https://github.com/kkawakam/rustyline) | REPL 交互 |
 | async-openai[](https://github.com/64bit/async-openai) | OpenAI API 客户端 |
 | serde[](https://github.com/serde-rs/serde) | 序列化框架 |
-
----
