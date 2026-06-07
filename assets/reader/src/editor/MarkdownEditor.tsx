@@ -316,6 +316,7 @@ export function MarkdownEditor({
   onSave,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const sourceRef = useRef(initialSource)
   const docRef = useRef(initialDoc)
   const updatingRef = useRef(false)
@@ -443,7 +444,7 @@ export function MarkdownEditor({
       const host = hostRef.current
       if (!host) return
 
-      const savedScrollTop = host.scrollTop
+      const savedScrollTop = scrollRef.current?.scrollTop ?? 0
 
       try {
         updatingRef.current = true
@@ -457,7 +458,9 @@ export function MarkdownEditor({
         updatingRef.current = false
       }
 
-      host.scrollTop = savedScrollTop
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = savedScrollTop
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [baseDirRef]
@@ -516,12 +519,17 @@ export function MarkdownEditor({
 
   return (
     <div
-      ref={hostRef}
-      className="md-editor h-full overflow-auto outline-none"
-      contentEditable
-      spellCheck={false}
-      suppressContentEditableWarning
-    />
+      ref={scrollRef}
+      className="h-full overflow-y-auto overflow-x-hidden outline-none"
+    >
+      <div
+        ref={hostRef}
+        className="md-editor min-h-full outline-none"
+        contentEditable
+        spellCheck={false}
+        suppressContentEditableWarning
+      />
+    </div>
   )
 }
 

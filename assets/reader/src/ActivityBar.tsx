@@ -1,12 +1,12 @@
+import { useEffect, useRef, useState } from 'react'
+import { CheckCircle, Files, Settings, Toolbox as ToolboxIcon } from './Icon'
+
 /**
  * VS Code 风的最左侧“活动栏”。
  *
- * 顶部负责文件 / 工具箱视图切换，底部保留设置入口：当前用于主题切换，后续可继续
- * 挂载字体大小、默认预览模式、自动保存、TOC 行为等 Reader 偏好。
+ * 顶部负责文件 / 工具箱视图切换，底部保留 Reader 设置入口。设置入口是通用菜单，
+ * 当前只暴露已经可用的颜色主题配置，后续可继续挂载字体大小、快捷键等偏好。
  */
-import { useState } from 'react'
-import { CheckCircle, Files, Settings, Toolbox as ToolboxIcon } from './Icon'
-
 export type ActivityKey = 'files' | 'toolbox'
 export type ReaderTheme = 'aliyun' | 'warm'
 
@@ -30,11 +30,37 @@ const ITEMS: ItemDef[] = [
 
 const THEME_OPTIONS: Array<{ key: ReaderTheme; label: string; desc: string }> = [
   { key: 'aliyun', label: 'Aliyun Light', desc: '白底、轻边框，适合文档阅读' },
-  { key: 'warm', label: 'Seeyue Warm', desc: '保留原来的暖色编辑氛围' },
+  { key: 'warm', label: 'Seeyue Warm', desc: '暖色纸张感，适合长时间编辑' },
 ]
 
 export function ActivityBar({ active, theme, onSelect, onThemeChange }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!settingsOpen) return
+
+    function closeOnOutsideClick(e: PointerEvent) {
+      const target = e.target
+      if (!(target instanceof Node)) return
+      if (!settingsRef.current?.contains(target)) {
+        setSettingsOpen(false)
+      }
+    }
+
+    function closeOnEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setSettingsOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [settingsOpen])
 
   return (
     <nav
@@ -55,7 +81,7 @@ export function ActivityBar({ active, theme, onSelect, onThemeChange }: Props) {
         </button>
       ))}
 
-      <div className="mt-auto relative">
+      <div ref={settingsRef} className="mt-auto relative">
         <button
           type="button"
           className="relative inline-flex items-center justify-center w-10 h-10 rounded-none bg-transparent border-0 text-seeyue-fg-dim cursor-pointer transition-colors duration-150 hover:text-seeyue-fg-strong hover:bg-seeyue-elevated focus-visible:outline-2 focus-visible:outline-seeyue-accent focus-visible:outline-offset-[-2px] data-[open=true]:text-seeyue-accent data-[open=true]:bg-seeyue-elevated"
@@ -69,26 +95,29 @@ export function ActivityBar({ active, theme, onSelect, onThemeChange }: Props) {
         </button>
 
         {settingsOpen && (
-          <div className="absolute left-[44px] bottom-0 z-30 w-[286px] rounded-lg border border-seeyue-border bg-seeyue-panel shadow-[0_12px_34px_rgba(15,23,42,0.14)] overflow-hidden animate-seeyue-scale-in">
-            <div className="px-4 py-3 border-b border-seeyue-border bg-seeyue-bg">
-              <div className="text-[13px] font-semibold text-seeyue-fg-strong">Reader 设置</div>
-              <div className="text-[12px] leading-5 text-seeyue-fg-muted">
-                当前先支持外观主题，后续设置会继续放在这里。
-              </div>
+          <div
+            className="absolute left-[44px] bottom-0 z-30 w-[300px] rounded-md border border-seeyue-border bg-seeyue-panel shadow-[0_12px_34px_rgba(15,23,42,0.14)] overflow-hidden animate-seeyue-scale-in"
+            role="menu"
+            aria-label="Reader 设置"
+          >
+            <div className="px-3 py-2 border-b border-seeyue-border bg-seeyue-bg-deep text-[12px] font-semibold text-seeyue-fg-strong">
+              设置
             </div>
-            <div className="p-3">
-              <div className="px-1 pb-2 text-[11px] font-semibold tracking-[0.08em] uppercase text-seeyue-fg-dim">
-                外观
+            <div className="p-2">
+              <div className="px-2 py-1.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-seeyue-fg-dim">
+                颜色主题
               </div>
-              <div className="grid gap-1">
+              <div className="grid gap-0.5" role="group" aria-label="颜色主题">
                 {THEME_OPTIONS.map((item) => {
                   const selected = item.key === theme
                   return (
                     <button
                       key={item.key}
                       type="button"
-                      className="w-full flex items-start gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left cursor-pointer transition-colors duration-150 hover:bg-seeyue-elevated hover:border-seeyue-border data-[selected=true]:bg-seeyue-accent-soft data-[selected=true]:border-seeyue-border"
+                      className="w-full flex items-start gap-2.5 rounded px-2.5 py-2 text-left cursor-pointer border-0 bg-transparent transition-colors duration-150 hover:bg-seeyue-elevated data-[selected=true]:bg-seeyue-accent-soft"
                       data-selected={selected ? 'true' : undefined}
+                      role="menuitemradio"
+                      aria-checked={selected}
                       onClick={() => onThemeChange(item.key)}
                     >
                       <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center text-seeyue-accent">

@@ -8,7 +8,7 @@
 @layer components {
   /* ---- 编辑器容器 ---- */
   .md-editor {
-    @apply mx-auto max-w-[920px] px-10 py-10 text-[14.5px] leading-[1.86] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
+    @apply mx-auto w-full max-w-[920px] px-10 py-10 text-[14.5px] leading-[1.86] text-seeyue-fg outline-none font-[family-name:var(--font-cjk)] caret-[var(--color-seeyue-accent)];
   }
 
   /* ---- Block 基础 ---- */

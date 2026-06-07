@@ -6,7 +6,7 @@
  *
  * 后续要再加工具，往 TOOLS 数组加项 + Reader 里给 toolId 加分发即可。
  */
-import { Braces, GitCompare, Toolbox as ToolboxIcon } from './Icon'
+import { Braces, GitCompare } from './Icon'
 import type { ToolId } from './types'
 
 interface Props {
@@ -44,20 +44,8 @@ const TOOLS: ToolDef[] = [
 export function Toolbox({ activeToolId, onOpen }: Props) {
   return (
     <div className="h-full flex flex-col text-[13px] text-seeyue-fg bg-seeyue-sidebar shadow-[0_0_12px_rgba(0,0,0,0.3)]">
-      {/* —— 顶部标题栏 —— */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-seeyue-border">
-        <button
-          className="relative inline-flex items-center gap-1.5 px-1 pb-1.5 text-[13px] font-medium text-seeyue-fg-muted cursor-pointer bg-transparent border-0 outline-none transition-colors duration-200 hover:text-seeyue-fg-strong data-[active=true]:text-seeyue-fg-strong after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-[-1px] after:h-[3px] after:rounded-[1.5px] after:bg-transparent data-[active=true]:after:bg-seeyue-accent-strong"
-          data-active="true"
-        >
-          <ToolboxIcon size={14} />
-          <span>工具箱</span>
-        </button>
-        <div className="flex-1" />
-      </div>
-
       {/* —— 工具列表 —— */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="flex-1 overflow-y-auto px-2 py-2.5">
         {TOOLS.map((tool) => (
           <button
             key={tool.id}
