@@ -225,6 +225,9 @@ fn task_list_marker(checked: Option<bool>, _theme: &dyn MdStyle) -> String {
     }
 }
 
+const BLOCKQUOTE_INDENT: &str = "  ";
+const BLOCKQUOTE_BAR: &str = "| ";
+
 /// 渲染引用块（与 thinking block 风格一致：竖线 + bg_primary 背景）
 fn render_blockquote(blocks: &[Block], ctx: &RenderContext) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
@@ -238,16 +241,21 @@ fn render_blockquote(blocks: &[Block], ctx: &RenderContext) -> Vec<Line<'static>
     let text_style = Style::default()
         .fg(ctx.theme.md_blockquote_text())
         .bg(bg_color);
+    let prefix_width = display_width(BLOCKQUOTE_INDENT) + display_width(BLOCKQUOTE_BAR);
+    let inner_ctx = RenderContext {
+        width: ctx.width.saturating_sub(prefix_width).max(1),
+        theme: ctx.theme,
+    };
 
     // 前导空行
     lines.push(Line::from(""));
 
     for block in blocks {
-        let inner_lines = render_block(block, ctx);
+        let inner_lines = render_block(block, &inner_ctx);
         for inner_line in inner_lines {
-            let mut line_spans: Vec<Span<'static>> = Vec::new();
-            line_spans.push(Span::styled("  ".to_string(), text_style));
-            line_spans.push(Span::styled("| ".to_string(), bar_style));
+            let mut line_spans: Vec<Span<'static>> = Vec::with_capacity(inner_line.spans.len() + 2);
+            line_spans.push(Span::styled(BLOCKQUOTE_INDENT.to_string(), text_style));
+            line_spans.push(Span::styled(BLOCKQUOTE_BAR.to_string(), bar_style));
             for span in inner_line.spans {
                 line_spans.push(Span::styled(
                     span.content.to_string(),
