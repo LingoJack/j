@@ -84,6 +84,19 @@ function trimEditableRange(block: Block, range: LineRange, lines: string[]): Lin
   return range
 }
 
+function splitListItemRanges(range: LineRange, lines: string[]): LineRange[] {
+  const ranges: LineRange[] = []
+  for (let line = range.startLine; line <= range.endLine; line++) {
+    if (isListMarkerLine(lines[line] ?? '')) ranges.push({ startLine: line, endLine: line })
+  }
+
+  return ranges.length > 0 ? ranges : [range]
+}
+
+function isListMarkerLine(line: string): boolean {
+  return /^\s*(?:[-+*]\s+|\d+[.)]\s+)/.test(line)
+}
+
 function getRangeText(lines: string[], range: LineRange): string {
   return lines.slice(range.startLine, range.endLine + 1).join('\n')
 }
@@ -146,7 +159,8 @@ export function MarkdownEditor({
     blocks.forEach((block, index) => {
       const range = ranges[index]
       if (block.kind.type === 'list') {
-        const listRanges = splitListItemRanges(range, lines, block.kind.value.items.length)
+        const listData = block.kind.value
+        const listRanges = splitListItemRanges(range, lines)
         listRanges.forEach((listRange, itemIndex) => {
           appendBlankLines(host, nextLine, listRange.startLine)
           if (active && sameRange(active, listRange)) {
@@ -176,7 +190,7 @@ export function MarkdownEditor({
               })
             )
           } else {
-            const el = createListItemElement(block.kind.value, itemIndex, baseDirRef.current)
+            const el = createListItemElement(listData, itemIndex, baseDirRef.current)
             el.dataset.startLine = String(listRange.startLine)
             el.dataset.endLine = String(listRange.endLine)
             el.addEventListener('mousedown', (event) => {
@@ -693,29 +707,46 @@ function createCodeBlockElement(lang: string, code: string): HTMLElement {
   return wrap
 }
 
-function createListElement(data: { ordered: boolean; items: { checked: boolean | null; content: Inline[] }[] }, baseDir: string | null): HTMLElement {
+function createListElement(data: ListData, baseDir: string | null): HTMLElement {
   const el = document.createElement(data.ordered ? 'ol' : 'ul')
   el.className = `md-block md-list md-rendered-block ${data.ordered ? 'md-ol' : 'md-ul'}`
   el.dataset.blockType = 'list'
 
-  for (const item of data.items) {
-    const li = document.createElement('li')
-    li.className = 'md-list-item'
-    if (item.checked !== null) {
-      const checkbox = document.createElement('input')
-      checkbox.type = 'checkbox'
-      checkbox.checked = item.checked
-      checkbox.className = 'md-checkbox'
-      checkbox.disabled = true
-      li.appendChild(checkbox)
-      li.classList.add('md-task-item')
+  data.items.forEach((item, index) => {
+    el.appendChild(createListItemNode(item, baseDir))
+    if (data.ordered && data.start_index !== null && index === 0) {
+      ;(el as HTMLOListElement).start = data.start_index
     }
-    const span = document.createElement('span')
-    span.className = 'md-list-text'
-    renderInlines(item.content, span, baseDir)
-    li.appendChild(span)
-    el.appendChild(li)
-  }
+  })
 
   return el
+}
+
+function createListItemElement(data: ListData, itemIndex: number, baseDir: string | null): HTMLElement {
+  const el = document.createElement(data.ordered ? 'ol' : 'ul')
+  el.className = `md-block md-list md-rendered-block ${data.ordered ? 'md-ol' : 'md-ul'}`
+  el.dataset.blockType = 'list_item'
+  if (data.ordered) (el as HTMLOListElement).start = (data.start_index ?? 1) + itemIndex
+  const item = data.items[itemIndex]
+  if (item) el.appendChild(createListItemNode(item, baseDir))
+  return el
+}
+
+function createListItemNode(item: ListData['items'][number], baseDir: string | null): HTMLLIElement {
+  const li = document.createElement('li')
+  li.className = 'md-list-item'
+  if (item.checked !== null) {
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.checked = item.checked
+    checkbox.className = 'md-checkbox'
+    checkbox.disabled = true
+    li.appendChild(checkbox)
+    li.classList.add('md-task-item')
+  }
+  const span = document.createElement('span')
+  span.className = 'md-list-text'
+  renderInlines(item.content, span, baseDir)
+  li.appendChild(span)
+  return li
 }
