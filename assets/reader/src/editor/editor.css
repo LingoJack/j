@@ -221,19 +221,35 @@
 
   /* ---- 列表 ---- */
   .md-list {
-    @apply my-2.5 pl-6;
+    @apply my-1.5 pl-[1.45rem];
+    list-style-position: outside;
+  }
+  .md-list[data-block-type='list_item'] {
+    @apply my-0.5;
   }
   .md-list-item {
-    @apply mb-1 flex items-start gap-1 leading-[1.8];
+    @apply mb-1 pl-1 leading-[1.78] text-seeyue-fg;
+    display: list-item;
+  }
+  .md-ul > .md-list-item {
+    list-style-type: disc;
+  }
+  .md-ol > .md-list-item {
+    list-style-type: decimal;
+  }
+  .md-list-item::marker {
+    @apply text-seeyue-fg-dim font-semibold;
+    font-size: 0.92em;
   }
   .md-list-text {
-    @apply flex-1 outline-none;
+    @apply outline-none;
+    display: inline;
   }
   .md-checkbox {
-    @apply mt-[7px] h-[14px] w-[14px] accent-[var(--color-seeyue-accent)];
+    @apply mt-[7px] h-[14px] w-[14px] shrink-0 accent-[var(--color-seeyue-accent)];
   }
   .md-task-item {
-    @apply list-none -ml-5;
+    @apply list-none -ml-[1.45rem] flex items-start gap-2;
   }
 
   /* ---- HR ---- */
