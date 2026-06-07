@@ -31,6 +31,11 @@ type LineRange = {
   endLine: number
 }
 
+type FocusRequest = {
+  line: number
+  column: number
+}
+
 function useLatest<T>(value: T) {
   const ref = useRef(value)
   useEffect(() => {
@@ -93,6 +98,28 @@ function splitListItemRanges(range: LineRange, lines: string[]): LineRange[] {
   return ranges.length > 0 ? ranges : [range]
 }
 
+function findEditableRangeForLine(ranges: LineRange[], targetLine: number): LineRange | null {
+  if (targetLine < 0) return null
+  return ranges.find((range) => targetLine >= range.startLine && targetLine <= range.endLine) ?? null
+}
+
+function getEditableRanges(blocks: Block[], lines: string[]): LineRange[] {
+  const blockRanges = normalizeBlockRanges(blocks, lines)
+  const ranges: LineRange[] = []
+  let nextLine = 0
+
+  blocks.forEach((block, index) => {
+    const range = blockRanges[index]
+    for (let line = nextLine; line < range.startLine; line++) ranges.push({ startLine: line, endLine: line })
+    if (block.kind.type === 'list') ranges.push(...splitListItemRanges(range, lines))
+    else ranges.push(range)
+    nextLine = range.endLine + 1
+  })
+
+  for (let line = nextLine; line < lines.length; line++) ranges.push({ startLine: line, endLine: line })
+  return ranges
+}
+
 function isListMarkerLine(line: string): boolean {
   return /^\s*(?:[-+*]\s+|\d+[.)]\s+)/.test(line)
 }
@@ -129,6 +156,9 @@ export function MarkdownEditor({
   const lastParsedSource = useRef('')
   const parseSeq = useRef(0)
   const activeRangeRef = useRef<LineRange | null>(null)
+  const focusRequestRef = useRef<FocusRequest | null>(null)
+  const documentCursorRef = useRef<FocusRequest>({ line: 0, column: 0 })
+  const switchingRangeRef = useRef(false)
   const [activeRange, setActiveRange] = useState<LineRange | null>(null)
 
   const onChangeRef = useLatest(onChange)
@@ -137,10 +167,33 @@ export function MarkdownEditor({
   const pathRef = useLatest(path)
   const baseDirRef = useLatest(baseDir)
 
-  const setActiveRangeSafely = useCallback((next: LineRange | null) => {
+  const setActiveRangeSafely = useCallback((next: LineRange | null, focus?: FocusRequest) => {
+    if (focus) {
+      documentCursorRef.current = focus
+      switchingRangeRef.current = true
+    }
     activeRangeRef.current = next
+    focusRequestRef.current = focus ?? null
     setActiveRange((prev) => (sameRange(prev, next) ? prev : next))
   }, [])
+
+  const moveDocumentCursor = useCallback(
+    (delta: -1 | 1, from?: FocusRequest): boolean => {
+      const lines = sourceRef.current.split('\n')
+      const current = from ?? documentCursorRef.current
+      const targetLine = Math.max(0, Math.min(lines.length - 1, current.line + delta))
+      if (targetLine === current.line) return false
+
+      const targetColumn = Math.min(current.column, lines[targetLine]?.length ?? 0)
+      const focus = { line: targetLine, column: targetColumn }
+      const ranges = getEditableRanges(docRef.current.blocks, lines)
+      const targetRange = findEditableRangeForLine(ranges, targetLine)
+      if (!targetRange) return false
+      setActiveRangeSafely(targetRange, focus)
+      return true
+    },
+    [setActiveRangeSafely]
+  )
 
   const renderDocument = useCallback(() => {
     const host = hostRef.current
@@ -161,8 +214,8 @@ export function MarkdownEditor({
       if (block.kind.type === 'list') {
         const listData = block.kind.value
         const listRanges = splitListItemRanges(range, lines)
+        appendInterBlockLines({ host, fromLine: nextLine, toLine: listRanges[0]?.startLine ?? range.startLine, lines, active, setActiveRangeSafely, moveDocumentCursor, sourceRef, activeRangeRef, switchingRangeRef, onChangeRef, pathRef, onSaveRef, scheduleParse, parseAndRender })
         listRanges.forEach((listRange, itemIndex) => {
-          appendBlankLines(host, nextLine, listRange.startLine)
           if (active && sameRange(active, listRange)) {
             host.appendChild(
               createSourceBlockEditor({
@@ -182,10 +235,12 @@ export function MarkdownEditor({
                   scheduleParse(nextSource)
                 },
                 onBlur: () => {
+                  if (switchingRangeRef.current) return
                   if (!sameRange(activeRangeRef.current, listRange)) return
                   setActiveRangeSafely(null)
                   parseAndRender(sourceRef.current)
                 },
+                onMoveLine: moveDocumentCursor,
                 onSave: () => void onSaveRef.current(),
               })
             )
@@ -196,7 +251,7 @@ export function MarkdownEditor({
             el.addEventListener('mousedown', (event) => {
               event.preventDefault()
               event.stopPropagation()
-              setActiveRangeSafely(listRange)
+              setActiveRangeSafely(listRange, { line: listRange.startLine, column: 0 })
             })
             host.appendChild(el)
           }
@@ -205,7 +260,7 @@ export function MarkdownEditor({
         return
       }
 
-      appendBlankLines(host, nextLine, range.startLine)
+      appendInterBlockLines({ host, fromLine: nextLine, toLine: range.startLine, lines, active, setActiveRangeSafely, moveDocumentCursor, sourceRef, activeRangeRef, switchingRangeRef, onChangeRef, pathRef, onSaveRef, scheduleParse, parseAndRender })
 
       if (active && sameRange(active, range)) {
         host.appendChild(
@@ -226,10 +281,12 @@ export function MarkdownEditor({
               scheduleParse(nextSource)
             },
             onBlur: () => {
+              if (switchingRangeRef.current) return
               if (!sameRange(activeRangeRef.current, range)) return
               setActiveRangeSafely(null)
               parseAndRender(sourceRef.current)
             },
+            onMoveLine: moveDocumentCursor,
             onSave: () => void onSaveRef.current(),
           })
         )
@@ -240,14 +297,14 @@ export function MarkdownEditor({
         el.addEventListener('mousedown', (event) => {
           event.preventDefault()
           event.stopPropagation()
-          setActiveRangeSafely(range)
+          setActiveRangeSafely(range, { line: range.startLine, column: 0 })
         })
         host.appendChild(el)
       }
 
       nextLine = range.endLine + 1
     })
-    appendBlankLines(host, nextLine, lines.length)
+    appendInterBlockLines({ host, fromLine: nextLine, toLine: lines.length, lines, active, setActiveRangeSafely, moveDocumentCursor, sourceRef, activeRangeRef, switchingRangeRef, onChangeRef, pathRef, onSaveRef, scheduleParse, parseAndRender })
 
     if (scrollRef.current) scrollRef.current.scrollTop = savedScrollTop
 
@@ -256,6 +313,16 @@ export function MarkdownEditor({
       host.querySelector<HTMLElement>('.md-block-source-input, .md-code-source-input, .md-table-cell-input, .md-code-lang-input')
     if (editor && document.activeElement !== editor) {
       editor.focus()
+    }
+    const focusRequest = focusRequestRef.current
+    if (focusRequest && editor instanceof HTMLTextAreaElement) {
+      focusRequestRef.current = null
+      setTextareaCursorForDocumentLine(editor, focusRequest.line, focusRequest.column)
+      requestAnimationFrame(() => {
+        switchingRangeRef.current = false
+      })
+    } else {
+      switchingRangeRef.current = false
     }
   }, [baseDirRef, onChangeRef, onSaveRef, pathRef, setActiveRangeSafely])
 
@@ -317,16 +384,78 @@ export function MarkdownEditor({
   }
 }
 
-function appendBlankLines(host: HTMLElement, fromLine: number, toLine: number) {
+type InterBlockOptions = {
+  host: HTMLElement
+  fromLine: number
+  toLine: number
+  lines: string[]
+  active: LineRange | null
+  sourceRef: React.MutableRefObject<string>
+  activeRangeRef: React.MutableRefObject<LineRange | null>
+  switchingRangeRef: React.MutableRefObject<boolean>
+  onChangeRef: React.MutableRefObject<(path: string, source: string) => void>
+  pathRef: React.MutableRefObject<string>
+  onSaveRef: React.MutableRefObject<() => void | Promise<void>>
+  setActiveRangeSafely: (next: LineRange | null, focus?: FocusRequest) => void
+  moveDocumentCursor: (delta: -1 | 1, from?: FocusRequest) => boolean
+  scheduleParse: (source: string) => void
+  parseAndRender: (source: string) => void
+}
+
+function appendInterBlockLines(options: InterBlockOptions) {
+  const { host, fromLine, toLine, lines, active } = options
   for (let line = fromLine; line < toLine; line++) {
-    const blank = document.createElement('div')
-    blank.className = 'md-block md-blank-line'
-    blank.dataset.blockType = 'blank'
-    blank.dataset.startLine = String(line)
-    blank.dataset.endLine = String(line)
-    blank.textContent = '\u00a0'
-    host.appendChild(blank)
+    const range = { startLine: line, endLine: line }
+    if (active && sameRange(active, range)) {
+      host.appendChild(
+        createSourceBlockEditor({
+          range,
+          block: createPlainTextBlock(range),
+          rawValue: lines[line] ?? '',
+          onChange: (value) => {
+            const currentRange = options.activeRangeRef.current ?? range
+            const nextSource = replaceRangeText(options.sourceRef.current, currentRange, value)
+            const nextRange = {
+              startLine: currentRange.startLine,
+              endLine: currentRange.startLine + rangeLineCount(value) - 1,
+            }
+            options.sourceRef.current = nextSource
+            options.activeRangeRef.current = nextRange
+            options.onChangeRef.current(options.pathRef.current, nextSource)
+            options.scheduleParse(nextSource)
+          },
+          onBlur: () => {
+            if (options.switchingRangeRef.current) return
+            if (!sameRange(options.activeRangeRef.current, range)) return
+            options.setActiveRangeSafely(null)
+            options.parseAndRender(options.sourceRef.current)
+          },
+          onMoveLine: options.moveDocumentCursor,
+          onSave: () => void options.onSaveRef.current(),
+        })
+      )
+    } else {
+      const blank = document.createElement('div')
+      blank.className = 'md-block md-blank-line'
+      blank.dataset.blockType = 'blank'
+      blank.dataset.startLine = String(line)
+      blank.dataset.endLine = String(line)
+      blank.textContent = '\u00a0'
+      blank.addEventListener('mousedown', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        options.setActiveRangeSafely(range, { line, column: 0 })
+      })
+      host.appendChild(blank)
+    }
   }
+}
+
+function createPlainTextBlock(range: LineRange): Block {
+  return {
+    source: { start_line: range.startLine, end_line: range.endLine },
+    kind: { type: 'paragraph', value: [] },
+  } as Block
 }
 
 type SourceBlockEditorOptions = {
@@ -335,13 +464,13 @@ type SourceBlockEditorOptions = {
   rawValue: string
   onChange: (value: string) => void
   onBlur: () => void
+  onMoveLine: (delta: -1 | 1, from?: FocusRequest) => boolean
   onSave: () => void
 }
 
 function createSourceBlockEditor(options: SourceBlockEditorOptions): HTMLElement {
   const kind = options.block.kind
   if (kind.type === 'code_block') return createCodeBlockEditor(options, kind.value.lang, kind.value.code)
-  if (kind.type === 'table') return createTableBlockEditor(options, kind.value)
   return createRawBlockEditor(options)
 }
 
@@ -410,16 +539,7 @@ function createCodeBlockEditor(options: SourceBlockEditorOptions, lang: string, 
     autoGrowTextarea(textarea)
     emit()
   })
-  textarea.addEventListener('keydown', (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 's') {
-      event.preventDefault()
-      options.onSave()
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeEditor()
-    }
-  })
+  bindCommonEditorKeys(textarea, options, false)
   langInput.addEventListener('blur', () => {
     setTimeout(() => {
       if (!wrap.contains(document.activeElement)) options.onBlur()
@@ -433,63 +553,6 @@ function createCodeBlockEditor(options: SourceBlockEditorOptions, lang: string, 
 
   wrap.appendChild(toolbar)
   wrap.appendChild(textarea)
-  return wrap
-}
-
-function createTableBlockEditor(options: SourceBlockEditorOptions, data: { alignments: Alignment[]; rows: Inline[][][] }): HTMLElement {
-  const wrap = document.createElement('div')
-  wrap.className = 'md-block md-table-source'
-  wrap.dataset.blockType = 'source_table'
-  wrap.dataset.startLine = String(options.range.startLine)
-  wrap.dataset.endLine = String(options.range.endLine)
-
-  const table = document.createElement('table')
-  table.className = 'md-table-edit-grid'
-
-  const maxCols = Math.max(data.alignments.length, ...data.rows.map((row) => row.length), 1)
-  const rows = data.rows.length > 0 ? data.rows : [[[]]]
-
-  for (let r = 0; r < rows.length; r++) {
-    const tr = document.createElement('tr')
-    for (let c = 0; c < maxCols; c++) {
-      const cell = document.createElement(r === 0 ? 'th' : 'td')
-      const textarea = createAutoGrowTextarea(
-        'md-table-cell-input md-table-cell-textarea',
-        inlinePlainText(rows[r][c] ?? [])
-      )
-      textarea.dataset.row = String(r)
-      textarea.dataset.col = String(c)
-      textarea.addEventListener('input', () => {
-        autoGrowTextarea(textarea)
-        options.onChange(buildTableSource(table, data.alignments))
-      })
-      textarea.addEventListener('keydown', (event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key === 's') {
-          event.preventDefault()
-          options.onSave()
-        }
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          textarea.blur()
-        }
-      })
-      textarea.addEventListener('blur', () => {
-        setTimeout(() => {
-          if (!wrap.contains(document.activeElement)) options.onBlur()
-        }, 0)
-      })
-      cell.appendChild(textarea)
-      tr.appendChild(cell)
-    }
-    table.appendChild(tr)
-  }
-
-  const hint = document.createElement('div')
-  hint.className = 'md-table-source-hint'
-  hint.textContent = '编辑单元格内容；表格结构暂按当前行列保持。'
-
-  wrap.appendChild(table)
-  wrap.appendChild(hint)
   return wrap
 }
 
@@ -508,47 +571,85 @@ function autoGrowTextarea(textarea: HTMLTextAreaElement) {
   textarea.style.height = `${textarea.scrollHeight}px`
 }
 
-function bindCommonEditorKeys(textarea: HTMLTextAreaElement, options: SourceBlockEditorOptions) {
+function bindCommonEditorKeys(textarea: HTMLTextAreaElement, options: SourceBlockEditorOptions, bindBlur = true) {
   textarea.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 's') {
       event.preventDefault()
       options.onSave()
+      return
     }
     if (event.key === 'Escape') {
       event.preventDefault()
       textarea.blur()
+      return
+    }
+    if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const delta = event.key === 'ArrowUp' ? -1 : 1
+      const movement = getBoundaryLineMovement(textarea, options.range, delta)
+      if (movement && options.onMoveLine(delta, movement)) {
+        event.preventDefault()
+      }
     }
   })
-  textarea.addEventListener('blur', options.onBlur)
+  if (bindBlur) textarea.addEventListener('blur', options.onBlur)
+}
+
+function getBoundaryLineMovement(textarea: HTMLTextAreaElement, range: LineRange, delta: -1 | 1): FocusRequest | null {
+  const cursor = getTextareaDocumentCursor(textarea, range)
+  const local = getTextareaLocalCursor(textarea)
+  const lineCount = textarea.value.split('\n').length
+  const isCodeContent = textarea.classList.contains('md-code-source-input')
+
+  if (delta < 0 && local.line === 0) {
+    return isCodeContent ? { line: range.startLine, column: cursor.column } : cursor
+  }
+  if (delta > 0 && local.line === lineCount - 1) {
+    return isCodeContent ? { line: range.endLine, column: cursor.column } : cursor
+  }
+  return null
+}
+
+function getTextareaLocalCursor(textarea: HTMLTextAreaElement): { line: number; column: number } {
+  const value = textarea.value
+  const cursor = textarea.selectionStart ?? 0
+  const beforeCursor = value.slice(0, cursor)
+  const line = beforeCursor.split('\n').length - 1
+  const lineStart = beforeCursor.lastIndexOf('\n') + 1
+  return { line, column: cursor - lineStart }
+}
+
+function getTextareaDocumentCursor(textarea: HTMLTextAreaElement, range: LineRange): FocusRequest {
+  const local = getTextareaLocalCursor(textarea)
+  return {
+    line: range.startLine + getTextareaDocumentLineOffset(textarea) + local.line,
+    column: local.column,
+  }
+}
+
+function getTextareaDocumentLineOffset(textarea: HTMLTextAreaElement): number {
+  return textarea.classList.contains('md-code-source-input') ? 1 : 0
+}
+
+function setTextareaCursorForDocumentLine(textarea: HTMLTextAreaElement, documentLine: number, column: number) {
+  const lineOffset = getTextareaDocumentLineOffset(textarea)
+  const rangeStart = Number(textarea.parentElement?.dataset.startLine ?? '0')
+  const localLine = Math.max(0, documentLine - rangeStart - lineOffset)
+  const lines = textarea.value.split('\n')
+  const clampedLine = Math.min(localLine, Math.max(0, lines.length - 1))
+  const lineStart = getTextareaLineStartOffset(lines, clampedLine)
+  const target = lineStart + Math.min(column, lines[clampedLine]?.length ?? 0)
+  textarea.setSelectionRange(target, target)
+  textarea.focus()
+}
+
+function getTextareaLineStartOffset(lines: string[], line: number): number {
+  let offset = 0
+  for (let index = 0; index < line; index++) offset += (lines[index]?.length ?? 0) + 1
+  return offset
 }
 
 function buildCodeBlockSource(lang: string, code: string): string {
   return `\`\`\`${lang.trim()}\n${code}\n\`\`\``
-}
-
-function inlinePlainText(inlines: Inline[]): string {
-  return extractText(inlines)
-}
-
-function escapeTableCell(value: string): string {
-  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
-}
-
-function tableAlignMarker(align: Alignment | undefined): string {
-  if (align === 'left') return ':---'
-  if (align === 'center') return ':---:'
-  if (align === 'right') return '---:'
-  return '---'
-}
-
-function buildTableSource(table: HTMLTableElement, alignments: Alignment[]): string {
-  const rows = Array.from(table.rows).map((row) =>
-    Array.from(row.cells).map((cell) => escapeTableCell(cell.querySelector('textarea')?.value ?? ''))
-  )
-  const header = rows[0] ?? ['']
-  const divider = header.map((_, index) => tableAlignMarker(alignments[index])).join(' | ')
-  const body = rows.slice(1)
-  return [`| ${header.join(' | ')} |`, `| ${divider} |`, ...body.map((row) => `| ${row.join(' | ')} |`)].join('\n')
 }
 
 function createBlockElement(block: Block, baseDir: string | null): HTMLElement {

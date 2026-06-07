@@ -22,12 +22,16 @@
   .md-block-source,
   .md-code-source,
   .md-table-source {
-    @apply my-3 rounded-md border border-seeyue-accent/45 bg-seeyue-bg-deep/70 shadow-[0_0_0_3px_rgba(204,120,92,0.08)];
+    @apply my-3 rounded-none border-0 bg-transparent shadow-none;
+  }
+
+  .md-block-source {
+    @apply -mx-4;
   }
 
   .md-block-source-input,
   .md-code-source-input {
-    @apply block w-full resize-none overflow-hidden border-0 bg-transparent px-4 py-3 font-[family-name:var(--font-mono)] text-[13.5px] leading-[1.72] text-seeyue-fg outline-none caret-[var(--color-seeyue-accent)] selection:bg-[rgba(204,120,92,0.2)];
+    @apply block w-full resize-none overflow-hidden border-0 bg-transparent px-4 py-2 font-[family-name:var(--font-mono)] text-[13.5px] leading-[1.72] text-seeyue-fg outline-none caret-[var(--color-seeyue-accent)] selection:bg-[rgba(204,120,92,0.2)];
     tab-size: 2;
   }
 
