@@ -122,9 +122,80 @@ jobs:
             target/aarch64-pc-windows-msvc/release/j-windows-arm64.zip
             target/aarch64-pc-windows-msvc/release/j-windows-arm64.zip.sha256
 
+  build-linux-x64:
+    name: Build Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: Build
+        run: cargo build --release
+        env:
+          INSTALL_SOURCE: github
+
+      - name: Package
+        run: |
+          cd target/release
+          strip j
+          tar -czvf j-linux-x64.tar.gz j
+          sha256sum j-linux-x64.tar.gz > j-linux-x64.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: j-linux-x64
+          path: |
+            target/release/j-linux-x64.tar.gz
+            target/release/j-linux-x64.tar.gz.sha256
+
+  build-linux-arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake gcc-aarch64-linux-gnu
+
+      - name: Build
+        run: cargo build --release --target aarch64-unknown-linux-gnu
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          INSTALL_SOURCE: github
+
+      - name: Package
+        run: |
+          cd target/aarch64-unknown-linux-gnu/release
+          aarch64-linux-gnu-strip j
+          tar -czvf j-linux-arm64.tar.gz j
+          sha256sum j-linux-arm64.tar.gz > j-linux-arm64.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: j-linux-arm64
+          path: |
+            target/aarch64-unknown-linux-gnu/release/j-linux-arm64.tar.gz
+            target/aarch64-unknown-linux-gnu/release/j-linux-arm64.tar.gz.sha256
+
   release:
     name: Create Release
-    needs: [build-macos, build-windows-x64, build-windows-arm64]
+    needs: [build-macos, build-windows-x64, build-windows-arm64, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -148,6 +219,18 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: j-windows-arm64
+          path: artifacts
+
+      - name: Download Linux x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: j-linux-x64
+          path: artifacts
+
+      - name: Download Linux ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: j-linux-arm64
           path: artifacts
 
       - name: Extract changelog for this version

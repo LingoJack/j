@@ -38,16 +38,24 @@ detect_platform() {
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     ARCH=$(uname -m)
 
-    # 只支持 macOS ARM64 (M 系列)
-    if [ "$OS" != "darwin" ]; then
-        error "当前仅支持 macOS (M1/M2/M3/M4)，检测到: $OS"
-    fi
-
-    if [ "$ARCH" != "arm64" ]; then
-        error "当前仅支持 Apple Silicon (M1/M2/M3/M4)，检测到: $ARCH"
-    fi
-
-    echo "darwin-arm64"
+    case "$OS" in
+        darwin)
+            case "$ARCH" in
+                arm64|aarch64) echo "darwin-arm64" ;;
+                *) error "当前 macOS 仅支持 Apple Silicon (M1/M2/M3/M4)，检测到: $ARCH" ;;
+            esac
+            ;;
+        linux)
+            case "$ARCH" in
+                x86_64|amd64) echo "linux-x64" ;;
+                aarch64|arm64) echo "linux-arm64" ;;
+                *) error "当前 Linux 仅支持 x86_64/arm64，检测到: $ARCH" ;;
+            esac
+            ;;
+        *)
+            error "当前仅支持 macOS 和 Linux，检测到: $OS"
+            ;;
+    esac
 }
 
 # 获取最新版本号
