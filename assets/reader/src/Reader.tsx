@@ -308,11 +308,11 @@ export function Reader() {
         const idx = prev.findIndex((t) => t.path === path)
         if (idx < 0) return prev
         const next = prev.filter((t) => t.path !== path)
-        // 切换 active：优先右邻 → 左邻 → null
-        if (activeTabPath === path) {
-          const fallback = prev[idx + 1]?.path ?? prev[idx - 1]?.path ?? null
-          setActiveTabPath(fallback)
-        }
+        setActiveTabPath((currentActivePath) => {
+          if (currentActivePath !== path) return currentActivePath
+          // 切换 active：优先左邻（上一个 tab）→ 右邻 → null
+          return prev[idx - 1]?.path ?? prev[idx + 1]?.path ?? null
+        })
         return next
       })
       // 清掉 ref 桶里的内容，不让已关 tab 占内存
@@ -320,7 +320,7 @@ export function Reader() {
       delete docsRef.current[path]
       delete imagesRef.current[path]
     },
-    [activeTabPath]
+    []
   )
 
   const saveTab = useCallback(
