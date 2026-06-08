@@ -272,10 +272,11 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 .style(Style::default().bg(t.bg_title)),
         )
         .highlight_style(
-            Style::default()
-                .bg(t.model_sel_highlight_bg)
-                .fg(t.text_white)
-                .add_modifier(Modifier::BOLD),
+            t.model_sel_highlight_fg.apply_fg(
+                t.model_sel_highlight_bg
+                    .apply_bg(Style::default())
+                    .add_modifier(Modifier::BOLD),
+            ),
         )
         .highlight_symbol("");
 

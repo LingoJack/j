@@ -1,4 +1,4 @@
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
 use serde::Deserialize;
 use std::sync::OnceLock;
 
@@ -72,6 +72,39 @@ impl BorderStyle {
             BorderStyle::Rounded => "╯",
             BorderStyle::Plain => "┘",
         }
+    }
+}
+
+/// 可用于主题字段的颜色值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeColor {
+    /// 普通 ratatui 颜色。
+    Color(Color),
+    /// 终端反色视频，用于跟随终端背景时的选中态高亮。
+    Reverse,
+}
+
+impl ThemeColor {
+    /// 将主题颜色应用到前景色。
+    pub fn apply_fg(self, style: Style) -> Style {
+        match self {
+            Self::Color(color) => style.fg(color),
+            Self::Reverse => style.add_modifier(Modifier::REVERSED),
+        }
+    }
+
+    /// 将主题颜色应用到背景色。
+    pub fn apply_bg(self, style: Style) -> Style {
+        match self {
+            Self::Color(color) => style.bg(color),
+            Self::Reverse => style.add_modifier(Modifier::REVERSED),
+        }
+    }
+}
+
+impl From<Color> for ThemeColor {
+    fn from(color: Color) -> Self {
+        Self::Color(color)
     }
 }
 
@@ -220,9 +253,9 @@ pub struct Theme {
     /// 非活跃模型颜色
     pub model_sel_inactive: Color,
     /// 选中高亮背景
-    pub model_sel_highlight_bg: Color,
+    pub model_sel_highlight_bg: ThemeColor,
     /// 选中高亮前景
-    pub model_sel_highlight_fg: Color,
+    pub model_sel_highlight_fg: ThemeColor,
 
     // ===== 配置界面 =====
     /// 配置标题颜色
@@ -408,8 +441,8 @@ struct ThemeJson {
     model_sel_title: ColorValue,
     model_sel_active: ColorValue,
     model_sel_inactive: ColorValue,
-    model_sel_highlight_bg: ColorValue,
-    model_sel_highlight_fg: ColorValue,
+    model_sel_highlight_bg: ThemeColorValue,
+    model_sel_highlight_fg: ThemeColorValue,
     config_title: ColorValue,
     config_section: ColorValue,
     config_pointer: ColorValue,
@@ -634,6 +667,21 @@ impl TryFrom<RawColor> for ColorValue {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(try_from = "RawColor")]
+struct ThemeColorValue(ThemeColor);
+
+impl TryFrom<RawColor> for ThemeColorValue {
+    type Error = String;
+
+    fn try_from(raw: RawColor) -> Result<Self, Self::Error> {
+        match raw {
+            RawColor::Simple(s) if s == "reverse" => Ok(Self(ThemeColor::Reverse)),
+            raw => ColorValue::try_from(raw).map(|value| Self(ThemeColor::Color(value.0))),
+        }
+    }
+}
+
 /// 在多级颜色对象中按当前 [`crate::util::color_adapt::ColorLevel`] 选取最优值。
 ///
 /// 优先级：当前色阶的精确字段 > rgb > 其他色阶兜底。
@@ -825,8 +873,8 @@ impl Theme {
             model_sel_title: Color::Reset,
             model_sel_active: Color::LightGreen,
             model_sel_inactive: Color::Reset,
-            model_sel_highlight_bg: Color::Reset,
-            model_sel_highlight_fg: Color::Yellow,
+            model_sel_highlight_bg: Color::Reset.into(),
+            model_sel_highlight_fg: Color::Yellow.into(),
             config_title: Color::LightCyan,
             config_section: Color::LightGreen,
             config_pointer: Color::Yellow,

@@ -164,4 +164,5 @@ allow:
 - Shell(npm run:*)
 - Shell(git status:*)
 - Shell(git restore:*)
+- Shell(python3 -:*)
 deny: []

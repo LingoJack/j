@@ -3,6 +3,7 @@ use crate::command::chat::input::autocomplete::{
     AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
     get_filtered_skill_names, get_filtered_slash_commands,
 };
+use crate::theme::ThemeColor;
 use crate::util::text::display_width;
 use ratatui::{
     layout::Rect,
@@ -19,8 +20,8 @@ pub(crate) struct PopupConfig {
     pub title_color: ratatui::style::Color,
     pub border_color: ratatui::style::Color,
     pub bg_color: ratatui::style::Color,
-    pub highlight_bg: ratatui::style::Color,
-    pub highlight_fg: ratatui::style::Color,
+    pub highlight_bg: ThemeColor,
+    pub highlight_fg: ThemeColor,
 }
 
 /// 通用浮动弹窗列表渲染（输入区上方）
@@ -60,6 +61,12 @@ pub(crate) fn draw_popup_list(
     let mut list_state = ListState::default();
     list_state.select(Some(cfg.selected.min(item_count.saturating_sub(1))));
 
+    let highlight_style = cfg.highlight_fg.apply_fg(
+        cfg.highlight_bg
+            .apply_bg(Style::default())
+            .add_modifier(Modifier::BOLD),
+    );
+
     let list = List::new(items)
         .block(
             Block::default()
@@ -74,12 +81,7 @@ pub(crate) fn draw_popup_list(
                 ))
                 .style(Style::default().bg(cfg.bg_color)),
         )
-        .highlight_style(
-            Style::default()
-                .bg(cfg.highlight_bg)
-                .fg(cfg.highlight_fg)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(highlight_style);
 
     f.render_widget(Clear, popup_area);
     f.render_stateful_widget(list, popup_area, &mut list_state);
@@ -181,8 +183,8 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
+        highlight_bg: t.model_sel_highlight_bg,
+        highlight_fg: t.model_sel_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -237,8 +239,8 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
+        highlight_bg: t.model_sel_highlight_bg,
+        highlight_fg: t.model_sel_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -291,8 +293,8 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
+        highlight_bg: t.model_sel_highlight_bg,
+        highlight_fg: t.model_sel_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -369,8 +371,8 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
+        highlight_bg: t.model_sel_highlight_bg,
+        highlight_fg: t.model_sel_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -449,8 +451,8 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
             title_color: t.md_h1,
             border_color: t.md_h1,
             bg_color: t.bg_primary,
-            highlight_bg: t.md_h1,
-            highlight_fg: t.bg_primary,
+            highlight_bg: t.model_sel_highlight_bg,
+            highlight_fg: t.model_sel_highlight_fg,
         },
     );
 }
