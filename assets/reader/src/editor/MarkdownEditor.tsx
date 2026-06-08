@@ -471,6 +471,7 @@ type SourceBlockEditorOptions = {
 function createSourceBlockEditor(options: SourceBlockEditorOptions): HTMLElement {
   const kind = options.block.kind
   if (kind.type === 'code_block') return createCodeBlockEditor(options, kind.value.lang, kind.value.code)
+  if (kind.type === 'table') return createTableBlockEditor(options, kind.value.alignments)
   return createRawBlockEditor(options)
 }
 
@@ -494,27 +495,18 @@ function createRawBlockEditor(options: SourceBlockEditorOptions): HTMLElement {
 
 function createCodeBlockEditor(options: SourceBlockEditorOptions, lang: string, code: string): HTMLElement {
   const wrap = document.createElement('div')
-  wrap.className = 'md-block md-code-source'
+  wrap.className = 'md-block md-code-source md-code-wrap'
   wrap.dataset.blockType = 'source_code'
   wrap.dataset.startLine = String(options.range.startLine)
   wrap.dataset.endLine = String(options.range.endLine)
 
-  const toolbar = document.createElement('div')
-  toolbar.className = 'md-code-source-toolbar'
-
-  const langLabel = document.createElement('label')
-  langLabel.className = 'md-code-source-label'
-
   const langInput = document.createElement('input')
-  langInput.className = 'md-code-lang-input'
+  langInput.className = 'md-code-lang-input md-code-lang'
   langInput.value = lang
-  langInput.placeholder = 'text'
+  langInput.placeholder = 'code'
   langInput.spellcheck = false
 
-  langLabel.appendChild(langInput)
-  toolbar.appendChild(langLabel)
-
-  const textarea = createAutoGrowTextarea('md-code-source-input md-preferred-focus', trimCodeBlockDisplayNewline(code))
+  const textarea = createAutoGrowTextarea('md-code-source-input md-code-content md-preferred-focus', trimCodeBlockDisplayNewline(code))
   const closeEditor = () => {
     langInput.blur()
     textarea.blur()
@@ -551,9 +543,110 @@ function createCodeBlockEditor(options: SourceBlockEditorOptions, lang: string, 
     }, 0)
   })
 
-  wrap.appendChild(toolbar)
-  wrap.appendChild(textarea)
+  const pre = document.createElement('pre')
+  pre.className = 'md-code-pre'
+  pre.appendChild(textarea)
+
+  wrap.appendChild(langInput)
+  wrap.appendChild(pre)
   return wrap
+}
+
+function createTableBlockEditor(options: SourceBlockEditorOptions, alignments: Alignment[]): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'md-block md-table-source md-table-wrap'
+  wrap.dataset.blockType = 'source_table'
+  wrap.dataset.startLine = String(options.range.startLine)
+  wrap.dataset.endLine = String(options.range.endLine)
+
+  const rows = parseTableSource(options.rawValue)
+  const table = document.createElement('table')
+  table.className = 'md-table md-table-edit-grid'
+
+  const emit = () => {
+    options.onChange(buildTableSource(rows, alignments))
+  }
+
+  rows.forEach((row, rowIndex) => {
+    const tr = document.createElement('tr')
+    row.forEach((cellValue, columnIndex) => {
+      const cell = document.createElement(rowIndex === 0 ? 'th' : 'td')
+      applyCellAlignment(cell, alignments[columnIndex])
+
+      const textarea = createAutoGrowTextarea('md-table-cell-input md-table-cell-textarea', cellValue)
+      textarea.addEventListener('input', () => {
+        autoGrowTextarea(textarea)
+        rows[rowIndex][columnIndex] = textarea.value
+        emit()
+      })
+      bindCommonEditorKeys(textarea, options, false)
+      textarea.addEventListener('blur', () => {
+        setTimeout(() => {
+          if (!wrap.contains(document.activeElement)) options.onBlur()
+        }, 0)
+      })
+      if (rowIndex === 0 && columnIndex === 0) textarea.classList.add('md-preferred-focus')
+
+      cell.appendChild(textarea)
+      tr.appendChild(cell)
+    })
+    table.appendChild(tr)
+  })
+
+  wrap.appendChild(table)
+  return wrap
+}
+
+function parseTableSource(source: string): string[][] {
+  const lines = source.split('\n').filter((line) => line.trim().length > 0)
+  const rows = lines
+    .filter((line, index) => index !== 1 || !isMarkdownTableDelimiter(line))
+    .map(splitMarkdownTableRow)
+  return normalizeTableRows(rows)
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim()
+  const withoutOuterPipes = trimmed.replace(/^\|/, '').replace(/\|$/, '')
+  return withoutOuterPipes.split('|').map((cell) => cell.trim())
+}
+
+function normalizeTableRows(rows: string[][]): string[][] {
+  const columnCount = Math.max(1, ...rows.map((row) => row.length))
+  return rows.length > 0
+    ? rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ''))
+    : [Array.from({ length: columnCount }, () => '')]
+}
+
+function isMarkdownTableDelimiter(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(line)
+}
+
+function buildTableSource(rows: string[][], alignments: Alignment[]): string {
+  const columnCount = Math.max(1, ...rows.map((row) => row.length), alignments.length)
+  const normalizedRows = rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ''))
+  const header = normalizedRows[0] ?? Array.from({ length: columnCount }, () => '')
+  const body = normalizedRows.slice(1)
+  const delimiter = Array.from({ length: columnCount }, (_, index) => tableDelimiterForAlignment(alignments[index]))
+  return [header, delimiter, ...body].map(formatMarkdownTableRow).join('\n')
+}
+
+function tableDelimiterForAlignment(alignment: Alignment | undefined): string {
+  if (alignment === 'center') return ':---:'
+  if (alignment === 'right') return '---:'
+  return '---'
+}
+
+function formatMarkdownTableRow(cells: string[]): string {
+  return `| ${cells.map(escapeMarkdownTableCell).join(' | ')} |`
+}
+
+function escapeMarkdownTableCell(cell: string): string {
+  return cell.replace(/\n/g, '<br>').replace(/\|/g, '\\|')
+}
+
+function getTextareaBlockElement(textarea: HTMLTextAreaElement): HTMLElement | null {
+  return textarea.closest<HTMLElement>('.md-block')
 }
 
 function createAutoGrowTextarea(className: string, value: string): HTMLTextAreaElement {
@@ -632,7 +725,7 @@ function getTextareaDocumentLineOffset(textarea: HTMLTextAreaElement): number {
 
 function setTextareaCursorForDocumentLine(textarea: HTMLTextAreaElement, documentLine: number, column: number) {
   const lineOffset = getTextareaDocumentLineOffset(textarea)
-  const rangeStart = Number(textarea.parentElement?.dataset.startLine ?? '0')
+  const rangeStart = Number(getTextareaBlockElement(textarea)?.dataset.startLine ?? '0')
   const localLine = Math.max(0, documentLine - rangeStart - lineOffset)
   const lines = textarea.value.split('\n')
   const clampedLine = Math.min(localLine, Math.max(0, lines.length - 1))
