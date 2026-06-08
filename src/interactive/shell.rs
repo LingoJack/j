@@ -5,9 +5,14 @@ use crate::markdown::theme::MdStyle;
 use crate::theme::Theme;
 use crate::{error, info};
 use colored::Colorize;
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use ratatui::style::{Color, Modifier, Style};
 use std::io::{BufRead, BufReader, Read, Write};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 /// 进入交互式 shell 子进程
 pub fn enter_interactive_shell(config: &YamlConfig) {
@@ -259,8 +264,138 @@ pub struct ShellSession {
     child: Box<dyn portable_pty::Child + Send + Sync>,
     _master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    reader: BufReader<Box<dyn Read + Send>>,
+    reader: Option<BufReader<Box<dyn Read + Send>>>,
     marker: String,
+}
+
+struct PtyReadResult {
+    reader: BufReader<Box<dyn Read + Send>>,
+    metadata: Option<String>,
+}
+
+fn read_pty_until_marker(
+    mut reader: BufReader<Box<dyn Read + Send>>,
+    marker_prefix: &str,
+) -> PtyReadResult {
+    let marker_bytes = marker_prefix.as_bytes();
+    let mut stdout = std::io::stdout();
+    let mut buf = [0_u8; 1024];
+    let mut state = MarkerScanState::Normal;
+
+    loop {
+        let read_count = match reader.get_mut().read(&mut buf) {
+            Ok(0) => break,
+            Ok(read_count) => read_count,
+            Err(_) => break,
+        };
+
+        for &byte in &buf[..read_count] {
+            match &mut state {
+                MarkerScanState::Normal => {
+                    if byte == marker_bytes[0] {
+                        state = MarkerScanState::MaybeMarker {
+                            pending: vec![byte],
+                        };
+                    } else {
+                        let _ = stdout.write_all(&[byte]);
+                    }
+                }
+                MarkerScanState::MaybeMarker { pending } => {
+                    pending.push(byte);
+                    if marker_bytes.starts_with(pending) {
+                        if pending.len() == marker_bytes.len() {
+                            state = MarkerScanState::InMarker {
+                                metadata: String::new(),
+                            };
+                        }
+                    } else {
+                        let _ = stdout.write_all(pending);
+                        state = MarkerScanState::Normal;
+                    }
+                }
+                MarkerScanState::InMarker { metadata } => {
+                    if byte == b'\n' {
+                        let _ = stdout.flush();
+                        return PtyReadResult {
+                            reader,
+                            metadata: Some(metadata.trim_end_matches('\r').to_string()),
+                        };
+                    }
+                    metadata.push(byte as char);
+                }
+            }
+        }
+        let _ = stdout.flush();
+    }
+
+    PtyReadResult {
+        reader,
+        metadata: None,
+    }
+}
+
+enum MarkerScanState {
+    Normal,
+    MaybeMarker { pending: Vec<u8> },
+    InMarker { metadata: String },
+}
+
+fn key_event_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
+    match key.code {
+        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            control_char_to_byte(c).map(|byte| vec![byte])
+        }
+        KeyCode::Char(c) => Some(c.to_string().into_bytes()),
+        KeyCode::Enter => Some(vec![b'\r']),
+        KeyCode::Tab => Some(vec![b'\t']),
+        KeyCode::Backspace => Some(vec![0x7f]),
+        KeyCode::Esc => Some(vec![0x1b]),
+        KeyCode::Left => Some(b"\x1b[D".to_vec()),
+        KeyCode::Right => Some(b"\x1b[C".to_vec()),
+        KeyCode::Up => Some(b"\x1b[A".to_vec()),
+        KeyCode::Down => Some(b"\x1b[B".to_vec()),
+        KeyCode::Home => Some(b"\x1b[H".to_vec()),
+        KeyCode::End => Some(b"\x1b[F".to_vec()),
+        KeyCode::Delete => Some(b"\x1b[3~".to_vec()),
+        KeyCode::PageUp => Some(b"\x1b[5~".to_vec()),
+        KeyCode::PageDown => Some(b"\x1b[6~".to_vec()),
+        KeyCode::F(index) => function_key_to_bytes(index),
+        KeyCode::Null | KeyCode::CapsLock | KeyCode::ScrollLock | KeyCode::NumLock => None,
+        KeyCode::PrintScreen | KeyCode::Pause | KeyCode::Menu | KeyCode::KeypadBegin => None,
+        KeyCode::Media(_) | KeyCode::Modifier(_) => None,
+        KeyCode::BackTab => Some(b"\x1b[Z".to_vec()),
+        KeyCode::Insert => Some(b"\x1b[2~".to_vec()),
+    }
+}
+
+fn control_char_to_byte(c: char) -> Option<u8> {
+    let lower = c.to_ascii_lowercase();
+    if lower.is_ascii_lowercase() {
+        Some((lower as u8) - b'a' + 1)
+    } else if c == '[' {
+        Some(0x1b)
+    } else {
+        None
+    }
+}
+
+fn function_key_to_bytes(index: u8) -> Option<Vec<u8>> {
+    let sequence = match index {
+        1 => "\x1bOP",
+        2 => "\x1bOQ",
+        3 => "\x1bOR",
+        4 => "\x1bOS",
+        5 => "\x1b[15~",
+        6 => "\x1b[17~",
+        7 => "\x1b[18~",
+        8 => "\x1b[19~",
+        9 => "\x1b[20~",
+        10 => "\x1b[21~",
+        11 => "\x1b[23~",
+        12 => "\x1b[24~",
+        _ => return None,
+    };
+    Some(sequence.as_bytes().to_vec())
 }
 
 impl ShellSession {
@@ -331,7 +466,7 @@ impl ShellSession {
             child,
             _master: pair.master,
             writer,
-            reader: BufReader::new(reader),
+            reader: Some(BufReader::new(reader)),
             marker,
         };
         if !session.wait_until_ready() {
@@ -343,9 +478,13 @@ impl ShellSession {
     fn wait_until_ready(&mut self) -> bool {
         let marker_prefix = format!("{}:ready:", self.marker);
         let mut line = String::new();
+        let Some(reader) = self.reader.as_mut() else {
+            error!("shell reader 不可用");
+            return false;
+        };
         loop {
             line.clear();
-            match self.reader.read_line(&mut line) {
+            match reader.read_line(&mut line) {
                 Ok(0) => {
                     error!("shell 会话启动后立即退出");
                     return false;
@@ -369,9 +508,7 @@ impl ShellSession {
             return true;
         }
 
-        let marker_command = format!("\nprintf '%s:%s:%s\\n' '{}' \"$?\" \"$PWD\"\n", self.marker);
         if writeln!(self.writer, "{}", cmd)
-            .and_then(|()| write!(self.writer, "{}", marker_command))
             .and_then(|()| self.writer.flush())
             .is_err()
         {
@@ -379,35 +516,95 @@ impl ShellSession {
             return false;
         }
 
-        self.read_until_marker()
+        self.proxy_until_marker()
     }
 
-    fn read_until_marker(&mut self) -> bool {
+    fn proxy_until_marker(&mut self) -> bool {
         let marker_prefix = format!("{}:", self.marker);
-        let mut line = String::new();
+        let Some(reader) = self.reader.take() else {
+            error!("shell reader 不可用");
+            return false;
+        };
 
-        loop {
-            line.clear();
-            match self.reader.read_line(&mut line) {
-                Ok(0) => {
-                    error!("shell 会话已退出");
-                    return false;
+        let (done_tx, done_rx) = mpsc::channel();
+        let output_handle = thread::spawn(move || {
+            let result = read_pty_until_marker(reader, &marker_prefix);
+            let _ = done_tx.send(result);
+        });
+
+        if enable_raw_mode().is_err() {
+            error!("无法进入 raw mode");
+            return self.finish_proxy_output(output_handle, done_rx);
+        }
+
+        let mut finished = false;
+        let mut success = false;
+        while !finished {
+            match done_rx.try_recv() {
+                Ok(result) => {
+                    success = self.restore_reader_and_cwd(result);
+                    finished = true;
                 }
-                Ok(_) => {
-                    let normalized = line.trim_matches(['\r', '\n']);
-                    if let Some(metadata) = normalized.strip_prefix(&marker_prefix) {
-                        self.sync_cwd_from_marker(metadata);
-                        return true;
-                    }
-                    print!("{}", line);
-                    let _ = std::io::stdout().flush();
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    error!("shell 输出线程已退出");
+                    success = false;
+                    finished = true;
                 }
-                Err(err) => {
-                    error!("读取 shell 输出失败: {}", err);
-                    return false;
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.forward_terminal_input();
                 }
             }
         }
+
+        let _ = disable_raw_mode();
+        let _ = output_handle.join();
+        success
+    }
+
+    fn finish_proxy_output(
+        &mut self,
+        output_handle: thread::JoinHandle<()>,
+        done_rx: mpsc::Receiver<PtyReadResult>,
+    ) -> bool {
+        match done_rx.recv() {
+            Ok(result) => {
+                let success = self.restore_reader_and_cwd(result);
+                let _ = output_handle.join();
+                success
+            }
+            Err(err) => {
+                error!("读取 shell 输出失败: {}", err);
+                let _ = output_handle.join();
+                false
+            }
+        }
+    }
+
+    fn forward_terminal_input(&mut self) {
+        match event::poll(Duration::from_millis(10)) {
+            Ok(true) => match event::read() {
+                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
+                    if let Some(bytes) = key_event_to_bytes(key) {
+                        let _ = self.writer.write_all(&bytes);
+                        let _ = self.writer.flush();
+                    }
+                }
+                Ok(Event::Resize(_, _)) => {}
+                Ok(_) => {}
+                Err(_) => {}
+            },
+            Ok(false) => {}
+            Err(_) => {}
+        }
+    }
+
+    fn restore_reader_and_cwd(&mut self, result: PtyReadResult) -> bool {
+        let has_metadata = result.metadata.is_some();
+        self.reader = Some(result.reader);
+        if let Some(metadata) = result.metadata {
+            self.sync_cwd_from_marker(&metadata);
+        }
+        has_metadata
     }
 
     fn sync_cwd_from_marker(&self, metadata: &str) {
@@ -446,7 +643,7 @@ fn build_persistent_shell_bootstrap(shell_path: &str) -> String {
     } else {
         ""
     };
-    let loop_script = "stty -echo 2>/dev/null; printf '%s:ready:%s\\n' \"$JCLI_SHELL_MARKER\" \"$PWD\"; while IFS= read -r __jcli_cmd; do eval \"$__jcli_cmd\" < /dev/null; done";
+    let loop_script = "stty -echo 2>/dev/null; printf '%s:ready:%s\\n' \"$JCLI_SHELL_MARKER\" \"$PWD\"; while IFS= read -r __jcli_cmd; do stty echo 2>/dev/null; eval \"$__jcli_cmd\"; __jcli_status=$?; stty -echo 2>/dev/null; printf '%s:%s:%s\\n' \"$JCLI_SHELL_MARKER\" \"$__jcli_status\" \"$PWD\"; done";
     if rc_source.is_empty() {
         loop_script.to_string()
     } else {
