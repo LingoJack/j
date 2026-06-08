@@ -2,7 +2,7 @@ use crate::command;
 use crate::config::YamlConfig;
 use crate::constants::{
     self, ALIAS_PATH_SECTIONS, ALL_SECTIONS, LIST_ALL, NOTE_CATEGORIES, cmd, config_key,
-    rmeta_action, search_flag, time_function,
+    rmeta_action, search_flag, shell, time_function,
 };
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::CmdKind;
@@ -285,6 +285,9 @@ impl Completer for CopilotCompleter {
                     });
                 }
             }
+            if candidates.is_empty() {
+                candidates = complete_shell_command(current_word);
+            }
             return Ok((start_pos, candidates));
         }
 
@@ -494,7 +497,8 @@ impl Completer for CopilotCompleter {
             return Ok((start_pos, candidates));
         }
 
-        Ok((start_pos, vec![]))
+        let candidates = complete_shell_fallback(line, current_word);
+        Ok((start_pos, candidates))
     }
 }
 
@@ -694,6 +698,121 @@ pub fn complete_file_path(partial: &str) -> Vec<Pair> {
 
     candidates.sort_by(|a, b| a.display.cmp(&b.display));
     candidates
+}
+
+fn complete_shell_fallback(line: &str, current_word: &str) -> Vec<Pair> {
+    if should_complete_executable(line, current_word) {
+        complete_shell_command(current_word)
+    } else {
+        complete_file_path(current_word)
+    }
+}
+
+fn should_complete_executable(line: &str, current_word: &str) -> bool {
+    line[..line.len().saturating_sub(current_word.len())]
+        .trim()
+        .is_empty()
+}
+
+fn complete_shell_command(prefix: &str) -> Vec<Pair> {
+    let mut candidates = complete_path_executables(prefix);
+    candidates.extend(complete_shell_aliases(prefix));
+    candidates.sort_by(|a, b| a.display.cmp(&b.display));
+    candidates.dedup_by(|a, b| a.display == b.display);
+    candidates
+}
+
+fn complete_path_executables(prefix: &str) -> Vec<Pair> {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return Vec::new();
+    };
+
+    let mut candidates = Vec::new();
+    for dir in std::env::split_paths(&path_var) {
+        collect_executables_from_dir(&dir, prefix, &mut candidates);
+    }
+    candidates
+}
+
+fn collect_executables_from_dir(dir: &std::path::Path, prefix: &str, candidates: &mut Vec<Pair>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with(prefix) || !is_executable_file(&entry) {
+            continue;
+        }
+        candidates.push(Pair {
+            display: name.clone(),
+            replacement: name,
+        });
+    }
+}
+
+#[cfg(unix)]
+fn is_executable_file(entry: &std::fs::DirEntry) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    entry
+        .metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(entry: &std::fs::DirEntry) -> bool {
+    entry
+        .metadata()
+        .map(|metadata| metadata.is_file())
+        .unwrap_or(false)
+}
+
+fn complete_shell_aliases(prefix: &str) -> Vec<Pair> {
+    let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
+    if shell_path.contains("zsh") {
+        return complete_aliases_from_shell(
+            &shell_path,
+            "source ~/.zshrc 2>/dev/null; alias",
+            prefix,
+        );
+    }
+    if shell_path.contains("bash") {
+        return complete_aliases_from_shell(
+            &shell_path,
+            "shopt -s expand_aliases; source ~/.bashrc 2>/dev/null; alias",
+            prefix,
+        );
+    }
+    Vec::new()
+}
+
+fn complete_aliases_from_shell(shell_path: &str, script: &str, prefix: &str) -> Vec<Pair> {
+    std::process::Command::new(shell_path)
+        .args([shell::BASH_CMD_FLAG, script])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| parse_alias_output(&output.stdout, prefix))
+        .unwrap_or_default()
+}
+
+fn parse_alias_output(output: &[u8], prefix: &str) -> Vec<Pair> {
+    String::from_utf8_lossy(output)
+        .lines()
+        .filter_map(alias_name_from_line)
+        .filter(|name| name.starts_with(prefix))
+        .map(|name| Pair {
+            display: name.to_string(),
+            replacement: name.to_string(),
+        })
+        .collect()
+}
+
+fn alias_name_from_line(line: &str) -> Option<&str> {
+    let alias = line.strip_prefix("alias ").unwrap_or(line);
+    alias.split_once('=').map(|(name, _)| name.trim())
 }
 
 // ========== 使用技巧 ==========
