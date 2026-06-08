@@ -183,8 +183,8 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.model_sel_highlight_bg,
-        highlight_fg: t.model_sel_highlight_fg,
+        highlight_bg: t.popup_highlight_bg,
+        highlight_fg: t.popup_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -239,8 +239,8 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.model_sel_highlight_bg,
-        highlight_fg: t.model_sel_highlight_fg,
+        highlight_bg: t.popup_highlight_bg,
+        highlight_fg: t.popup_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -293,8 +293,8 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.model_sel_highlight_bg,
-        highlight_fg: t.model_sel_highlight_fg,
+        highlight_bg: t.popup_highlight_bg,
+        highlight_fg: t.popup_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -371,8 +371,8 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.model_sel_highlight_bg,
-        highlight_fg: t.model_sel_highlight_fg,
+        highlight_bg: t.popup_highlight_bg,
+        highlight_fg: t.popup_highlight_fg,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -451,8 +451,8 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
             title_color: t.md_h1,
             border_color: t.md_h1,
             bg_color: t.bg_primary,
-            highlight_bg: t.model_sel_highlight_bg,
-            highlight_fg: t.model_sel_highlight_fg,
+            highlight_bg: t.popup_highlight_bg,
+            highlight_fg: t.popup_highlight_fg,
         },
     );
 }

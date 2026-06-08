@@ -166,6 +166,10 @@ pub struct Theme {
     pub text_very_dim: Color,
     /// 白色文字（用于输入区等）
     pub text_white: Color,
+    /// 用户消息正文颜色
+    pub user_text: ThemeColor,
+    /// 输入区正文颜色
+    pub input_text: ThemeColor,
     /// 系统消息颜色
     pub text_system: Color,
 
@@ -256,6 +260,12 @@ pub struct Theme {
     pub model_sel_highlight_bg: ThemeColor,
     /// 选中高亮前景
     pub model_sel_highlight_fg: ThemeColor,
+
+    // ===== 浮动弹窗 =====
+    /// 弹窗选中高亮背景
+    pub popup_highlight_bg: ThemeColor,
+    /// 弹窗选中高亮前景
+    pub popup_highlight_fg: ThemeColor,
 
     // ===== 配置界面 =====
     /// 配置标题颜色
@@ -405,6 +415,10 @@ struct ThemeJson {
     text_dim: ColorValue,
     text_very_dim: ColorValue,
     text_white: ColorValue,
+    #[serde(default = "default_user_text")]
+    user_text: ThemeColorValue,
+    #[serde(default = "default_input_text")]
+    input_text: ThemeColorValue,
     text_system: ColorValue,
     title_icon: ColorValue,
     title_separator: ColorValue,
@@ -443,6 +457,10 @@ struct ThemeJson {
     model_sel_inactive: ColorValue,
     model_sel_highlight_bg: ThemeColorValue,
     model_sel_highlight_fg: ThemeColorValue,
+    #[serde(default)]
+    popup_highlight_bg: Option<ThemeColorValue>,
+    #[serde(default)]
+    popup_highlight_fg: Option<ThemeColorValue>,
     config_title: ColorValue,
     config_section: ColorValue,
     config_pointer: ColorValue,
@@ -523,6 +541,8 @@ impl From<ThemeJson> for Theme {
             text_dim: j.text_dim.0,
             text_very_dim: j.text_very_dim.0,
             text_white: j.text_white.0,
+            user_text: j.user_text.0,
+            input_text: j.input_text.0,
             text_system: j.text_system.0,
             title_icon: j.title_icon.0,
             title_separator: j.title_separator.0,
@@ -561,6 +581,12 @@ impl From<ThemeJson> for Theme {
             model_sel_inactive: j.model_sel_inactive.0,
             model_sel_highlight_bg: j.model_sel_highlight_bg.0,
             model_sel_highlight_fg: j.model_sel_highlight_fg.0,
+            popup_highlight_bg: j
+                .popup_highlight_bg
+                .map_or(j.model_sel_highlight_bg.0, |value| value.0),
+            popup_highlight_fg: j
+                .popup_highlight_fg
+                .map_or(j.model_sel_highlight_fg.0, |value| value.0),
             config_title: j.config_title.0,
             config_section: j.config_section.0,
             config_pointer: j.config_pointer.0,
@@ -680,6 +706,28 @@ impl TryFrom<RawColor> for ThemeColorValue {
             raw => ColorValue::try_from(raw).map(|value| Self(ThemeColor::Color(value.0))),
         }
     }
+}
+
+impl Default for ThemeColorValue {
+    fn default() -> Self {
+        Self(ThemeColor::Color(Color::Reset))
+    }
+}
+
+fn default_user_text() -> ThemeColorValue {
+    ThemeColorValue(ThemeColor::Color(Color::White))
+}
+
+fn default_input_text() -> ThemeColorValue {
+    ThemeColorValue(ThemeColor::Color(Color::White))
+}
+
+fn default_popup_highlight_bg() -> ThemeColorValue {
+    ThemeColorValue(ThemeColor::Color(Color::Reset))
+}
+
+fn default_popup_highlight_fg() -> ThemeColorValue {
+    ThemeColorValue(ThemeColor::Color(Color::Yellow))
 }
 
 /// 在多级颜色对象中按当前 [`crate::util::color_adapt::ColorLevel`] 选取最优值。
@@ -837,6 +885,8 @@ impl Theme {
             text_dim: Color::DarkGray,
             text_very_dim: Color::DarkGray,
             text_white: Color::White,
+            user_text: Color::White.into(),
+            input_text: Color::White.into(),
             text_system: Color::DarkGray,
             title_icon: Color::Reset,
             title_separator: Color::DarkGray,
@@ -875,6 +925,8 @@ impl Theme {
             model_sel_inactive: Color::Reset,
             model_sel_highlight_bg: Color::Reset.into(),
             model_sel_highlight_fg: Color::Yellow.into(),
+            popup_highlight_bg: default_popup_highlight_bg().0,
+            popup_highlight_fg: default_popup_highlight_fg().0,
             config_title: Color::LightCyan,
             config_section: Color::LightGreen,
             config_pointer: Color::Yellow,

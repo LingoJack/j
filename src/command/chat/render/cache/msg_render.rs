@@ -223,7 +223,7 @@ pub fn render_user_msg(
             Span::styled(" ".repeat(user_pad_lr), Style::default().bg(user_bg)),
             Span::styled(
                 wl.clone(),
-                Style::default().fg(theme.text_white).bg(user_bg),
+                theme.user_text.apply_fg(Style::default().bg(user_bg)),
             ),
             Span::styled(" ".repeat(fill), Style::default().bg(user_bg)),
             Span::styled(" ".repeat(user_pad_lr), Style::default().bg(user_bg)),

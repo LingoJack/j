@@ -2,7 +2,6 @@
 //!
 //! 提取自 chat.rs，处理用户输入框的渲染、折行、光标位置计算和 @mention 高亮。
 
-use crate::theme::Theme;
 use crate::util::safe_lock;
 use ratatui::{
     layout::Rect,
@@ -94,6 +93,11 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let input_text_no_nl: String = input_text.chars().filter(|&c| c != '\n').collect();
     let mention_ranges = compute_mention_ranges(app, &input_text, &input_text_no_nl);
     let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
+    let line_styles = InputLineStyles {
+        mention: mention_style,
+        input_text: t.input_text.apply_fg(Style::default()),
+        cursor: Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+    };
 
     let mut display_lines: Vec<Line> = Vec::new();
     let mut char_offset: usize = 0;
@@ -131,8 +135,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             before_len,
             cursor_len,
             &mention_ranges,
-            mention_style,
-            t,
+            line_styles,
         );
         spans.extend(segments);
 
@@ -280,6 +283,14 @@ fn compute_cursor_col_in_line(
     col as u16
 }
 
+/// 输入行文本片段样式。
+#[derive(Debug, Clone, Copy)]
+struct InputLineStyles {
+    mention: Style,
+    input_text: Style,
+    cursor: Style,
+}
+
 /// 构建一行中的 Span 片段
 fn build_line_segments(
     line_chars: &[char],
@@ -287,8 +298,7 @@ fn build_line_segments(
     before_len: usize,
     cursor_len: usize,
     mention_ranges: &[(usize, usize)],
-    mention_style: Style,
-    t: &Theme,
+    styles: InputLineStyles,
 ) -> Vec<Span<'static>> {
     let mut spans: Vec<Span> = Vec::new();
     let mut seg_start = 0;
@@ -309,19 +319,16 @@ fn build_line_segments(
                     .iter()
                     .any(|&(s, e)| prev_global >= s && prev_global < e);
                 let seg_style = if prev_is_mention {
-                    mention_style
+                    styles.mention
                 } else {
-                    Style::default().fg(t.text_white)
+                    styles.input_text
                 };
                 spans.push(Span::styled(seg, seg_style));
             }
             if is_cursor {
-                spans.push(Span::styled(
-                    ch.to_string(),
-                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-                ));
+                spans.push(Span::styled(ch.to_string(), styles.cursor));
             } else {
-                spans.push(Span::styled(ch.to_string(), mention_style));
+                spans.push(Span::styled(ch.to_string(), styles.mention));
             }
             seg_start = ci + 1;
         } else if ci > seg_start {
@@ -334,9 +341,9 @@ fn build_line_segments(
             if prev_is_mention != curr_is_mention {
                 let seg: String = line_chars[seg_start..ci].iter().collect();
                 let seg_style = if prev_is_mention {
-                    mention_style
+                    styles.mention
                 } else {
-                    Style::default().fg(t.text_white)
+                    styles.input_text
                 };
                 spans.push(Span::styled(seg, seg_style));
                 seg_start = ci;
@@ -352,9 +359,9 @@ fn build_line_segments(
             .iter()
             .any(|&(s, e)| seg_global >= s && seg_global < e);
         let seg_style = if seg_is_mention {
-            mention_style
+            styles.mention
         } else {
-            Style::default().fg(t.text_white)
+            styles.input_text
         };
         spans.push(Span::styled(seg, seg_style));
     }
