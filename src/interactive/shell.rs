@@ -213,8 +213,12 @@ pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
         c
     } else {
         let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
-        let mut c = std::process::Command::new(shell_path);
-        c.args([shell::BASH_CMD_FLAG, cmd]);
+        let mut c = std::process::Command::new(&shell_path);
+        if shell_path.contains("zsh") || shell_path.contains("bash") {
+            c.args(["-ic", cmd]);
+        } else {
+            c.args([shell::BASH_CMD_FLAG, cmd]);
+        }
         c
     };
 
@@ -222,17 +226,8 @@ pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
         command.env(&key, &value);
     }
 
-    match command.status() {
-        Ok(status) => {
-            if !status.success()
-                && let Some(code) = status.code()
-            {
-                error!("命令退出码: {}", code);
-            }
-        }
-        Err(e) => {
-            error!("执行命令失败: {}", e);
-        }
+    if let Err(e) = command.status() {
+        error!("执行命令失败: {}", e);
     }
 }
 

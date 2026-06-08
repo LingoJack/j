@@ -46,12 +46,11 @@ pub fn run_interactive(config: &mut YamlConfig) {
     inject_envs_to_process(config);
 
     loop {
-        let cwd = format_cwd();
-        println!("{}", format!("work dir: {}", cwd).dimmed());
+        let prompt = build_prompt();
         if let Some(helper) = rl.helper_mut() {
             helper.rotate_tip();
         }
-        match rl.readline(&format!("{} ", "j >".yellow())) {
+        match rl.readline(&prompt) {
             Ok(line) => {
                 let input = line.trim();
 
@@ -130,6 +129,76 @@ fn history_file_path() -> std::path::PathBuf {
     let data_dir = crate::config::YamlConfig::data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     data_dir.join(HISTORY_FILE)
+}
+
+fn build_prompt() -> String {
+    let cwd = format_cwd();
+    let git_info = format_git_info();
+    format!(
+        "\n{} {}{}\n{} ",
+        "(jcli)".green(),
+        cwd.cyan(),
+        git_info,
+        "❯".cyan()
+    )
+}
+
+fn format_git_info() -> String {
+    let Some(branch) = current_git_branch() else {
+        return String::new();
+    };
+
+    let dirty = if is_git_dirty() {
+        format!(" {}", "✱".yellow())
+    } else {
+        String::new()
+    };
+
+    format!(" {} {}{}", "".magenta(), branch.magenta(), dirty)
+}
+
+fn current_git_branch() -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["symbolic-ref", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .or_else(|| {
+            std::process::Command::new("git")
+                .args(["rev-parse", "--short", "HEAD"])
+                .output()
+                .ok()
+                .filter(|output| output.status.success())
+        })?;
+
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|branch| branch.trim().to_string())
+        .filter(|branch| !branch.is_empty())
+}
+
+fn is_git_dirty() -> bool {
+    git_has_changes(["diff", "--quiet", "--ignore-submodules", "--cached"])
+        || git_has_changes(["diff", "--quiet", "--ignore-submodules"])
+        || git_has_untracked_files()
+}
+
+fn git_has_changes<const N: usize>(args: [&str; N]) -> bool {
+    std::process::Command::new("git")
+        .args(args)
+        .status()
+        .map(|status| !status.success())
+        .unwrap_or(false)
+}
+
+fn git_has_untracked_files() -> bool {
+    std::process::Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| !output.stdout.is_empty())
+        .unwrap_or(false)
 }
 
 /// cwd 显示最大字符数（超出时中间省略）
