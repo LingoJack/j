@@ -257,8 +257,8 @@ impl Completer for CopilotCompleter {
         let start_pos = pos - current_word.len();
 
         // Shell 命令（! 前缀）
-        if !parts.is_empty() && (parts[0] == "!" || parts[0].starts_with('!')) {
-            let candidates = complete_file_path(current_word);
+        if line_to_cursor.trim_start().starts_with('!') {
+            let candidates = complete_prefixed_shell_line(line_to_cursor, current_word);
             return Ok((start_pos, candidates));
         }
 
@@ -704,8 +704,91 @@ fn complete_shell_fallback(line: &str, current_word: &str) -> Vec<Pair> {
     if should_complete_executable(line, current_word) {
         complete_shell_command(current_word)
     } else {
-        complete_file_path(current_word)
+        complete_shell_argument(line, current_word)
     }
+}
+
+fn complete_prefixed_shell_line(line: &str, current_word: &str) -> Vec<Pair> {
+    let shell_line = line.trim_start().trim_start_matches('!');
+    complete_shell_fallback(shell_line, current_word)
+}
+
+fn complete_shell_argument(line: &str, current_word: &str) -> Vec<Pair> {
+    match shell_command_name(line) {
+        Some("make") | Some("gmake") => complete_make_targets(current_word),
+        Some(_) | None => complete_file_path(current_word),
+    }
+}
+
+fn shell_command_name(line: &str) -> Option<&str> {
+    line.split_whitespace().next()
+}
+
+fn complete_make_targets(prefix: &str) -> Vec<Pair> {
+    let mut candidates = Vec::new();
+    for makefile in makefile_candidates() {
+        collect_make_targets_from_file(&makefile, prefix, &mut candidates);
+    }
+    candidates.sort_by(|a, b| a.display.cmp(&b.display));
+    candidates.dedup_by(|a, b| a.display == b.display);
+    candidates
+}
+
+fn makefile_candidates() -> Vec<std::path::PathBuf> {
+    ["GNUmakefile", "makefile", "Makefile"]
+        .iter()
+        .map(std::path::PathBuf::from)
+        .filter(|path| path.is_file())
+        .collect()
+}
+
+fn collect_make_targets_from_file(
+    path: &std::path::Path,
+    prefix: &str,
+    candidates: &mut Vec<Pair>,
+) {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return;
+    };
+
+    for line in content.lines() {
+        for target in make_targets_from_line(line) {
+            if target.starts_with(prefix) {
+                candidates.push(Pair {
+                    display: target.to_string(),
+                    replacement: target.to_string(),
+                });
+            }
+        }
+    }
+}
+
+fn make_targets_from_line(line: &str) -> Vec<&str> {
+    let Some((targets, _)) = line.split_once(':') else {
+        return Vec::new();
+    };
+
+    if targets.is_empty()
+        || targets.starts_with(['.', '#', '\t'])
+        || targets.contains('=')
+        || targets.contains('$')
+    {
+        return Vec::new();
+    }
+
+    targets
+        .split_whitespace()
+        .filter(|target| is_visible_make_target(target))
+        .collect()
+}
+
+fn is_visible_make_target(target: &str) -> bool {
+    !target.is_empty()
+        && !target.starts_with('.')
+        && !target.contains('%')
+        && target
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
 fn should_complete_executable(line: &str, current_word: &str) -> bool {
