@@ -40,26 +40,15 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
             let _ = std::fs::create_dir_all(&tmp_dir);
 
             let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-            let zshrc_content = format!(
-                "# j shell 临时配置 - 自动生成，退出后自动清理\n\
-                 export ZDOTDIR=\"{home}\"\n\
-                 if [ -f \"{home}/.zshenv\" ]; then\n\
-                   source \"{home}/.zshenv\"\n\
-                 fi\n\
-                 if [ -f \"{home}/.zprofile\" ]; then\n\
-                   source \"{home}/.zprofile\"\n\
-                 fi\n\
-                 if [ -f \"{home}/.zshrc\" ]; then\n\
-                   source \"{home}/.zshrc\"\n\
-                 fi\n\
-                 PROMPT='%F{{green}}shell%f (%F{{cyan}}%~%f) %F{{green}}>%f '\n",
-                home = home,
-            );
+            let zshrc_content = build_zshrc_content(&home);
 
             let zshrc_path = tmp_dir.join(".zshrc");
             if let Err(e) = std::fs::write(&zshrc_path, &zshrc_content) {
                 error!("创建临时 .zshrc 失败: {}", e);
-                command.env("PROMPT", "%F{green}shell%f (%F{cyan}%~%f) %F{green}>%f ");
+                command.env(
+                    "PROMPT",
+                    "\n%F{green}(%F{cyan}shell%F{green})%f %F{cyan}%~%f\n%F{cyan}❯%f ",
+                );
             } else {
                 command.env("ZDOTDIR", tmp_dir.to_str().unwrap_or("/tmp"));
                 cleanup_path = Some(tmp_dir);
@@ -69,18 +58,14 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
             let tmp_rc = std::env::temp_dir().join(format!("j_shell_bashrc_{}", pid));
 
             let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-            let bashrc_content = format!(
-                "# j shell 临时配置 - 自动生成，退出后自动清理\n\
-                 if [ -f \"{home}/.bashrc\" ]; then\n\
-                   source \"{home}/.bashrc\"\n\
-                 fi\n\
-                 PS1='\\[\\033[32m\\]shell\\[\\033[0m\\] (\\[\\033[36m\\]\\w\\[\\033[0m\\]) \\[\\033[32m\\]>\\[\\033[0m\\] '\n",
-                home = home,
-            );
+            let bashrc_content = build_bashrc_content(&home);
 
             if let Err(e) = std::fs::write(&tmp_rc, &bashrc_content) {
                 error!("创建临时 bashrc 失败: {}", e);
-                command.env("PS1", "\\[\\033[32m\\]shell\\[\\033[0m\\] (\\[\\033[36m\\]\\w\\[\\033[0m\\]) \\[\\033[32m\\]>\\[\\033[0m\\] ");
+                command.env(
+                    "PS1",
+                    "\n\\[\\033[32m\\](\\[\\033[36m\\]shell\\[\\033[32m\\])\\[\\033[0m\\] \\[\\033[36m\\]\\w\\[\\033[0m\\]\n\\[\\033[36m\\]❯\\[\\033[0m\\] ",
+                );
             } else {
                 command.arg("--rcfile");
                 command.arg(tmp_rc.to_str().unwrap_or("/tmp/j_shell_bashrc"));
@@ -89,11 +74,11 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
         } else {
             command.env(
                 "PS1",
-                "\x1b[32mshell\x1b[0m (\x1b[36m\\w\x1b[0m) \x1b[32m>\x1b[0m ",
+                "\n\x1b[32m(\x1b[36mshell\x1b[32m)\x1b[0m \x1b[36m\\w\x1b[0m\n\x1b[36m❯\x1b[0m ",
             );
             command.env(
                 "PROMPT",
-                "\x1b[32mshell\x1b[0m (\x1b[36m%~\x1b[0m) \x1b[32m>\x1b[0m ",
+                "\n\x1b[32m(\x1b[36mshell\x1b[32m)\x1b[0m \x1b[36m%~\x1b[0m\n\x1b[36m❯\x1b[0m ",
             );
         }
     }
@@ -127,7 +112,95 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
     info!("{}", "已返回 copilot 交互模式 🚀".green());
 }
 
-/// 执行 shell 命令（交互模式下 ! 前缀触发）
+fn build_zshrc_content(home: &str) -> String {
+    format!(
+        r#"# j shell 临时配置 - 自动生成，退出后自动清理
+export ZDOTDIR="{home}"
+if [ -f "{home}/.zshenv" ]; then
+  source "{home}/.zshenv"
+fi
+if [ -f "{home}/.zprofile" ]; then
+  source "{home}/.zprofile"
+fi
+if [ -f "{home}/.zshrc" ]; then
+  source "{home}/.zshrc"
+fi
+
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats '%F{{magenta}} %b%f'
+zstyle ':vcs_info:git:*' actionformats '%F{{magenta}} %b|%a%f'
+setopt prompt_subst
+
+_j_shell_git_dirty() {{
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
+  if ! git diff --quiet --ignore-submodules --cached 2>/dev/null || \
+     ! git diff --quiet --ignore-submodules 2>/dev/null || \
+     [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
+    print -r -- ' %F{{yellow}}✱%f'
+  fi
+}}
+
+_j_shell_prompt_symbol() {{
+  print -r -- '%F{{cyan}}❯%f'
+}}
+
+_j_shell_virtualenv() {{
+  if [ -n "$VIRTUAL_ENV" ]; then
+    print -r -- " %F{{blue}}($(basename "$VIRTUAL_ENV"))%f"
+  fi
+}}
+
+precmd() {{
+  local prompt_symbol git_dirty_segment virtualenv_segment
+  vcs_info
+  prompt_symbol=$(_j_shell_prompt_symbol)
+  git_dirty_segment=$(_j_shell_git_dirty)
+  virtualenv_segment=$(_j_shell_virtualenv)
+  PROMPT="
+%F{{green}}(%F{{cyan}}shell%F{{green}})%f${{virtualenv_segment}} %F{{cyan}}%~%f ${{vcs_info_msg_0_}}${{git_dirty_segment}}
+${{prompt_symbol}} "
+}}
+"#,
+        home = home,
+    )
+}
+
+fn build_bashrc_content(home: &str) -> String {
+    format!(
+        r#"# j shell 临时配置 - 自动生成，退出后自动清理
+if [ -f "{home}/.bashrc" ]; then
+  source "{home}/.bashrc"
+fi
+
+__j_shell_git_info() {{
+  local branch dirty
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) || return
+  dirty=""
+  if ! git diff --quiet --ignore-submodules --cached 2>/dev/null || \
+     ! git diff --quiet --ignore-submodules 2>/dev/null || \
+     [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
+    dirty=" ✱"
+  fi
+  printf ' \\[\033[35m\\] %s\\[\033[0m\\]\\[\033[33m\\]%s\\[\033[0m\\]' "$branch" "$dirty"
+}}
+
+__j_shell_virtualenv() {{
+  if [ -n "$VIRTUAL_ENV" ]; then
+    printf ' \\[\033[34m\\](%s)\\[\033[0m\\]' "$(basename "$VIRTUAL_ENV")"
+  fi
+}}
+
+__j_shell_set_prompt() {{
+  PS1="\n\\[\033[32m\\](\\[\033[36m\\]shell\\[\033[32m\\])\\[\033[0m\\]$(__j_shell_virtualenv) \\[\033[36m\\]\\w\\[\033[0m\\]$(__j_shell_git_info)\n\\[\033[36m\\]❯\\[\033[0m\\] "
+}}
+
+PROMPT_COMMAND=__j_shell_set_prompt
+"#,
+        home = home,
+    )
+}
+
 pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
     if cmd.is_empty() {
         return;
