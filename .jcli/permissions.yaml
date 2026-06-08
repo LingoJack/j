@@ -162,4 +162,6 @@ allow:
 - Shell(cargo fmt:*)
 - Shell(cd /Users/jacklingo/dev_custom/jcli/assets/reader:*)
 - Shell(npm run:*)
+- Shell(git status:*)
+- Shell(git restore:*)
 deny: []

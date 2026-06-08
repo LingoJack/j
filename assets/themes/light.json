@@ -9,7 +9,7 @@
   "border_input_loading": "#c8a03c",
   "border_config": "#bebec8",
   "separator": "#dcdce6",
-  "bubble_ai": "#ffffff",
+  "bubble_ai": "#f8f8fc",
   "bubble_ai_selected": "#e6f0ff",
   "bubble_user": "#dcebff",
   "bubble_user_selected": "#c8e1ff",
