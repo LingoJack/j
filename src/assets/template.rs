@@ -71,7 +71,7 @@ pub fn quotes_text() -> &'static str {
 /// 使用技巧文本
 ///
 /// 用途: 交互模式 prompt 上方随机展示一条使用技巧
-/// 格式: 纯文本，每行一条
+/// 格式: YAML，按功能域分组维护
 pub fn tips_text() -> &'static str {
-    include_str!("../../assets/tips.txt")
+    include_str!("../../assets/tips.yaml")
 }

@@ -714,6 +714,42 @@ fn pick_random_tip() -> String {
 }
 
 fn parse_tips(content: &str) -> Vec<&str> {
+    let tips = parse_yaml_tips(content);
+    if tips.is_empty() {
+        parse_legacy_tips(content)
+    } else {
+        tips
+    }
+}
+
+fn parse_yaml_tips(content: &str) -> Vec<&str> {
+    let mut tips = Vec::new();
+    let mut in_tips = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "tips:" {
+            in_tips = true;
+            continue;
+        }
+
+        if trimmed.ends_with(':') && !trimmed.starts_with('-') {
+            in_tips = false;
+            continue;
+        }
+
+        if in_tips && let Some(tip) = trimmed.strip_prefix("- ") {
+            let tip = tip.trim();
+            if !tip.is_empty() {
+                tips.push(tip);
+            }
+        }
+    }
+
+    tips
+}
+
+fn parse_legacy_tips(content: &str) -> Vec<&str> {
     content
         .lines()
         .map(str::trim)
