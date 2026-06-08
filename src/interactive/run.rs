@@ -137,7 +137,7 @@ fn build_prompt() -> String {
     let label = format!(
         "{}{}{}",
         "(".green(),
-        "jcli".bright_magenta().bold(),
+        "jcli".bright_blue().bold(),
         ")".green()
     );
     format!("\n{} {}{}\n{} ", label, cwd.cyan(), git_info, "❯".cyan())
