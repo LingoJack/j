@@ -446,7 +446,7 @@ fn build_persistent_shell_bootstrap(shell_path: &str) -> String {
     } else {
         ""
     };
-    let loop_script = "stty -echo 2>/dev/null; printf '%s:ready:%s\\n' \"$JCLI_SHELL_MARKER\" \"$PWD\"; while IFS= read -r __jcli_cmd; do eval \"$__jcli_cmd\"; done";
+    let loop_script = "stty -echo 2>/dev/null; printf '%s:ready:%s\\n' \"$JCLI_SHELL_MARKER\" \"$PWD\"; while IFS= read -r __jcli_cmd; do eval \"$__jcli_cmd\" < /dev/null; done";
     if rc_source.is_empty() {
         loop_script.to_string()
     } else {
