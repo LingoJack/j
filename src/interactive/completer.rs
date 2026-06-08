@@ -703,7 +703,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// 全局轮转计数器，保证每条 tip 依次出现
 static TIP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
-/// 从 tips.txt 中轮转选取一条使用技巧
+/// 从 tips.yaml 中轮转选取一条使用技巧
 fn pick_random_tip() -> String {
     let tips = parse_tips(crate::assets::tips_text());
     if tips.is_empty() {
@@ -724,21 +724,30 @@ fn parse_tips(content: &str) -> Vec<&str> {
 
 fn parse_yaml_tips(content: &str) -> Vec<&str> {
     let mut tips = Vec::new();
-    let mut in_tips = false;
+    let mut tips_indent = None;
 
     for line in content.lines() {
         let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let indent = line.len().saturating_sub(line.trim_start().len());
         if trimmed == "tips:" {
-            in_tips = true;
+            tips_indent = Some(indent);
             continue;
         }
 
-        if trimmed.ends_with(':') && !trimmed.starts_with('-') {
-            in_tips = false;
+        let Some(parent_indent) = tips_indent else {
+            continue;
+        };
+
+        if indent <= parent_indent {
+            tips_indent = None;
             continue;
         }
 
-        if in_tips && let Some(tip) = trimmed.strip_prefix("- ") {
+        if let Some(tip) = trimmed.strip_prefix("- ") {
             let tip = tip.trim();
             if !tip.is_empty() {
                 tips.push(tip);
