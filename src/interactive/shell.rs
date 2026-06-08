@@ -5,14 +5,12 @@ use crate::markdown::theme::MdStyle;
 use crate::theme::Theme;
 use crate::{error, info};
 use colored::Colorize;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use ratatui::style::{Color, Modifier, Style};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
 /// 进入交互式 shell 子进程
 pub fn enter_interactive_shell(config: &YamlConfig) {
@@ -340,62 +338,38 @@ enum MarkerScanState {
     InMarker { metadata: String },
 }
 
-fn key_event_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
-    match key.code {
-        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            control_char_to_byte(c).map(|byte| vec![byte])
-        }
-        KeyCode::Char(c) => Some(c.to_string().into_bytes()),
-        KeyCode::Enter => Some(vec![b'\r']),
-        KeyCode::Tab => Some(vec![b'\t']),
-        KeyCode::Backspace => Some(vec![0x7f]),
-        KeyCode::Esc => Some(vec![0x1b]),
-        KeyCode::Left => Some(b"\x1b[D".to_vec()),
-        KeyCode::Right => Some(b"\x1b[C".to_vec()),
-        KeyCode::Up => Some(b"\x1b[A".to_vec()),
-        KeyCode::Down => Some(b"\x1b[B".to_vec()),
-        KeyCode::Home => Some(b"\x1b[H".to_vec()),
-        KeyCode::End => Some(b"\x1b[F".to_vec()),
-        KeyCode::Delete => Some(b"\x1b[3~".to_vec()),
-        KeyCode::PageUp => Some(b"\x1b[5~".to_vec()),
-        KeyCode::PageDown => Some(b"\x1b[6~".to_vec()),
-        KeyCode::F(index) => function_key_to_bytes(index),
-        KeyCode::Null | KeyCode::CapsLock | KeyCode::ScrollLock | KeyCode::NumLock => None,
-        KeyCode::PrintScreen | KeyCode::Pause | KeyCode::Menu | KeyCode::KeypadBegin => None,
-        KeyCode::Media(_) | KeyCode::Modifier(_) => None,
-        KeyCode::BackTab => Some(b"\x1b[Z".to_vec()),
-        KeyCode::Insert => Some(b"\x1b[2~".to_vec()),
-    }
-}
-
-fn control_char_to_byte(c: char) -> Option<u8> {
-    let lower = c.to_ascii_lowercase();
-    if lower.is_ascii_lowercase() {
-        Some((lower as u8) - b'a' + 1)
-    } else if c == '[' {
-        Some(0x1b)
-    } else {
-        None
-    }
-}
-
-fn function_key_to_bytes(index: u8) -> Option<Vec<u8>> {
-    let sequence = match index {
-        1 => "\x1bOP",
-        2 => "\x1bOQ",
-        3 => "\x1bOR",
-        4 => "\x1bOS",
-        5 => "\x1b[15~",
-        6 => "\x1b[17~",
-        7 => "\x1b[18~",
-        8 => "\x1b[19~",
-        9 => "\x1b[20~",
-        10 => "\x1b[21~",
-        11 => "\x1b[23~",
-        12 => "\x1b[24~",
-        _ => return None,
+#[cfg(unix)]
+fn read_stdin_bytes() -> Option<Vec<u8>> {
+    let mut poll_fd = libc::pollfd {
+        fd: libc::STDIN_FILENO,
+        events: libc::POLLIN,
+        revents: 0,
     };
-    Some(sequence.as_bytes().to_vec())
+    // SAFETY: poll 只读取本进程 stdin fd 的就绪状态，poll_fd 指针有效且长度为 1。
+    let ready = unsafe { libc::poll(&mut poll_fd, 1, 10) };
+    if ready <= 0 || poll_fd.revents & libc::POLLIN == 0 {
+        return None;
+    }
+
+    let mut buf = [0_u8; 1024];
+    // SAFETY: buf 是有效可写缓冲区，STDIN_FILENO 由当前进程持有；read 返回的长度会检查后再使用。
+    let read_count = unsafe {
+        libc::read(
+            libc::STDIN_FILENO,
+            buf.as_mut_ptr().cast::<libc::c_void>(),
+            buf.len(),
+        )
+    };
+    if read_count <= 0 {
+        None
+    } else {
+        Some(buf[..read_count as usize].to_vec())
+    }
+}
+
+#[cfg(not(unix))]
+fn read_stdin_bytes() -> Option<Vec<u8>> {
+    None
 }
 
 impl ShellSession {
@@ -581,21 +555,11 @@ impl ShellSession {
     }
 
     fn forward_terminal_input(&mut self) {
-        match event::poll(Duration::from_millis(10)) {
-            Ok(true) => match event::read() {
-                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
-                    if let Some(bytes) = key_event_to_bytes(key) {
-                        let _ = self.writer.write_all(&bytes);
-                        let _ = self.writer.flush();
-                    }
-                }
-                Ok(Event::Resize(_, _)) => {}
-                Ok(_) => {}
-                Err(_) => {}
-            },
-            Ok(false) => {}
-            Err(_) => {}
-        }
+        let Some(bytes) = read_stdin_bytes() else {
+            return;
+        };
+        let _ = self.writer.write_all(&bytes);
+        let _ = self.writer.flush();
     }
 
     fn restore_reader_and_cwd(&mut self, result: PtyReadResult) -> bool {
