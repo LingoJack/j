@@ -134,13 +134,13 @@ fn history_file_path() -> std::path::PathBuf {
 fn build_prompt() -> String {
     let cwd = format_cwd();
     let git_info = format_git_info();
-    format!(
-        "\n{} {}{}\n{} ",
-        "(jcli)".green(),
-        cwd.cyan(),
-        git_info,
-        "❯".cyan()
-    )
+    let label = format!(
+        "{}{}{}",
+        "(".green(),
+        "jcli".bright_magenta().bold(),
+        ")".green()
+    );
+    format!("\n{} {}{}\n{} ", label, cwd.cyan(), git_info, "❯".cyan())
 }
 
 fn format_git_info() -> String {

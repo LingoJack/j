@@ -180,7 +180,7 @@ __j_shell_git_info() {{
   if ! git diff --quiet --ignore-submodules --cached 2>/dev/null || \
      ! git diff --quiet --ignore-submodules 2>/dev/null || \
      [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
-    dirty=" ✱"
+    dirty=" dirty"
   fi
   printf ' \\[\033[35m\\] %s\\[\033[0m\\]\\[\033[33m\\]%s\\[\033[0m\\]' "$branch" "$dirty"
 }}
@@ -214,8 +214,18 @@ pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
     } else {
         let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
         let mut c = std::process::Command::new(&shell_path);
-        if shell_path.contains("zsh") || shell_path.contains("bash") {
-            c.args(["-ic", cmd]);
+        if shell_path.contains("zsh") {
+            c.args([
+                shell::BASH_CMD_FLAG,
+                "source ~/.zshrc 2>/dev/null; eval \"$JCLI_INTERACTIVE_COMMAND\"",
+            ]);
+            c.env("JCLI_INTERACTIVE_COMMAND", cmd);
+        } else if shell_path.contains("bash") {
+            c.args([
+                shell::BASH_CMD_FLAG,
+                "shopt -s expand_aliases; source ~/.bashrc 2>/dev/null; eval \"$JCLI_INTERACTIVE_COMMAND\"",
+            ]);
+            c.env("JCLI_INTERACTIVE_COMMAND", cmd);
         } else {
             c.args([shell::BASH_CMD_FLAG, cmd]);
         }
