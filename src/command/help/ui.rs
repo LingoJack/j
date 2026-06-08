@@ -343,7 +343,6 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &HelpApp, main_area: Rect) {
             title,
             items: cmd_items,
             selected: app.cmd_popup_selected,
-            highlight_fg: Some(Color::Black),
             theme: app.theme(),
         },
     );

@@ -360,7 +360,6 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
             title,
             items: cmd_items,
             selected: app.cmd_popup_selected,
-            highlight_fg: None,
             theme: &app.theme,
         },
     );

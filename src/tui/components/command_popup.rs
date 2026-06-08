@@ -6,7 +6,7 @@ use crate::theme::Theme;
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState},
 };
@@ -35,8 +35,6 @@ pub struct CommandPopupConfig<'a> {
     pub items: Vec<CommandItem<'a>>,
     /// 当前选中索引
     pub selected: usize,
-    /// 高亮前景色（默认使用 `theme.bg_primary`）
-    pub highlight_fg: Option<Color>,
     /// 主题样式
     pub theme: &'a Theme,
 }
@@ -84,7 +82,6 @@ pub fn draw_command_popup(f: &mut Frame, main_area: Rect, config: &CommandPopupC
     let dim_color = t.text_dim;
     let popup_bg = t.bg_primary;
     let text_color = t.text_normal;
-    let highlight_fg = config.highlight_fg.unwrap_or(popup_bg);
 
     // 构建列表项：pointer + key + label
     let list_items: Vec<ListItem<'_>> = config
@@ -123,12 +120,7 @@ pub fn draw_command_popup(f: &mut Frame, main_area: Rect, config: &CommandPopupC
                 ))
                 .style(Style::default().bg(popup_bg)),
         )
-        .highlight_style(
-            Style::default()
-                .bg(accent)
-                .fg(highlight_fg)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     f.render_widget(Clear, popup_area);
     f.render_stateful_widget(list, popup_area, &mut list_state);

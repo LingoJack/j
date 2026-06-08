@@ -512,7 +512,6 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
             title,
             items: cmd_items,
             selected: app.cmd_popup_selected,
-            highlight_fg: Some(Color::Black),
             theme: &app.theme,
         },
     );
@@ -538,7 +537,6 @@ fn draw_completion_popup(f: &mut ratatui::Frame, app: &NotebookApp, main_area: R
             title,
             items: cmd_items,
             selected: app.completion_selected,
-            highlight_fg: Some(Color::Black),
             theme: &app.theme,
         },
     );

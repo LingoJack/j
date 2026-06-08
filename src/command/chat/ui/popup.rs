@@ -19,8 +19,24 @@ pub(crate) struct PopupConfig {
     pub title_color: ratatui::style::Color,
     pub border_color: ratatui::style::Color,
     pub bg_color: ratatui::style::Color,
-    pub highlight_bg: ratatui::style::Color,
-    pub highlight_fg: ratatui::style::Color,
+}
+
+fn selected_reverse(is_selected: bool) -> Modifier {
+    if is_selected {
+        Modifier::REVERSED
+    } else {
+        Modifier::empty()
+    }
+}
+
+fn popup_item_style(color: Color, is_selected: bool) -> Style {
+    Style::default()
+        .fg(color)
+        .add_modifier(selected_reverse(is_selected))
+}
+
+fn popup_item_bold_style(color: Color, is_selected: bool) -> Style {
+    popup_item_style(color, is_selected).add_modifier(Modifier::BOLD)
 }
 
 /// 通用浮动弹窗列表渲染（输入区上方）
@@ -74,12 +90,7 @@ pub(crate) fn draw_popup_list(
                 ))
                 .style(Style::default().bg(cfg.bg_color)),
         )
-        .highlight_style(
-            Style::default()
-                .bg(cfg.highlight_bg)
-                .fg(cfg.highlight_fg)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     f.render_widget(Clear, popup_area);
     f.render_stateful_widget(list, popup_area, &mut list_state);
@@ -124,29 +135,41 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
                     // 分类分隔行：显示为 "skill:" 风格的暗色标签
                     ListItem::new(Line::from(vec![Span::styled(
                         format!("  {s}"),
-                        Style::default().fg(t.text_dim),
+                        popup_item_style(t.text_dim, is_selected),
                     )]))
                 }
                 AtPopupItem::Skill(s) => {
                     let pointer = if is_selected { "❯ " } else { "  " };
                     ListItem::new(Line::from(vec![
-                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                        Span::styled(
+                            pointer.to_string(),
+                            popup_item_style(t.text_normal, is_selected),
+                        ),
                         Span::styled(
                             "[skill]   ".to_string(),
-                            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                            popup_item_bold_style(t.label_ai, is_selected),
                         ),
-                        Span::styled(s.as_str().to_string(), Style::default().fg(t.text_white)),
+                        Span::styled(
+                            s.as_str().to_string(),
+                            popup_item_style(t.text_white, is_selected),
+                        ),
                     ]))
                 }
                 AtPopupItem::Command(s) => {
                     let pointer = if is_selected { "❯ " } else { "  " };
                     ListItem::new(Line::from(vec![
-                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                        Span::styled(
+                            pointer.to_string(),
+                            popup_item_style(t.text_normal, is_selected),
+                        ),
                         Span::styled(
                             "[command] ".to_string(),
-                            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                            popup_item_bold_style(t.label_ai, is_selected),
                         ),
-                        Span::styled(s.as_str().to_string(), Style::default().fg(t.text_white)),
+                        Span::styled(
+                            s.as_str().to_string(),
+                            popup_item_style(t.text_white, is_selected),
+                        ),
                     ]))
                 }
                 AtPopupItem::File(s) => {
@@ -181,8 +204,6 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -237,8 +258,6 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -291,8 +310,6 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -369,8 +386,6 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
-        highlight_bg: t.md_h1,
-        highlight_fg: t.bg_primary,
     };
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
@@ -449,8 +464,6 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
             title_color: t.md_h1,
             border_color: t.md_h1,
             bg_color: t.bg_primary,
-            highlight_bg: t.md_h1,
-            highlight_fg: t.bg_primary,
         },
     );
 }
