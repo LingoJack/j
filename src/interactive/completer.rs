@@ -705,13 +705,19 @@ static TIP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 /// 从 tips.txt 中轮转选取一条使用技巧
 fn pick_random_tip() -> String {
-    let tips: Vec<&str> = crate::assets::tips_text()
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .collect();
+    let tips = parse_tips(crate::assets::tips_text());
     if tips.is_empty() {
         return String::new();
     }
     let index = TIP_INDEX.fetch_add(1, Ordering::Relaxed) % tips.len();
     format!("({})", tips[index])
+}
+
+fn parse_tips(content: &str) -> Vec<&str> {
+    content
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix("- ").map(str::trim))
+        .filter(|line| !line.is_empty())
+        .collect()
 }
