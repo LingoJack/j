@@ -1,7 +1,7 @@
 use super::completer::CopilotHelper;
 use super::parser::execute_interactive_command;
 use super::shell::{
-    enter_interactive_shell, execute_shell_command, expand_env_vars, inject_envs_to_process,
+    ShellSession, enter_interactive_shell, expand_env_vars, inject_envs_to_process,
 };
 use crate::config::YamlConfig;
 use crate::constants::{HISTORY_FILE, SHELL_PREFIX_CN, SHELL_PREFIX_EN, WELCOME_MESSAGE, cmd};
@@ -44,6 +44,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
     info!("{}", WELCOME_MESSAGE);
 
     inject_envs_to_process(config);
+    let mut shell_session: Option<ShellSession> = None;
 
     loop {
         let prompt = build_prompt();
@@ -65,7 +66,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     if shell_cmd.is_empty() {
                         enter_interactive_shell(config);
                     } else {
-                        execute_shell_command(shell_cmd, config);
+                        execute_with_shell_session(&mut shell_session, shell_cmd, config);
                     }
                     let _ = rl.add_history_entry(input);
                     println!();
@@ -93,7 +94,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     let _ = rl.add_history_entry(input);
                 }
 
-                execute_interactive_command(&args, input, config);
+                execute_interactive_command(&args, input, config, &mut shell_session);
 
                 if let Some(start) = start {
                     let elapsed = start.elapsed();
@@ -123,6 +124,21 @@ pub fn run_interactive(config: &mut YamlConfig) {
     }
 
     let _ = rl.save_history(&history_path);
+}
+
+fn execute_with_shell_session(
+    shell_session: &mut Option<ShellSession>,
+    cmd: &str,
+    config: &YamlConfig,
+) {
+    if shell_session.is_none() {
+        *shell_session = ShellSession::new(config);
+    }
+    if let Some(session) = shell_session.as_mut()
+        && !session.execute(cmd)
+    {
+        *shell_session = ShellSession::new(config);
+    }
 }
 
 fn history_file_path() -> std::path::PathBuf {

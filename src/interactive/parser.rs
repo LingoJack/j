@@ -2,9 +2,10 @@
 const DEFAULT_REMOTE_PORT: u16 = 9390;
 
 use crate::cli::SubCmd;
+use crate::command;
 use crate::config::YamlConfig;
 use crate::constants::cmd;
-use crate::{command, info};
+use crate::info;
 use colored::Colorize;
 
 /// 交互命令解析结果（三态）
@@ -18,7 +19,12 @@ pub enum ParseResult {
 }
 
 /// 在交互模式下执行命令
-pub fn execute_interactive_command(args: &[String], raw_input: &str, config: &mut YamlConfig) {
+pub fn execute_interactive_command(
+    args: &[String],
+    raw_input: &str,
+    config: &mut YamlConfig,
+    shell_session: &mut Option<super::shell::ShellSession>,
+) {
     if args.is_empty() {
         return;
     }
@@ -43,7 +49,14 @@ pub fn execute_interactive_command(args: &[String], raw_input: &str, config: &mu
                     "(shell)".green(),
                     super::shell::highlight_shell_command(raw_input)
                 );
-                super::shell::execute_shell_command(raw_input, config);
+                if shell_session.is_none() {
+                    *shell_session = super::shell::ShellSession::new(config);
+                }
+                if let Some(session) = shell_session.as_mut()
+                    && !session.execute(raw_input)
+                {
+                    *shell_session = super::shell::ShellSession::new(config);
+                }
             }
         }
     }

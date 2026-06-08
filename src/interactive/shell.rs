@@ -5,7 +5,9 @@ use crate::markdown::theme::MdStyle;
 use crate::theme::Theme;
 use crate::{error, info};
 use colored::Colorize;
+use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use ratatui::style::{Color, Modifier, Style};
+use std::io::{BufRead, BufReader, Read, Write};
 
 /// 进入交互式 shell 子进程
 pub fn enter_interactive_shell(config: &YamlConfig) {
@@ -201,47 +203,7 @@ PROMPT_COMMAND=__j_shell_set_prompt
     )
 }
 
-pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
-    if cmd.is_empty() {
-        return;
-    }
-
-    let os = std::env::consts::OS;
-    let mut command = if os == shell::WINDOWS_OS {
-        let mut c = std::process::Command::new(shell::WINDOWS_CMD);
-        c.args([shell::WINDOWS_CMD_FLAG, cmd]);
-        c
-    } else {
-        let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
-        let mut c = std::process::Command::new(&shell_path);
-        if shell_path.contains("zsh") {
-            c.args([
-                shell::BASH_CMD_FLAG,
-                "source ~/.zshrc 2>/dev/null; eval \"$JCLI_INTERACTIVE_COMMAND\"",
-            ]);
-            c.env("JCLI_INTERACTIVE_COMMAND", cmd);
-        } else if shell_path.contains("bash") {
-            c.args([
-                shell::BASH_CMD_FLAG,
-                "shopt -s expand_aliases; source ~/.bashrc 2>/dev/null; eval \"$JCLI_INTERACTIVE_COMMAND\"",
-            ]);
-            c.env("JCLI_INTERACTIVE_COMMAND", cmd);
-        } else {
-            c.args([shell::BASH_CMD_FLAG, cmd]);
-        }
-        c
-    };
-
-    for (key, value) in config.collect_alias_envs() {
-        command.env(&key, &value);
-    }
-
-    if let Err(e) = command.status() {
-        error!("执行命令失败: {}", e);
-    }
-}
-
-/// 高亮展示 shell 命令（复用 Markdown 代码块里的 shell/bash 语法高亮）
+/// 高亮展示 shell 命令，复用 Chat Markdown 代码块的 bash 语法高亮。
 pub fn highlight_shell_command(cmd: &str) -> String {
     let theme = Theme::terminal().code_syntax_theme();
     highlight_code_line(cmd, "bash", &theme)
@@ -290,6 +252,205 @@ fn fg_to_ansi(color: Color) -> String {
         Color::Rgb(r, g, b) => format!("\x1b[38;2;{};{};{}m", r, g, b),
         Color::Indexed(i) => format!("\x1b[38;5;{}m", i),
         Color::Reset => "\x1b[39m".to_string(),
+    }
+}
+
+pub struct ShellSession {
+    child: Box<dyn portable_pty::Child + Send + Sync>,
+    _master: Box<dyn MasterPty + Send>,
+    writer: Box<dyn Write + Send>,
+    reader: BufReader<Box<dyn Read + Send>>,
+    marker: String,
+}
+
+impl ShellSession {
+    const MARKER_PREFIX: &'static str = "__JCLI_SHELL_DONE_";
+
+    pub fn new(config: &YamlConfig) -> Option<Self> {
+        let os = std::env::consts::OS;
+        if os == shell::WINDOWS_OS {
+            return None;
+        }
+
+        let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
+        let marker = format!("{}{}", Self::MARKER_PREFIX, std::process::id());
+        let pty_system = NativePtySystem::default();
+        let pair = match pty_system.openpty(PtySize {
+            rows: 30,
+            cols: 120,
+            pixel_width: 0,
+            pixel_height: 0,
+        }) {
+            Ok(pair) => pair,
+            Err(err) => {
+                error!("启动 shell PTY 失败: {}", err);
+                return None;
+            }
+        };
+
+        let mut command = CommandBuilder::new(&shell_path);
+        command.arg(shell::BASH_CMD_FLAG);
+        command.arg(build_persistent_shell_bootstrap(&shell_path));
+        command.env("JCLI_SHELL_MARKER", &marker);
+        command.env("TERM", "xterm-256color");
+        command.env("CLICOLOR_FORCE", "1");
+        command.env("GIT_PAGER", "cat");
+        if let Ok(current_dir) = std::env::current_dir() {
+            command.cwd(current_dir.as_os_str());
+            command.env("PWD", current_dir.as_os_str());
+        }
+
+        for (key, value) in config.collect_alias_envs() {
+            command.env(&key, &value);
+        }
+
+        let child = match pair.slave.spawn_command(command) {
+            Ok(child) => child,
+            Err(err) => {
+                error!("启动 shell 会话失败: {}", err);
+                return None;
+            }
+        };
+
+        let reader = match pair.master.try_clone_reader() {
+            Ok(reader) => reader,
+            Err(err) => {
+                error!("启动 shell 会话失败: 无法打开 reader: {}", err);
+                return None;
+            }
+        };
+        let writer = match pair.master.take_writer() {
+            Ok(writer) => writer,
+            Err(err) => {
+                error!("启动 shell 会话失败: 无法打开 writer: {}", err);
+                return None;
+            }
+        };
+
+        let mut session = Self {
+            child,
+            _master: pair.master,
+            writer,
+            reader: BufReader::new(reader),
+            marker,
+        };
+        if !session.wait_until_ready() {
+            return None;
+        }
+        Some(session)
+    }
+
+    fn wait_until_ready(&mut self) -> bool {
+        let marker_prefix = format!("{}:ready:", self.marker);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match self.reader.read_line(&mut line) {
+                Ok(0) => {
+                    error!("shell 会话启动后立即退出");
+                    return false;
+                }
+                Ok(_) => {
+                    let normalized = line.trim_matches(['\r', '\n']);
+                    if normalized.starts_with(&marker_prefix) {
+                        return true;
+                    }
+                }
+                Err(err) => {
+                    error!("读取 shell 启动输出失败: {}", err);
+                    return false;
+                }
+            }
+        }
+    }
+
+    pub fn execute(&mut self, cmd: &str) -> bool {
+        if cmd.trim().is_empty() {
+            return true;
+        }
+
+        let marker_command = format!("\nprintf '%s:%s:%s\\n' '{}' \"$?\" \"$PWD\"\n", self.marker);
+        if writeln!(self.writer, "{}", cmd)
+            .and_then(|()| write!(self.writer, "{}", marker_command))
+            .and_then(|()| self.writer.flush())
+            .is_err()
+        {
+            error!("shell 会话已不可用");
+            return false;
+        }
+
+        self.read_until_marker()
+    }
+
+    fn read_until_marker(&mut self) -> bool {
+        let marker_prefix = format!("{}:", self.marker);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match self.reader.read_line(&mut line) {
+                Ok(0) => {
+                    error!("shell 会话已退出");
+                    return false;
+                }
+                Ok(_) => {
+                    let normalized = line.trim_matches(['\r', '\n']);
+                    if let Some(metadata) = normalized.strip_prefix(&marker_prefix) {
+                        self.sync_cwd_from_marker(metadata);
+                        return true;
+                    }
+                    print!("{}", line);
+                    let _ = std::io::stdout().flush();
+                }
+                Err(err) => {
+                    error!("读取 shell 输出失败: {}", err);
+                    return false;
+                }
+            }
+        }
+    }
+
+    fn sync_cwd_from_marker(&self, metadata: &str) {
+        let Some((_, pwd)) = metadata.split_once(':') else {
+            return;
+        };
+        if pwd.is_empty() {
+            return;
+        }
+
+        if std::env::set_current_dir(pwd).is_err() {
+            return;
+        }
+
+        // SAFETY: 普通交互 REPL 单线程串行执行命令；这里同步 shell 会话 cwd 到
+        // 当前进程环境，供 prompt 和后续子进程使用。
+        unsafe {
+            std::env::set_var("PWD", pwd);
+        }
+    }
+}
+
+impl Drop for ShellSession {
+    fn drop(&mut self) {
+        let _ = writeln!(self.writer, "exit");
+        let _ = self.writer.flush();
+        let _ = self.child.wait();
+    }
+}
+
+fn build_persistent_shell_bootstrap(shell_path: &str) -> String {
+    let rc_source = if shell_path.contains("zsh") {
+        "source ~/.zshrc 2>/dev/null"
+    } else if shell_path.contains("bash") {
+        "shopt -s expand_aliases; source ~/.bashrc 2>/dev/null"
+    } else {
+        ""
+    };
+    let loop_script = "stty -echo 2>/dev/null; printf '%s:ready:%s\\n' \"$JCLI_SHELL_MARKER\" \"$PWD\"; while IFS= read -r __jcli_cmd; do eval \"$__jcli_cmd\"; done";
+    if rc_source.is_empty() {
+        loop_script.to_string()
+    } else {
+        format!("{}; {}", rc_source, loop_script)
     }
 }
 
