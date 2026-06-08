@@ -89,7 +89,7 @@ impl ThemeColor {
     pub fn apply_fg(self, style: Style) -> Style {
         match self {
             Self::Color(color) => style.fg(color),
-            Self::Reverse => style.add_modifier(Modifier::REVERSED),
+            Self::Reverse => style.fg(Color::Reset),
         }
     }
 

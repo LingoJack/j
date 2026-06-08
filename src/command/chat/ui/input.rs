@@ -2,10 +2,11 @@
 //!
 //! 提取自 chat.rs，处理用户输入框的渲染、折行、光标位置计算和 @mention 高亮。
 
+use crate::theme::ThemeColor;
 use crate::util::safe_lock;
 use ratatui::{
     layout::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
 };
@@ -93,9 +94,14 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let input_text_no_nl: String = input_text.chars().filter(|&c| c != '\n').collect();
     let mention_ranges = compute_mention_ranges(app, &input_text, &input_text_no_nl);
     let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
+    let input_text_style = if matches!(t.input_text, ThemeColor::Reverse) {
+        t.input_text.apply_fg(Style::default().bg(Color::Reset))
+    } else {
+        t.input_text.apply_fg(Style::default())
+    };
     let line_styles = InputLineStyles {
         mention: mention_style,
-        input_text: t.input_text.apply_fg(Style::default()),
+        input_text: input_text_style,
         cursor: Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
     };
 

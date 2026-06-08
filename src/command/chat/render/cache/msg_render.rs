@@ -1,6 +1,7 @@
 //! 基础消息渲染：用户气泡、AI 气泡、思考内容折叠
 
 use crate::command::chat::storage::DisplayHint;
+use crate::theme::ThemeColor;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -196,6 +197,12 @@ pub fn render_user_msg(
         theme.border_message
     };
     // 内容行：│ + pad + content + fill + pad + │
+    let user_text_base = if matches!(theme.user_text, ThemeColor::Reverse) {
+        Style::default().bg(Color::Reset)
+    } else {
+        Style::default().bg(user_bg)
+    };
+    let user_text_style = theme.user_text.apply_fg(user_text_base);
 
     // 顶行：╭─...─╮
     {
@@ -221,10 +228,7 @@ pub fn render_user_msg(
             Span::raw(" ".repeat(pad)),
             Span::styled("│", Style::default().fg(border_color).bg(user_bg)),
             Span::styled(" ".repeat(user_pad_lr), Style::default().bg(user_bg)),
-            Span::styled(
-                wl.clone(),
-                theme.user_text.apply_fg(Style::default().bg(user_bg)),
-            ),
+            Span::styled(wl.clone(), user_text_style),
             Span::styled(" ".repeat(fill), Style::default().bg(user_bg)),
             Span::styled(" ".repeat(user_pad_lr), Style::default().bg(user_bg)),
             Span::styled("│", Style::default().fg(border_color).bg(user_bg)),
