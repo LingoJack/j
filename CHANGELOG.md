@@ -1,3 +1,24 @@
+# v12.10.103
+
+
+### 新功能
+
+- **交互式 Shell 会话复用**: `! <command>` 现在会复用持久 Shell PTY 会话执行命令，支持保留 shell alias、环境初始化和命令间工作目录状态。
+- **Shell 命令补全**: 交互模式补全增强，支持从 `PATH` 中补全可执行命令，并读取 zsh/bash alias 作为补全候选。
+- **分组使用技巧**: 使用技巧从纯文本改为 YAML 分组维护，便于按 shell、prompt、completion、chat、alias 等功能域分类展示。
+
+### 改进
+
+- **交互 Prompt**: jcli REPL prompt 改为显示当前目录、Git 分支以及工作区 dirty 标记，命令输出与下一次输入之间增加空行提升可读性。
+- **Shell 代理交互体验**: Shell 命令执行改为代理终端输入输出，支持方向键、Tab、Ctrl 组合键、功能键等常见交互按键转发。
+- **Shell 工作目录同步**: Shell 命令执行完成后会将子 Shell 的当前目录同步回 jcli 进程，保证后续 prompt 和命令基于正确目录。
+
+### Bug 修复
+
+- **持久 Shell 输入读取**: 修复命令执行时可能误读持久 Shell 输入的问题，通过完成标记识别命令结束并恢复 reader 状态。
+- **交互式 Shell 代理状态**: 修复 Shell 输出代理状态恢复不完整的问题，确保 raw mode 退出、reader 恢复和 cwd 同步更可靠。
+- **Tips YAML 解析**: 修复 YAML 使用技巧解析时对缩进层级处理不准确的问题，并保留旧格式回退解析。
+
 # v12.10.102
 
 
