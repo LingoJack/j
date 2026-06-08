@@ -5,7 +5,7 @@ use crate::markdown::theme::MdStyle;
 use crate::theme::Theme;
 use crate::{error, info};
 use colored::Colorize;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size as terminal_size};
 use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use ratatui::style::{Color, Modifier, Style};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -258,9 +258,26 @@ fn fg_to_ansi(color: Color) -> String {
     }
 }
 
+fn current_pty_size() -> PtySize {
+    match terminal_size() {
+        Ok((cols, rows)) => PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        },
+        Err(_) => PtySize {
+            rows: 30,
+            cols: 120,
+            pixel_width: 0,
+            pixel_height: 0,
+        },
+    }
+}
+
 pub struct ShellSession {
     child: Box<dyn portable_pty::Child + Send + Sync>,
-    _master: Box<dyn MasterPty + Send>,
+    master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     reader: Option<BufReader<Box<dyn Read + Send>>>,
     marker: String,
@@ -384,12 +401,7 @@ impl ShellSession {
         let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
         let marker = format!("{}{}", Self::MARKER_PREFIX, std::process::id());
         let pty_system = NativePtySystem::default();
-        let pair = match pty_system.openpty(PtySize {
-            rows: 30,
-            cols: 120,
-            pixel_width: 0,
-            pixel_height: 0,
-        }) {
+        let pair = match pty_system.openpty(current_pty_size()) {
             Ok(pair) => pair,
             Err(err) => {
                 error!("启动 shell PTY 失败: {}", err);
@@ -438,7 +450,7 @@ impl ShellSession {
 
         let mut session = Self {
             child,
-            _master: pair.master,
+            master: pair.master,
             writer,
             reader: Some(BufReader::new(reader)),
             marker,
@@ -482,6 +494,7 @@ impl ShellSession {
             return true;
         }
 
+        self.sync_terminal_size();
         if writeln!(self.writer, "{}", cmd)
             .and_then(|()| self.writer.flush())
             .is_err()
@@ -525,6 +538,7 @@ impl ShellSession {
                     finished = true;
                 }
                 Err(mpsc::TryRecvError::Empty) => {
+                    self.sync_terminal_size();
                     self.forward_terminal_input();
                 }
             }
@@ -552,6 +566,10 @@ impl ShellSession {
                 false
             }
         }
+    }
+
+    fn sync_terminal_size(&mut self) {
+        let _ = self.master.resize(current_pty_size());
     }
 
     fn forward_terminal_input(&mut self) {
