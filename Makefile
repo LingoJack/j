@@ -37,7 +37,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         pre-commit \
         build-remote \
         reader-init reader-dev reader-build reader-install reader-uninstall reader-clean \
-        jstudio-status jstudio-commit jstudio-push \
+        jstudio-status jstudio-commit jstudio-push jstudio-push-non-ai \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -209,25 +209,81 @@ jstudio-status: ## 查看 jstudio submodule 状态
 	@echo "🔍 jstudio submodule 状态:"
 	@git -C $(READER_DIR) status --short --branch --untracked-files=all
 
-jstudio-commit: ## 提交 jstudio submodule 代码（MSG='message' 可指定提交信息）
-	@echo "📝 提交 jstudio submodule 代码..."
+jstudio-commit: ## 提交 jstudio submodule 代码（非 AI，自动生成 message）
+	@echo "📝 自动提交 jstudio submodule 代码..."
 	@cd $(READER_DIR) && \
 		git add . && \
-		if git diff --cached --quiet; then \
+		staged_files=$$(git diff --cached --name-only 2>/dev/null); \
+		if [ -z "$$staged_files" ]; then \
 			echo "ℹ️ jstudio 没有待提交变更"; \
+			exit 0; \
+		fi; \
+		file_count=$$(echo "$$staged_files" | wc -l | tr -d ' '); \
+		if [ "$$file_count" -eq 1 ]; then \
+			msg="update: $$(echo "$$staged_files" | head -1)"; \
 		else \
-			msg="$${MSG:-update: jstudio reader app}"; \
-			git commit -m "$$msg"; \
-			echo "☑️ jstudio 已提交: $$msg"; \
-		fi
+			first=$$(echo "$$staged_files" | head -1); \
+			msg="update: $$first and $$((file_count - 1)) other file(s)"; \
+		fi; \
+		git commit -m "$$msg"; \
+		echo "☑️ jstudio 已提交: $$msg"
 	@echo "🔗 更新主仓库 submodule 指针..."
 	@git add $(READER_DIR)
 	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
 
-jstudio-push: jstudio-commit ## 提交并推送 jstudio submodule 代码（MSG='message' 可指定提交信息）
-	@echo "📤 推送 jstudio submodule..."
-	@cd $(READER_DIR) && git push origin HEAD
-	@echo "☑️ jstudio 已推送"
+jstudio-push: ## AI 生成 commit message 并推送 jstudio submodule
+	@echo "🤖 AI 生成 jstudio 变更说明..."
+	@cd $(READER_DIR) && \
+		diff_stat="$$(git diff --stat 2>/dev/null)"; \
+		if [ -z "$$diff_stat" ]; then \
+			diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
+		fi; \
+		if [ -z "$$diff_stat" ]; then \
+			echo "ℹ️ jstudio 没有检测到本地变更，直接 push 已有 commits..."; \
+			git push origin HEAD; \
+			exit 0; \
+		fi; \
+		prompt_file=$$(mktemp); \
+		stat_file=$$(mktemp); \
+		diff_file=$$(mktemp); \
+		trap 'rm -f "$$prompt_file" "$$stat_file" "$$diff_file"' EXIT; \
+		printf '%s\n' "$$diff_stat" > "$$stat_file"; \
+		git diff 2>/dev/null | head -200 > "$$diff_file"; \
+		awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" ' \
+			/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
+			/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
+			{ print }' ../../prompts/commit-message.md > "$$prompt_file"; \
+		ai_out=$$(mktemp); \
+		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+		echo ""; \
+		echo "📄 AI 原始输出:"; \
+		echo "----------------------------------------"; \
+		cat "$$ai_out"; \
+		echo "----------------------------------------"; \
+		msg=$$(perl -0777 -pe 's/<\s*\/\s*result\s*>/<\/result>/g' "$$ai_out" | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'); \
+		rm -f "$$ai_out"; \
+		if [ -z "$$msg" ]; then msg="更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
+		git add . && git commit -m "$$msg" && git push origin HEAD; \
+		echo "✅ jstudio 已推送: $$msg"
+	@echo "🔗 更新主仓库 submodule 指针..."
+	@git add $(READER_DIR)
+	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
+
+jstudio-push-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG='message' 可指定提交信息）
+	@echo "📤 非 AI 推送 jstudio submodule..."
+	@cd $(READER_DIR) && \
+		git add . && \
+		if git diff --cached --quiet; then \
+			echo "ℹ️ jstudio 没有待提交变更，直接 push 已有 commits..."; \
+			git push origin HEAD; \
+		else \
+			msg="$${MSG:-更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')}"; \
+			git commit -m "$$msg" && git push origin HEAD; \
+			echo "☑️ jstudio 已推送: $$msg"; \
+		fi
+	@echo "🔗 更新主仓库 submodule 指针..."
+	@git add $(READER_DIR)
+	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
 
 reader-uninstall: ## 卸载 reader app（macOS）
 	@echo "🗑️  卸载 jstudio reader..."
