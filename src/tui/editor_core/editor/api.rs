@@ -1,7 +1,10 @@
 //! Markdown 编辑器公共 API 入口
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    event::{
+        self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        Event,
+    },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -60,6 +63,8 @@ pub fn open_markdown_editor_on_terminal(
                 }
             } else if let Event::Mouse(mouse) = evt {
                 editor.handle_mouse(mouse, area);
+            } else if let Event::Paste(text) = evt {
+                editor.insert_text(&text);
             }
         }
     }
@@ -75,7 +80,8 @@ pub fn open_markdown_editor(
     execute!(
         stdout,
         EnterAlternateScreen,
-        EnableMouseCapture // 启用鼠标事件捕获
+        EnableMouseCapture,   // 启用鼠标事件捕获
+        EnableBracketedPaste  // 启用粘贴事件
     )?;
 
     let backend = CrosstermBackend::new(stdout);
@@ -86,6 +92,7 @@ pub fn open_markdown_editor(
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        DisableBracketedPaste, // 禁用粘贴事件
         LeaveAlternateScreen,
         DisableMouseCapture // 禁用鼠标事件捕获
     )?;
