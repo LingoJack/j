@@ -354,7 +354,14 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
                     format!("{:<16}", name),
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(desc.clone(), Style::default().fg(t.text_dim)),
+                Span::styled(
+                    desc.clone(),
+                    if is_selected {
+                        t.popup_highlight_fg.apply_fg(Style::default())
+                    } else {
+                        Style::default().fg(t.text_dim)
+                    },
+                ),
             ]))
         })
         .collect();
@@ -428,7 +435,14 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
                     padded_label,
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(cmd.description(), Style::default().fg(t.text_dim)),
+                Span::styled(
+                    cmd.description(),
+                    if is_selected {
+                        t.popup_highlight_fg.apply_fg(Style::default())
+                    } else {
+                        Style::default().fg(t.text_dim)
+                    },
+                ),
             ]))
         })
         .collect();
