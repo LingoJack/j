@@ -4,8 +4,8 @@
 
 use crate::theme::Theme;
 use crate::tui::components::{
-    LABEL_WIDTH, TOGGLE_OFF, TOGGLE_ON, cursor_spans, desc_span, label_span, pointer_span,
-    value_style,
+    LABEL_WIDTH, TOGGLE_OFF, TOGGLE_ON, cursor_spans, desc_span_with_selected, label_span,
+    pointer_span, value_style,
 };
 use crate::util::text::display_width;
 use ratatui::{
@@ -143,7 +143,7 @@ pub(crate) fn global_text_row<'a>(
             label_span(&ctx.label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(display_value, vs),
-            desc_span(&ctx.desc, 30, theme),
+            desc_span_with_selected(&ctx.desc, 30, selected, theme),
         ])
     }
 }
@@ -152,7 +152,11 @@ pub(crate) fn global_text_row<'a>(
 pub(crate) fn global_toggle_row<'a>(is_on: bool, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
     let selected = ctx.selected;
     let theme = ctx.theme;
-    let toggle_style = if is_on {
+    let toggle_style = if selected {
+        Style::default()
+            .fg(theme.text_normal)
+            .add_modifier(Modifier::BOLD)
+    } else if is_on {
         Style::default()
             .fg(theme.config_toggle_on)
             .add_modifier(Modifier::BOLD)
@@ -169,14 +173,18 @@ pub(crate) fn global_toggle_row<'a>(is_on: bool, ctx: &GlobalRowCtx<'_>) -> Line
         label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(toggle_text, toggle_style),
-        desc_span(&ctx.desc, 30, theme),
+        desc_span_with_selected(&ctx.desc, 30, selected, theme),
         Span::styled(
             if selected {
                 format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },
-            Style::default().fg(theme.config_dim),
+            if selected {
+                Style::default().fg(theme.config_label_selected)
+            } else {
+                Style::default().fg(theme.config_dim)
+            },
         ),
     ])
 }
@@ -191,14 +199,18 @@ pub fn global_preview_row<'a>(raw: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
         label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(render_preview_value(raw), vs),
-        desc_span(&ctx.desc, 30, theme),
+        desc_span_with_selected(&ctx.desc, 30, selected, theme),
         Span::styled(
             if selected {
                 format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },
-            Style::default().fg(theme.config_dim),
+            if selected {
+                Style::default().fg(theme.config_label_selected)
+            } else {
+                Style::default().fg(theme.config_dim)
+            },
         ),
     ])
 }
@@ -213,18 +225,28 @@ pub fn global_theme_row<'a>(name: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
         Span::styled("  ", Style::default()),
         Span::styled(
             format!("\u{1f3a8} {name}"),
-            Style::default()
-                .fg(theme.config_toggle_on)
-                .add_modifier(Modifier::BOLD),
+            if selected {
+                Style::default()
+                    .fg(theme.text_normal)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(theme.config_toggle_on)
+                    .add_modifier(Modifier::BOLD)
+            },
         ),
-        desc_span(&ctx.desc, 30, theme),
+        desc_span_with_selected(&ctx.desc, 30, selected, theme),
         Span::styled(
             if selected {
                 format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },
-            Style::default().fg(theme.config_dim),
+            if selected {
+                Style::default().fg(theme.config_label_selected)
+            } else {
+                Style::default().fg(theme.config_dim)
+            },
         ),
     ])
 }

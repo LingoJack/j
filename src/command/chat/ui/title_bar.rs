@@ -155,7 +155,7 @@ pub fn draw_title_bar(
         Span::styled(
             "Sprite",
             Style::default()
-                .fg(t.text_white)
+                .fg(t.text_normal)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
@@ -346,7 +346,7 @@ fn build_teammate_entry(
         Span::styled(
             safe_name.clone(),
             Style::default()
-                .fg(t.text_white)
+                .fg(t.text_normal)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(" [", Style::default().fg(t.text_dim)),
@@ -425,7 +425,7 @@ fn build_subagent_entry(
         Span::styled(
             name.clone(),
             Style::default()
-                .fg(t.text_white)
+                .fg(t.text_normal)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(" [", Style::default().fg(t.text_dim)),

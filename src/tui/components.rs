@@ -23,7 +23,7 @@ pub use consts::*;
 pub use cursor::{cursor_spans, cursor_wrapped_lines};
 pub use help_page::{HelpPageConfig, HelpShortcut, draw_help_page};
 pub use hint::{help_key_row, hint_spans};
-pub use label::{desc_span, label_span, value_style};
+pub use label::{desc_span_with_selected, label_span, value_style};
 pub use list::ItemList;
 pub use pointer::pointer_span;
 pub use row::{

@@ -113,7 +113,7 @@ function renderOneInline(inline: Inline, baseDir: string | null): Node {
     }
 
     case 'soft_break':
-      return document.createTextNode(' ')
+      return document.createElement('br')
 
     case 'hard_break':
       return document.createElement('br')
