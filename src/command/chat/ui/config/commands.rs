@@ -1,5 +1,5 @@
 use crate::command::chat::app::{ChatApp, CommandsMode};
-use crate::command::chat::infra::command;
+use crate::theme::Theme;
 use crate::tui::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, pointer_span};
 use ratatui::{
     style::{Modifier, Style},
@@ -43,11 +43,15 @@ pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &Chat
             .fg(t.config_toggle_on)
             .add_modifier(Modifier::BOLD),
     )]));
+    lines.push(Line::from(Span::styled(
+        "  c 快速创建  Space/Enter 启用/禁用  a 全启用  d 全禁用  Esc 保存返回",
+        Style::default().fg(t.config_dim),
+    )));
     lines.push(Line::from(""));
 
     if total == 0 {
         lines.push(Line::from(Span::styled(
-            "  (没有自定义命令，按 c 快速创建)",
+            "  (没有自定义命令，按 c 选择用户级或项目级后创建)",
             Style::default().fg(t.config_dim),
         )));
     }
@@ -56,19 +60,53 @@ pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &Chat
 /// 渲染选择保存级别的界面
 fn draw_select_source_ui<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
-    let has_project_dir = command::project_commands_dir().is_some();
 
     lines.push(Line::from(Span::styled(
-        "  选择命令保存位置：",
+        "  选择命令保存级别：",
         Style::default()
             .fg(t.config_label_selected)
             .add_modifier(Modifier::BOLD),
     )));
+    lines.push(Line::from(Span::styled(
+        "  确认后会打开 Markdown 编辑器编写命令内容。",
+        Style::default().fg(t.config_dim),
+    )));
     lines.push(Line::from(""));
 
-    // 用户级选项
-    let user_selected = app.ui.commands_source_idx == 0;
-    let user_marker = if user_selected {
+    push_command_source_option(
+        lines,
+        0,
+        app.ui.commands_source_idx,
+        "用户级",
+        "~/.jdata/agent/commands/",
+        t,
+    );
+    push_command_source_option(
+        lines,
+        1,
+        app.ui.commands_source_idx,
+        "项目级",
+        ".jcli/commands/（不存在时自动创建）",
+        t,
+    );
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  j/k 或 ↑/↓ 选择，Enter 确认，Esc 取消",
+        Style::default().fg(t.config_dim),
+    )));
+}
+
+fn push_command_source_option<'a>(
+    lines: &mut Vec<Line<'a>>,
+    idx: usize,
+    selected_idx: usize,
+    label: &'static str,
+    path_hint: &'static str,
+    t: &Theme,
+) {
+    let selected = selected_idx == idx;
+    let marker = if selected {
         Span::styled(
             "  > ",
             Style::default()
@@ -78,57 +116,22 @@ fn draw_select_source_ui<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     } else {
         Span::styled("    ", Style::default())
     };
-    let user_label = Span::styled(
-        "用户级 (~/.jdata/agent/commands/)",
-        Style::default()
-            .fg(if user_selected {
-                t.config_label_selected
-            } else {
-                t.text_dim
-            })
-            .add_modifier(if user_selected {
-                Modifier::BOLD
-            } else {
-                Modifier::empty()
-            }),
-    );
-    lines.push(Line::from(vec![user_marker, user_label]));
-
-    // 项目级选项
-    if has_project_dir {
-        let proj_selected = app.ui.commands_source_idx == 1;
-        let proj_marker = if proj_selected {
-            Span::styled(
-                "  > ",
-                Style::default()
-                    .fg(t.config_label_selected)
-                    .add_modifier(Modifier::BOLD),
-            )
+    let style = Style::default()
+        .fg(if selected {
+            t.config_label_selected
         } else {
-            Span::styled("    ", Style::default())
-        };
-        let proj_label = Span::styled(
-            "项目级 (.jcli/commands/)",
-            Style::default()
-                .fg(if proj_selected {
-                    t.config_label_selected
-                } else {
-                    t.text_dim
-                })
-                .add_modifier(if proj_selected {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                }),
-        );
-        lines.push(Line::from(vec![proj_marker, proj_label]));
-    }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  j/k 或 ↑/↓ 选择，Enter 确认，Esc 取消",
-        Style::default().fg(t.config_dim),
-    )));
+            t.text_dim
+        })
+        .add_modifier(if selected {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        });
+    lines.push(Line::from(vec![
+        marker,
+        Span::styled(label, style),
+        Span::styled(format!(" ({})", path_hint), style),
+    ]));
 }
 
 /// Commands tab 可滚动列表（每个命令：名称行 + 描述折行）

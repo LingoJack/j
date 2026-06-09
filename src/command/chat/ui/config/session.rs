@@ -8,7 +8,10 @@ use ratatui::{
 /// 格式化 Unix 时间戳为人类可读格式
 fn format_timestamp(ts: u64) -> String {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    let dt = UNIX_EPOCH + Duration::from_secs(ts);
+    let dt = match UNIX_EPOCH.checked_add(Duration::from_secs(ts)) {
+        Some(t) => t,
+        None => return format_timestamp_fallback(ts),
+    };
     let now = SystemTime::now();
     let elapsed = now.duration_since(dt).unwrap_or_default();
     if elapsed.as_secs() < 60 {
@@ -25,6 +28,13 @@ fn format_timestamp(ts: u64) -> String {
         let (y, m, d) = days_to_ymd(days);
         format!("{y:04}-{m:02}-{d:02}")
     }
+}
+
+/// 当 SystemTime 溢出时（Windows 上大时间戳可能发生），走纯算数 fallback
+fn format_timestamp_fallback(ts: u64) -> String {
+    let days = ts / 86400;
+    let (y, m, d) = days_to_ymd(days);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// 将 1970-01-01 起的天数转为 (year, month, day)

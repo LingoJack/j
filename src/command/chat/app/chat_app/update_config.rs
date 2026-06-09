@@ -1,7 +1,6 @@
 use super::ChatApp;
 use crate::command::chat::app::action::CursorDirection;
 use crate::command::chat::app::ui_state::ConfigTab;
-use crate::command::chat::infra::command;
 use crate::command::chat::storage::ModelProvider;
 use crate::constants::CONFIG_FIELDS;
 
@@ -845,16 +844,9 @@ impl ChatApp {
     /// 进入选择命令保存级别模式
     pub(super) fn update_config_command_select_source(&mut self) {
         use crate::command::chat::app::ui_state::CommandsMode;
-        use crate::command::chat::infra::command::CommandSource;
 
-        if command::project_commands_dir().is_some() {
-            self.ui.commands_mode = CommandsMode::SelectSource;
-            self.ui.commands_source_idx = 0;
-        } else {
-            // 没有项目级目录，直接使用用户级
-            self.ui.command_create_source = CommandSource::User;
-            self.ui.pending_command_create = true;
-        }
+        self.ui.commands_mode = CommandsMode::SelectSource;
+        self.ui.commands_source_idx = 0;
     }
 
     /// 选择命令保存级别导航
