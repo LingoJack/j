@@ -177,4 +177,10 @@ allow:
 - Shell(cargo check:*)
 - Shell(make -n:*)
 - Shell(mv "reader.html":*)
+- Shell(pwd; ls:*)
+- Shell(cargo clean:*)
+- Shell(test -f:*)
+- Shell(make reader-install:*)
+- Shell(touch /Applications/jstudio.app:*)
+- Shell(mv .git/modules/apps/reader:*)
 deny: []

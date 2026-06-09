@@ -1,3 +1,3 @@
-[submodule "apps/reader"]
-	path = apps/reader
+[submodule "apps/jstudio"]
+	path = apps/jstudio
 	url = https://github.com/LingoJack/jstudio.git

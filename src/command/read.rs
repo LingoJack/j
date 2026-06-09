@@ -1,6 +1,6 @@
 //! `j read <path>` — 启动独立的 jstudio Reader Tauri 应用。
 //!
-//! Reader 已从 `j` 二进制中拆出，作为 `apps/reader` Git submodule 中的
+//! Reader 已从 `j` 二进制中拆出，作为 `apps/jstudio` Git submodule 中的
 //! Tauri 桌面应用维护。这里仅保留轻量 launcher：校验路径后定位 reader
 //! 可执行文件或 `.app` bundle，并把目标路径作为启动参数传给 reader。
 
@@ -10,18 +10,18 @@ use std::process::{Command, Stdio};
 
 const READER_BIN_ENV: &str = "JSTUDIO_BIN";
 const MACOS_APP_PATHS: &[&str] = &[
-    "apps/reader/src-tauri/target/release/bundle/macos/jstudio.app",
-    "apps/reader/src-tauri/target/debug/bundle/macos/jstudio.app",
+    "apps/jstudio/src-tauri/target/release/bundle/macos/jstudio.app",
+    "apps/jstudio/src-tauri/target/debug/bundle/macos/jstudio.app",
     "/Applications/jstudio.app",
 ];
 const UNIX_BIN_PATHS: &[&str] = &[
-    "apps/reader/src-tauri/target/release/jstudio",
-    "apps/reader/src-tauri/target/debug/jstudio",
+    "apps/jstudio/src-tauri/target/release/jstudio",
+    "apps/jstudio/src-tauri/target/debug/jstudio",
 ];
 #[cfg(windows)]
 const WINDOWS_BIN_PATHS: &[&str] = &[
-    "apps\\reader\\src-tauri\\target\\release\\jstudio.exe",
-    "apps\\reader\\src-tauri\\target\\debug\\jstudio.exe",
+    "apps\\jstudio\\src-tauri\\target\\release\\jstudio.exe",
+    "apps\\jstudio\\src-tauri\\target\\debug\\jstudio.exe",
 ];
 
 /// `j read <path>` 命令入口。
@@ -129,7 +129,7 @@ fn spawn_reader_bin(bin: &Path, target: &Path) -> Result<(), String> {
 
 fn reader_missing_message() -> String {
     format!(
-        "未找到 jstudio reader。请先进入 apps/reader 执行 `npm install && npm run tauri:build`，或通过 {READER_BIN_ENV} 指定 reader 可执行文件路径。"
+        "未找到 jstudio reader。请先执行 `make reader-install`，或通过 {READER_BIN_ENV} 指定 reader 可执行文件路径。"
     )
 }
 

@@ -6,7 +6,7 @@ SHELL := /bin/bash
 INSTALL_DIR := /usr/local/bin
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
-READER_DIR := apps/reader
+READER_DIR := apps/jstudio
 READER_TAURI_DIR := $(READER_DIR)/src-tauri
 READER_MACOS_APP := $(READER_TAURI_DIR)/target/release/bundle/macos/jstudio.app
 READER_BIN := $(READER_TAURI_DIR)/target/release/jstudio
@@ -37,6 +37,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         pre-commit \
         build-remote \
         reader-init reader-dev reader-build reader-install reader-uninstall reader-clean \
+        jstudio-status jstudio-commit jstudio-push \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -173,7 +174,7 @@ reader-dev: reader-init ## 启动 reader Tauri 开发模式
 
 reader-build: reader-init ## 构建 reader Tauri 应用
 	@echo "📖 构建 reader Tauri 应用..."
-	@cd $(READER_DIR) && npm run tauri:build
+	@cd $(READER_DIR) && npm run tauri:build -- --bundles app
 	@echo "☑️ reader 构建完成"
 	@if [ -d "$(READER_MACOS_APP)" ]; then \
 		echo "   macOS App: $(READER_MACOS_APP)"; \
@@ -203,6 +204,30 @@ reader-install: reader-build ## 安装 reader app（macOS 安装到 /Application
 			echo "✖️ 未找到 reader 二进制: $(READER_BIN)"; exit 1; \
 		fi; \
 	fi
+
+jstudio-status: ## 查看 jstudio submodule 状态
+	@echo "🔍 jstudio submodule 状态:"
+	@git -C $(READER_DIR) status --short --branch --untracked-files=all
+
+jstudio-commit: ## 提交 jstudio submodule 代码（MSG='message' 可指定提交信息）
+	@echo "📝 提交 jstudio submodule 代码..."
+	@cd $(READER_DIR) && \
+		git add . && \
+		if git diff --cached --quiet; then \
+			echo "ℹ️ jstudio 没有待提交变更"; \
+		else \
+			msg="$${MSG:-update: jstudio reader app}"; \
+			git commit -m "$$msg"; \
+			echo "☑️ jstudio 已提交: $$msg"; \
+		fi
+	@echo "🔗 更新主仓库 submodule 指针..."
+	@git add $(READER_DIR)
+	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
+
+jstudio-push: jstudio-commit ## 提交并推送 jstudio submodule 代码（MSG='message' 可指定提交信息）
+	@echo "📤 推送 jstudio submodule..."
+	@cd $(READER_DIR) && git push origin HEAD
+	@echo "☑️ jstudio 已推送"
 
 reader-uninstall: ## 卸载 reader app（macOS）
 	@echo "🗑️  卸载 jstudio reader..."
