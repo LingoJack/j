@@ -43,7 +43,7 @@ pub(crate) fn render_todo_write_call_request_expanded(
             let display = truncate_str(&line_text, content_w);
             lines.push(Line::from(vec![
                 Span::styled("      ", Style::default()),
-                Span::styled(display, Style::default().fg(theme.text_dim)),
+                Span::styled(display, Style::default().fg(theme.text_normal)),
             ]));
         }
     }

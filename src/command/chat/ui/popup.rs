@@ -145,7 +145,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
                     let name_style = if is_selected {
                         selected_style
                     } else {
-                        Style::default().fg(t.text_white)
+                        Style::default().fg(t.text_normal)
                     };
                     ListItem::new(Line::from(vec![
                         Span::styled(pointer.to_string(), pointer_style),
@@ -169,7 +169,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
                     let name_style = if is_selected {
                         selected_style
                     } else {
-                        Style::default().fg(t.text_white)
+                        Style::default().fg(t.text_normal)
                     };
                     ListItem::new(Line::from(vec![
                         Span::styled(pointer.to_string(), pointer_style),
@@ -196,7 +196,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
                     let name_style = if is_selected {
                         selected_style
                     } else {
-                        let name_color = if is_dir { Color::Cyan } else { t.text_white };
+                        let name_color = if is_dir { Color::Cyan } else { t.text_normal };
                         Style::default().fg(name_color)
                     };
                     ListItem::new(Line::from(vec![
@@ -318,12 +318,20 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         .map(|(i, name)| {
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
+            let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+            let pointer_style = if is_selected {
+                selected_style
+            } else {
+                Style::default().fg(t.text_normal)
+            };
+            let name_style = if is_selected {
+                selected_style.add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD)
+            };
             ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                Span::styled(
-                    name.clone(),
-                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(pointer.to_string(), pointer_style),
+                Span::styled(name.clone(), name_style),
             ]))
         })
         .collect();
@@ -395,20 +403,26 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         .map(|(i, (name, desc))| {
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
+            let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+            let pointer_style = if is_selected {
+                selected_style
+            } else {
+                Style::default().fg(t.text_normal)
+            };
+            let name_style = if is_selected {
+                selected_style.add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD)
+            };
+            let desc_style = if is_selected {
+                selected_style
+            } else {
+                Style::default().fg(t.text_dim)
+            };
             ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                Span::styled(
-                    format!("{:<16}", name),
-                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    desc.clone(),
-                    if is_selected {
-                        t.popup_highlight_fg.apply_fg(Style::default())
-                    } else {
-                        Style::default().fg(t.text_dim)
-                    },
-                ),
+                Span::styled(pointer.to_string(), pointer_style),
+                Span::styled(format!("{:<16}", name), name_style),
+                Span::styled(desc.clone(), desc_style),
             ]))
         })
         .collect();
@@ -476,20 +490,26 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
                 let padding = label_width.saturating_sub(label_dw);
                 format!("{}{}", label, " ".repeat(padding))
             };
+            let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+            let pointer_style = if is_selected {
+                selected_style
+            } else {
+                Style::default().fg(t.text_normal)
+            };
+            let label_style = if is_selected {
+                selected_style.add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD)
+            };
+            let desc_style = if is_selected {
+                selected_style
+            } else {
+                Style::default().fg(t.text_dim)
+            };
             ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                Span::styled(
-                    padded_label,
-                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    cmd.description(),
-                    if is_selected {
-                        t.popup_highlight_fg.apply_fg(Style::default())
-                    } else {
-                        Style::default().fg(t.text_dim)
-                    },
-                ),
+                Span::styled(pointer.to_string(), pointer_style),
+                Span::styled(padded_label, label_style),
+                Span::styled(cmd.description(), desc_style),
             ]))
         })
         .collect();

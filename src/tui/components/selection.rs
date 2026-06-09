@@ -68,9 +68,26 @@ pub fn rebuild_spans_with_selection(
     sel_fg: Color,
     sel_bg: Color,
 ) -> Vec<Span<'static>> {
+    rebuild_spans_with_selection_style(
+        spans,
+        skip_chars,
+        local_start,
+        local_end,
+        Style::default().fg(sel_fg).bg(sel_bg),
+    )
+}
+
+/// 对已渲染的 spans 列表应用自定义选区样式。
+pub fn rebuild_spans_with_selection_style(
+    spans: &[Span<'static>],
+    skip_chars: usize,
+    local_start: usize,
+    local_end: usize,
+    selected_style: Style,
+) -> Vec<Span<'static>> {
     let ss = SelectionStyle {
         normal: Style::default(),
-        selected: Style::default().fg(sel_fg).bg(sel_bg),
+        selected: selected_style,
         local_start,
         local_end,
     };

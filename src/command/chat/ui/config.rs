@@ -15,7 +15,7 @@ mod tools;
 
 use crate::command::chat::app::{ChatApp, CommandsMode, ConfigTab, ConfigTabHitBox};
 use crate::tui::components::selection::{
-    compute_line_selection_range, rebuild_spans_with_selection,
+    compute_line_selection_range, rebuild_spans_with_selection_style,
 };
 use crate::tui::components::{separator_line, tab_bar};
 use ratatui::{
@@ -53,41 +53,49 @@ fn render_block_lines(
     }
 }
 
+struct RenderBlockLinesSelectionCtx<'a> {
+    area: Rect,
+    block: Block<'a>,
+    bg: Color,
+    lines: &'a [Line<'static>],
+    scroll_y: u16,
+    selection: Option<&'a crate::command::chat::app::MouseSelection>,
+    selected_style: Style,
+}
+
 /// 逐行渲染配置页内容，支持鼠标选区高亮。
 ///
 /// 与 `render_block_lines` 功能相同，但对选区范围内的行应用高亮样式。
 /// 返回 inner rect 供调用方缓存。
 fn render_block_lines_with_selection(
     f: &mut ratatui::Frame,
-    area: Rect,
-    block: Block<'_>,
-    bg: Color,
-    lines: &[Line<'static>],
-    scroll_y: u16,
-    selection: Option<&crate::command::chat::app::MouseSelection>,
+    ctx: RenderBlockLinesSelectionCtx<'_>,
 ) -> Rect {
-    let inner = block.inner(area);
-    f.render_widget(block, area);
+    let inner = ctx.block.inner(ctx.area);
+    f.render_widget(ctx.block, ctx.area);
 
     if inner.width == 0 || inner.height == 0 {
         return inner;
     }
 
-    f.render_widget(Block::default().style(Style::default().bg(bg)), inner);
+    f.render_widget(Block::default().style(Style::default().bg(ctx.bg)), inner);
 
-    let start = usize::from(scroll_y).min(lines.len());
-    let end = (start + inner.height as usize).min(lines.len());
+    let start = usize::from(ctx.scroll_y).min(ctx.lines.len());
+    let end = (start + inner.height as usize).min(ctx.lines.len());
 
-    let sel_fg = Color::White;
-    let sel_bg = Color::DarkGray;
-
-    for (row, line) in lines[start..end].iter().enumerate() {
-        let line_idx = scroll_y as usize + row;
-        let display_spans = if let Some(sel) = selection {
+    for (row, line) in ctx.lines[start..end].iter().enumerate() {
+        let line_idx = ctx.scroll_y as usize + row;
+        let display_spans = if let Some(sel) = ctx.selection {
             let (sel_start, sel_end) =
                 compute_line_selection_range(line_idx, sel.anchor, sel.current);
             if sel_start < sel_end {
-                rebuild_spans_with_selection(&line.spans, 0, sel_start, sel_end, sel_fg, sel_bg)
+                rebuild_spans_with_selection_style(
+                    &line.spans,
+                    0,
+                    sel_start,
+                    sel_end,
+                    ctx.selected_style,
+                )
             } else {
                 line.spans.to_vec()
             }
@@ -95,7 +103,7 @@ fn render_block_lines_with_selection(
             line.spans.to_vec()
         };
         let line_area = Rect::new(inner.x, inner.y + row as u16, inner.width, 1);
-        let widget = Paragraph::new(Line::from(display_spans)).style(Style::default().bg(bg));
+        let widget = Paragraph::new(Line::from(display_spans)).style(Style::default().bg(ctx.bg));
         f.render_widget(widget, line_area);
     }
 
@@ -175,6 +183,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     let t = &app.ui.theme;
     let bg = t.bg_primary;
+    let selection_style = t
+        .popup_highlight_fg
+        .apply_fg(t.popup_highlight_bg.apply_bg(Style::default()));
 
     // 鼠标选区引用
     let mouse_selection = app.ui.mouse_selection.as_ref();
@@ -298,12 +309,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .style(Style::default().bg(bg));
         let inner = render_block_lines_with_selection(
             f,
-            area,
-            block,
-            bg,
-            &all_lines,
-            app.ui.config_scroll_offset,
-            mouse_selection,
+            RenderBlockLinesSelectionCtx {
+                area,
+                block,
+                bg,
+                lines: &all_lines,
+                scroll_y: app.ui.config_scroll_offset,
+                selection: mouse_selection,
+                selected_style: selection_style,
+            },
         );
         // ── 回退模式下也记录布局信息 ──
         // 回退模式的 Block 有 Borders::ALL（含 top border），所以 Tab 栏全局 Y = area.y + 1（top border）+ 1（空行）
@@ -420,12 +434,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .style(Style::default().bg(bg));
         let detail_inner = render_block_lines_with_selection(
             f,
-            h_chunks[1],
-            right_block,
-            bg,
-            &detail_lines,
-            0,
-            mouse_selection,
+            RenderBlockLinesSelectionCtx {
+                area: h_chunks[1],
+                block: right_block,
+                bg,
+                lines: &detail_lines,
+                scroll_y: 0,
+                selection: mouse_selection,
+                selected_style: selection_style,
+            },
         );
 
         // ── 记录布局信息 ──
@@ -505,12 +522,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .style(Style::default().bg(bg));
         let detail_inner = render_block_lines_with_selection(
             f,
-            h_chunks[1],
-            right_block,
-            bg,
-            &detail_lines,
-            0,
-            mouse_selection,
+            RenderBlockLinesSelectionCtx {
+                area: h_chunks[1],
+                block: right_block,
+                bg,
+                lines: &detail_lines,
+                scroll_y: 0,
+                selection: mouse_selection,
+                selected_style: selection_style,
+            },
         );
 
         // ── 记录布局信息 ──
@@ -563,12 +583,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         .style(Style::default().bg(bg));
     let list_inner = render_block_lines_with_selection(
         f,
-        chunks[1],
-        list_block,
-        bg,
-        &list_lines,
-        app.ui.config_scroll_offset,
-        mouse_selection,
+        RenderBlockLinesSelectionCtx {
+            area: chunks[1],
+            block: list_block,
+            bg,
+            lines: &list_lines,
+            scroll_y: app.ui.config_scroll_offset,
+            selection: mouse_selection,
+            selected_style: selection_style,
+        },
     );
 
     // ── 记录布局信息供鼠标点击使用 ──

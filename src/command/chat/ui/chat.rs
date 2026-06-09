@@ -9,7 +9,7 @@ use crate::markdown::image_cache::ImageState;
 use crate::markdown::image_loader::load_image;
 use crate::tui::components::selection::{
     compute_line_selection_range, extract_content_from_line, is_selectable_line,
-    normalize_selection, rebuild_spans_with_selection, spans_to_char_offset,
+    normalize_selection, rebuild_spans_with_selection_style, spans_to_char_offset,
 };
 use crate::util::safe_lock;
 
@@ -274,6 +274,7 @@ struct TextPassParams<'a> {
     end: usize,
     history_total: usize,
     msg_area_bg: Style,
+    selection_style: Style,
 }
 
 /// 文字渲染 pass：遍历可见行渲染文字，同时收集图片标记。
@@ -326,6 +327,7 @@ fn render_text_pass(
                         line_idx,
                         selection,
                         params.msg_area_bg,
+                        params.selection_style,
                         &mut img_markers,
                         screen_i,
                     );
@@ -364,6 +366,7 @@ fn render_text_pass(
                 global_idx,
                 selection,
                 params.msg_area_bg,
+                params.selection_style,
                 &mut img_markers,
                 screen_i,
             );
@@ -382,6 +385,7 @@ fn render_single_line(
     line_idx: usize,
     selection: Option<&MouseSelection>,
     msg_area_bg: Style,
+    selection_style: Style,
     img_markers: &mut Vec<(usize, u16, String)>,
     screen_i: usize,
 ) {
@@ -411,14 +415,12 @@ fn render_single_line(
     {
         let (sel_start, sel_end) = compute_line_selection_range(line_idx, sel.anchor, sel.current);
         if sel_start < sel_end {
-            let fg = msg_area_bg.fg.unwrap_or(Color::White);
-            let highlighted_spans = rebuild_spans_with_selection(
+            let highlighted_spans = rebuild_spans_with_selection_style(
                 &line.spans,
                 0,
                 sel_start,
                 sel_end,
-                fg,
-                Color::DarkGray,
+                selection_style,
             );
             let p = Paragraph::new(Line::from(highlighted_spans)).style(msg_area_bg);
             f.render_widget(p, line_area);
@@ -526,7 +528,7 @@ fn render_image_pass(
                 let loading = Paragraph::new(Line::from(Span::styled(
                     format!("  Loading image: {}...", display_url),
                     Style::default()
-                        .fg(Color::DarkGray)
+                        .fg(app.ui.theme.text_normal)
                         .bg(app.ui.theme.bubble_ai),
                 )));
                 f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
@@ -537,7 +539,7 @@ fn render_image_pass(
                 let loading = Paragraph::new(Line::from(Span::styled(
                     format!("  Loading image: {}...", display_url),
                     Style::default()
-                        .fg(Color::DarkGray)
+                        .fg(app.ui.theme.text_normal)
                         .bg(app.ui.theme.bubble_ai),
                 )));
                 f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
@@ -796,6 +798,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         let end = (start + visible_height).min(cached.total_line_count);
         let history_total = cached.history_line_count;
         let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
+        let selection_style = app
+            .ui
+            .theme
+            .popup_highlight_fg
+            .apply_fg(app.ui.theme.popup_highlight_bg.apply_bg(Style::default()));
         let selection = app.ui.mouse_selection.as_ref();
         let img_markers = render_text_pass(
             f,
@@ -806,6 +813,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 end,
                 history_total,
                 msg_area_bg,
+                selection_style,
             },
             selection,
         );

@@ -3,7 +3,7 @@
 use crate::command::chat::render::cache::ContentContext;
 use crate::util::text::wrap_text;
 use ratatui::{
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
 };
 
@@ -28,7 +28,7 @@ pub(crate) fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
                 Span::styled("    ", Style::default()),
                 Span::styled(
                     format!("完成 {} / 未完成 {}", completed, pending),
-                    Style::default().fg(theme.text_dim),
+                    Style::default().fg(theme.text_normal),
                 ),
             ]));
             lines.push(Line::from(""));
@@ -49,8 +49,8 @@ pub(crate) fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
             let (dot, color) = match status {
                 "completed" => ("●", theme.label_ai),        // 绿色实心点
                 "in_progress" => ("◉", theme.title_loading), // 黄色双圈实心点
-                "cancelled" => ("◌", theme.text_dim),        // 灰色空心虚圈
-                _ => ("○", Color::Yellow),                   // pending: 黄色空心点
+                "cancelled" => ("◌", theme.text_dim),
+                _ => ("○", theme.title_loading),
             };
 
             let text_style = if status == "completed" {
@@ -58,7 +58,7 @@ pub(crate) fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
                     .fg(theme.text_dim)
                     .add_modifier(Modifier::CROSSED_OUT)
             } else {
-                Style::default().fg(theme.text_white)
+                Style::default().fg(theme.text_normal)
             };
             let max_w = content_w.saturating_sub(10); // "    ● " prefix
             for (i, wrapped) in wrap_text(text, max_w).iter().enumerate() {
@@ -84,7 +84,7 @@ pub(crate) fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
             for wrapped in wrap_text(line, content_w) {
                 lines.push(Line::from(Span::styled(
                     format!("    {}", wrapped),
-                    Style::default().fg(theme.text_dim),
+                    Style::default().fg(theme.text_normal),
                 )));
             }
         }
