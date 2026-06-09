@@ -102,8 +102,8 @@ fn handle_stdin_render() {
 
     let mut input = String::new();
     if let Err(e) = std::io::stdin().read_to_string(&mut input) {
-        eprintln!("读取 stdin 失败: {e}");
-        std::process::exit(1);
+        error!("读取 stdin 失败: {e}");
+        return;
     }
     if input.trim().is_empty() {
         return;
