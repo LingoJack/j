@@ -27,8 +27,7 @@ const WINDOWS_BIN_PATHS: &[&str] = &[
 /// `j read <path>` 命令入口。
 pub fn handle_read(file_path: &str, _config: &mut YamlConfig) {
     if let Err(msg) = run(file_path) {
-        eprintln!("❌ {msg}");
-        std::process::exit(1);
+        crate::error!("❌ {msg}");
     }
 }
 
