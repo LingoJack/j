@@ -45,7 +45,6 @@ crossterm = "0.28.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "io-std", "io-util"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
-pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "json", "stream"] }
 urlencoding = "2.1"
@@ -62,9 +61,7 @@ ignore = "0.4.25"
 notify = "7"
 regex = "1.12.3"
 tokio-tungstenite = "0.29"
-axum = "0.7"
-mime_guess = "2"
-tempfile = "3"
+pulldown-cmark = "0.13.0"
 qrcode = "0.14"
 rand = "0.8"
 uuid = { version = "1", features = ["v4"] }

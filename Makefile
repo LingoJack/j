@@ -6,6 +6,11 @@ SHELL := /bin/bash
 INSTALL_DIR := /usr/local/bin
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
+READER_DIR := apps/reader
+READER_TAURI_DIR := $(READER_DIR)/src-tauri
+READER_MACOS_APP := $(READER_TAURI_DIR)/target/release/bundle/macos/jstudio.app
+READER_BIN := $(READER_TAURI_DIR)/target/release/jstudio
+READER_INSTALL_APP_DIR ?= /Applications
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -31,7 +36,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         docker-build docker-run \
         pre-commit \
         build-remote \
-        build-reader-web \
+        reader-init reader-dev reader-build reader-install reader-uninstall reader-clean \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -153,10 +158,66 @@ build-web: ## 构建 Web 前端
 	@cd web && npm install --silent && npm run build
 	@echo "☑️ Web 前端构建完成"
 
-build-reader-web: ## 构建 `j read` 命令使用的 Reader SPA（产物嵌入二进制）
-	@echo "📖 构建 Reader SPA..."
-	@cd assets/reader && npm install --silent && npm run build
-	@echo "☑️ Reader SPA 构建完成（输出至 assets/reader/dist/）"
+# ============================================
+# Reader / jstudio Tauri App
+# ============================================
+reader-init: ## 初始化 reader submodule 并安装前端依赖
+	@echo "📖 初始化 jstudio reader..."
+	@git submodule update --init --recursive $(READER_DIR)
+	@cd $(READER_DIR) && npm install --silent
+	@echo "☑️ reader 依赖已就绪"
+
+reader-dev: reader-init ## 启动 reader Tauri 开发模式
+	@echo "📖 启动 reader 开发模式..."
+	@cd $(READER_DIR) && npm run tauri:dev
+
+reader-build: reader-init ## 构建 reader Tauri 应用
+	@echo "📖 构建 reader Tauri 应用..."
+	@cd $(READER_DIR) && npm run tauri:build
+	@echo "☑️ reader 构建完成"
+	@if [ -d "$(READER_MACOS_APP)" ]; then \
+		echo "   macOS App: $(READER_MACOS_APP)"; \
+	elif [ -x "$(READER_BIN)" ]; then \
+		echo "   Binary: $(READER_BIN)"; \
+	fi
+
+reader-install: reader-build ## 安装 reader app（macOS 安装到 /Applications，其他系统提示二进制路径）
+	@echo "📦 安装 jstudio reader..."
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		if [ ! -d "$(READER_MACOS_APP)" ]; then \
+			echo "✖️ 未找到 $(READER_MACOS_APP)"; exit 1; \
+		fi; \
+		if [ ! -w "$(READER_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		echo "   正在安装到 $(READER_INSTALL_APP_DIR)/jstudio.app..."; \
+		$$SUDO rm -rf "$(READER_INSTALL_APP_DIR)/jstudio.app"; \
+		$$SUDO cp -R "$(READER_MACOS_APP)" "$(READER_INSTALL_APP_DIR)/jstudio.app"; \
+		echo "☑️ reader 已安装: $(READER_INSTALL_APP_DIR)/jstudio.app"; \
+		echo "   现在可以使用: j read <file_or_dir_path>"; \
+	else \
+		if [ -x "$(READER_BIN)" ]; then \
+			echo "☑️ reader 已构建: $(READER_BIN)"; \
+			echo "   请设置环境变量后使用:"; \
+			echo "   export JSTUDIO_BIN=$$(pwd)/$(READER_BIN)"; \
+			echo "   j read <file_or_dir_path>"; \
+		else \
+			echo "✖️ 未找到 reader 二进制: $(READER_BIN)"; exit 1; \
+		fi; \
+	fi
+
+reader-uninstall: ## 卸载 reader app（macOS）
+	@echo "🗑️  卸载 jstudio reader..."
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		if [ ! -w "$(READER_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		$$SUDO rm -rf "$(READER_INSTALL_APP_DIR)/jstudio.app"; \
+		echo "☑️ 已卸载 $(READER_INSTALL_APP_DIR)/jstudio.app"; \
+	else \
+		echo "ℹ️ 非 macOS 平台请删除自定义安装位置，并取消 JSTUDIO_BIN 环境变量。"; \
+	fi
+
+reader-clean: ## 清理 reader 构建产物
+	@echo "🧹 清理 reader 构建产物..."
+	@rm -rf $(READER_DIR)/dist $(READER_TAURI_DIR)/target
+	@echo "☑️ reader 构建产物已清理"
 
 build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
 	@echo "🔴 构建 j-indicator..."

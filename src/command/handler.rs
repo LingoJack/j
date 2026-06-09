@@ -164,9 +164,9 @@ command_handlers! {
         crate::command::lock::handle_unlock(&self.password, target);
     },
 
-    // ========== 文件预览（Web UI） ==========
-    ReadCmd { file_path: String, port: Option<u16>, no_open: bool, tab: bool, foreground: bool, daemon_child: bool } => |self, config| {
-        crate::command::read::handle_read(&self.file_path, self.port, self.no_open, self.tab, self.foreground, self.daemon_child, config);
+    // ========== 文件阅读器（Tauri App） ==========
+    ReadCmd { file_path: String } => |self, config| {
+        crate::command::read::handle_read(&self.file_path, config);
     },
 }
 
@@ -251,22 +251,8 @@ impl SubCmd {
             SubCmd::Lock { password, target } => Box::new(LockCmd { password, target }),
             SubCmd::Unlock { password, target } => Box::new(UnlockCmd { password, target }),
 
-            // 文件预览（Web UI）
-            SubCmd::Read {
-                file_path,
-                port,
-                no_open,
-                tab,
-                foreground,
-                daemon_child,
-            } => Box::new(ReadCmd {
-                file_path,
-                port,
-                no_open,
-                tab,
-                foreground,
-                daemon_child,
-            }),
+            // 文件阅读器（Tauri App）
+            SubCmd::Read { file_path } => Box::new(ReadCmd { file_path }),
         }
     }
 }

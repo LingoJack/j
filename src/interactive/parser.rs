@@ -327,69 +327,20 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             target: rest.get(1).cloned(),
         })
     } else if is(cmd::READ) {
-        // 解析 read 子命令的 flags：--port <N> / --no-open / --tab / --foreground
-        // （内部 --__daemon-child 通过 spawn 的 std::process::Command 传，REPL
-        // 用户写不到这里，无需在 parser 暴露）
         let mut file_path: Option<String> = None;
-        let mut port: Option<u16> = None;
-        let mut no_open = false;
-        let mut tab = false;
-        let mut foreground = false;
-        let mut i = 0;
-        while i < rest.len() {
-            let arg = rest[i].as_str();
-            if arg == "--no-open" {
-                no_open = true;
-                i += 1;
-            } else if arg == "--tab" {
-                tab = true;
-                i += 1;
-            } else if arg == "--foreground" || arg == "--fg" {
-                foreground = true;
-                i += 1;
-            } else if arg == "--port" {
-                if let Some(v) = rest.get(i + 1) {
-                    match v.parse::<u16>() {
-                        Ok(p) => port = Some(p),
-                        Err(_) => {
-                            crate::error!("✖️ --port 需要一个 0-65535 的整数，收到：{v}");
-                            return ParseResult::Handled;
-                        }
-                    }
-                    i += 2;
-                } else {
-                    crate::error!("✖️ --port 后缺少端口号");
-                    return ParseResult::Handled;
-                }
-            } else if let Some(p) = arg.strip_prefix("--port=") {
-                match p.parse::<u16>() {
-                    Ok(v) => port = Some(v),
-                    Err(_) => {
-                        crate::error!("✖️ --port 需要一个 0-65535 的整数，收到：{p}");
-                        return ParseResult::Handled;
-                    }
-                }
-                i += 1;
-            } else if file_path.is_none() {
+        for arg in rest {
+            if file_path.is_none() {
                 file_path = Some(arg.to_string());
-                i += 1;
             } else {
-                crate::error!("✖️ read 命令仅接受一个文件路径，收到额外参数：{arg}");
+                crate::error!("✖️ read 命令仅接受一个文件或目录路径，收到额外参数：{arg}");
                 return ParseResult::Handled;
             }
         }
         let Some(path) = file_path else {
-            crate::usage!("read <file_path> [--port <N>] [--no-open] [--tab] [--foreground]");
+            crate::usage!("read <file_or_dir_path>");
             return ParseResult::Handled;
         };
-        ParseResult::Matched(SubCmd::Read {
-            file_path: path,
-            port,
-            no_open,
-            tab,
-            foreground,
-            daemon_child: false,
-        })
+        ParseResult::Matched(SubCmd::Read { file_path: path })
     } else {
         ParseResult::NotFound
     }

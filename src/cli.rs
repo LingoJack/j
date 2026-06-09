@@ -276,27 +276,11 @@ pub enum SubCmd {
         target: Option<String>,
     },
 
-    // ========== 文件预览（Web UI） ==========
-    /// 在浏览器中预览文件（只读，支持 Markdown，未来扩展 PPT/DOCX/XLSX）
+    // ========== 文件阅读器（Tauri App） ==========
+    /// 使用独立 jstudio Reader 应用打开文件或目录
     #[command(alias = "rd")]
     Read {
-        /// 要预览的文件路径
+        /// 要打开的文件或目录路径
         file_path: String,
-        /// 监听端口（默认随机分配空闲端口）
-        #[arg(long)]
-        port: Option<u16>,
-        /// 不自动打开浏览器，只输出访问 URL
-        #[arg(long)]
-        no_open: bool,
-        /// 用普通浏览器标签页而不是 Chrome app 模式打开
-        /// （app 模式：⌘W 等快捷键归网页所有；标签页模式：⌘W 会被浏览器吞掉）
-        #[arg(long)]
-        tab: bool,
-        /// 前台运行（默认会 daemonize 后立刻返回 prompt）
-        #[arg(long)]
-        foreground: bool,
-        /// 内部使用：标记当前进程是 daemonize 后的 server 子进程
-        #[arg(long = "__daemon-child", hide = true)]
-        daemon_child: bool,
     },
 }
