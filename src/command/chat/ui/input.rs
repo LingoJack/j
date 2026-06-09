@@ -30,12 +30,12 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else if app.state.is_loading {
         (" + ", Style::default().fg(t.input_prompt_loading))
     } else if app.ui.auto_approve {
-        (" bypass > ", Style::default().fg(t.config_toggle_on))
+        (" bypass ❯ ", Style::default().fg(t.config_toggle_on))
     } else {
-        (" > ", Style::default().fg(t.input_prompt))
+        (" ❯ ", Style::default().fg(t.input_prompt))
     };
-    // prompt 只含 ASCII 字符，用 len() 即可得到显示宽度
-    let prompt_width = prompt.len();
+    // prompt 含非 ASCII 字符（如 ❯），需用 display_width 计算显示宽度
+    let prompt_width = crate::util::text::display_width(prompt);
 
     let usable_width = area.width.saturating_sub(2) as usize;
     let input_text = app.ui.input_text();

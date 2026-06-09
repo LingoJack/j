@@ -106,16 +106,7 @@ fn push_command_source_option<'a>(
     t: &Theme,
 ) {
     let selected = selected_idx == idx;
-    let marker = if selected {
-        Span::styled(
-            "  > ",
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD),
-        )
-    } else {
-        Span::styled("    ", Style::default())
-    };
+    let marker = pointer_span(selected, t);
     let style = Style::default()
         .fg(if selected {
             t.config_label_selected
