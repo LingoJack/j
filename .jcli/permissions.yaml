@@ -185,4 +185,5 @@ allow:
 - Shell(mv .git/modules/apps/reader:*)
 - Shell(make help:*)
 - Shell(pwd &&:*)
+- Shell(npx prettier:*)
 deny: []
