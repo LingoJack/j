@@ -186,4 +186,5 @@ allow:
 - Shell(make help:*)
 - Shell(pwd &&:*)
 - Shell(npx prettier:*)
+- Shell(cd /Users/jacklingo/dev_custom/jcli/apps/jstudio:*)
 deny: []
