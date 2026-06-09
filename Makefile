@@ -227,9 +227,14 @@ commit-jstudio: ## 提交 jstudio submodule 代码（非 AI，自动生成 messa
 		fi; \
 		git commit -m "$$msg"; \
 		echo "☑️ jstudio 已提交: $$msg"
-	@echo "🔗 更新主仓库 submodule 指针..."
+	@echo "🔗 更新并提交主仓库 submodule 指针..."
 	@git add $(JSTUDIO_DIR)
-	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
+	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
+		echo "ℹ️ 主仓库 submodule 指针无变化"; \
+	else \
+		git commit -m "chore: update jstudio submodule pointer"; \
+		echo "☑️ 主仓库 submodule 指针已提交"; \
+	fi
 
 push-jstudio: ## AI 生成 commit message 并推送 jstudio submodule
 	@echo "🤖 AI 生成 jstudio 变更说明..."
@@ -265,9 +270,14 @@ push-jstudio: ## AI 生成 commit message 并推送 jstudio submodule
 		if [ -z "$$msg" ]; then msg="更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 		git add . && git commit -m "$$msg" && git push origin HEAD; \
 		echo "✅ jstudio 已推送: $$msg"
-	@echo "🔗 更新主仓库 submodule 指针..."
+	@echo "🔗 更新并提交主仓库 submodule 指针..."
 	@git add $(JSTUDIO_DIR)
-	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
+	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
+		echo "ℹ️ 主仓库 submodule 指针无变化"; \
+	else \
+		git commit -m "chore: update jstudio submodule pointer"; \
+		echo "☑️ 主仓库 submodule 指针已提交"; \
+	fi
 
 push-jstudio-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG='message' 可指定提交信息）
 	@echo "📤 非 AI 推送 jstudio submodule..."
@@ -281,9 +291,14 @@ push-jstudio-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG=
 			git commit -m "$$msg" && git push origin HEAD; \
 			echo "☑️ jstudio 已推送: $$msg"; \
 		fi
-	@echo "🔗 更新主仓库 submodule 指针..."
+	@echo "🔗 更新并提交主仓库 submodule 指针..."
 	@git add $(JSTUDIO_DIR)
-	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
+	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
+		echo "ℹ️ 主仓库 submodule 指针无变化"; \
+	else \
+		git commit -m "chore: update jstudio submodule pointer"; \
+		echo "☑️ 主仓库 submodule 指针已提交"; \
+	fi
 
 uninstall-jstudio: ## 卸载 jstudio app（macOS）
 	@echo "🗑️  卸载 jstudio..."
