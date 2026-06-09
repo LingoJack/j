@@ -6,11 +6,11 @@ SHELL := /bin/bash
 INSTALL_DIR := /usr/local/bin
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
-READER_DIR := apps/jstudio
-READER_TAURI_DIR := $(READER_DIR)/src-tauri
-READER_MACOS_APP := $(READER_TAURI_DIR)/target/release/bundle/macos/jstudio.app
-READER_BIN := $(READER_TAURI_DIR)/target/release/jstudio
-READER_INSTALL_APP_DIR ?= /Applications
+JSTUDIO_DIR := apps/jstudio
+JSTUDIO_TAURI_DIR := $(JSTUDIO_DIR)/src-tauri
+JSTUDIO_MACOS_APP := $(JSTUDIO_TAURI_DIR)/target/release/bundle/macos/jstudio.app
+JSTUDIO_BIN := $(JSTUDIO_TAURI_DIR)/target/release/jstudio
+JSTUDIO_INSTALL_APP_DIR ?= /Applications
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -36,8 +36,8 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         docker-build docker-run \
         pre-commit \
         build-remote \
-        reader-init reader-dev reader-build reader-install reader-uninstall reader-clean \
-        jstudio-status jstudio-commit jstudio-push jstudio-push-non-ai \
+        init-jstudio dev-jstudio build-jstudio install-jstudio uninstall-jstudio clean-jstudio \
+        status-jstudio commit-jstudio push-jstudio push-jstudio-non-ai \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -160,58 +160,58 @@ build-web: ## 构建 Web 前端
 	@echo "☑️ Web 前端构建完成"
 
 # ============================================
-# Reader / jstudio Tauri App
+# jstudio Tauri App
 # ============================================
-reader-init: ## 初始化 reader submodule 并安装前端依赖
-	@echo "📖 初始化 jstudio reader..."
-	@git submodule update --init --recursive $(READER_DIR)
-	@cd $(READER_DIR) && npm install --silent
-	@echo "☑️ reader 依赖已就绪"
+init-jstudio: ## 初始化 jstudio submodule 并安装前端依赖
+	@echo "📖 初始化 jstudio..."
+	@git submodule update --init --recursive $(JSTUDIO_DIR)
+	@cd $(JSTUDIO_DIR) && npm install --silent
+	@echo "☑️ jstudio 依赖已就绪"
 
-reader-dev: reader-init ## 启动 reader Tauri 开发模式
-	@echo "📖 启动 reader 开发模式..."
-	@cd $(READER_DIR) && npm run tauri:dev
+dev-jstudio: init-jstudio ## 启动 jstudio Tauri 开发模式
+	@echo "📖 启动 jstudio 开发模式..."
+	@cd $(JSTUDIO_DIR) && npm run tauri:dev
 
-reader-build: reader-init ## 构建 reader Tauri 应用
-	@echo "📖 构建 reader Tauri 应用..."
-	@cd $(READER_DIR) && npm run tauri:build -- --bundles app
-	@echo "☑️ reader 构建完成"
-	@if [ -d "$(READER_MACOS_APP)" ]; then \
-		echo "   macOS App: $(READER_MACOS_APP)"; \
-	elif [ -x "$(READER_BIN)" ]; then \
-		echo "   Binary: $(READER_BIN)"; \
+build-jstudio: init-jstudio ## 构建 jstudio Tauri 应用
+	@echo "📖 构建 jstudio Tauri 应用..."
+	@cd $(JSTUDIO_DIR) && npm run tauri:build -- --bundles app
+	@echo "☑️ jstudio 构建完成"
+	@if [ -d "$(JSTUDIO_MACOS_APP)" ]; then \
+		echo "   macOS App: $(JSTUDIO_MACOS_APP)"; \
+	elif [ -x "$(JSTUDIO_BIN)" ]; then \
+		echo "   Binary: $(JSTUDIO_BIN)"; \
 	fi
 
-reader-install: reader-build ## 安装 reader app（macOS 安装到 /Applications，其他系统提示二进制路径）
-	@echo "📦 安装 jstudio reader..."
+install-jstudio: build-jstudio ## 安装 jstudio app（macOS 安装到 /Applications，其他系统提示二进制路径）
+	@echo "📦 安装 jstudio..."
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		if [ ! -d "$(READER_MACOS_APP)" ]; then \
-			echo "✖️ 未找到 $(READER_MACOS_APP)"; exit 1; \
+		if [ ! -d "$(JSTUDIO_MACOS_APP)" ]; then \
+			echo "✖️ 未找到 $(JSTUDIO_MACOS_APP)"; exit 1; \
 		fi; \
-		if [ ! -w "$(READER_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-		echo "   正在安装到 $(READER_INSTALL_APP_DIR)/jstudio.app..."; \
-		$$SUDO rm -rf "$(READER_INSTALL_APP_DIR)/jstudio.app"; \
-		$$SUDO cp -R "$(READER_MACOS_APP)" "$(READER_INSTALL_APP_DIR)/jstudio.app"; \
-		echo "☑️ reader 已安装: $(READER_INSTALL_APP_DIR)/jstudio.app"; \
+		if [ ! -w "$(JSTUDIO_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		echo "   正在安装到 $(JSTUDIO_INSTALL_APP_DIR)/jstudio.app..."; \
+		$$SUDO rm -rf "$(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
+		$$SUDO cp -R "$(JSTUDIO_MACOS_APP)" "$(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
+		echo "☑️ jstudio 已安装: $(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
 		echo "   现在可以使用: j read <file_or_dir_path>"; \
 	else \
-		if [ -x "$(READER_BIN)" ]; then \
-			echo "☑️ reader 已构建: $(READER_BIN)"; \
+		if [ -x "$(JSTUDIO_BIN)" ]; then \
+			echo "☑️ jstudio 已构建: $(JSTUDIO_BIN)"; \
 			echo "   请设置环境变量后使用:"; \
-			echo "   export JSTUDIO_BIN=$$(pwd)/$(READER_BIN)"; \
+			echo "   export JSTUDIO_BIN=$$(pwd)/$(JSTUDIO_BIN)"; \
 			echo "   j read <file_or_dir_path>"; \
 		else \
-			echo "✖️ 未找到 reader 二进制: $(READER_BIN)"; exit 1; \
+			echo "✖️ 未找到 jstudio 二进制: $(JSTUDIO_BIN)"; exit 1; \
 		fi; \
 	fi
 
-jstudio-status: ## 查看 jstudio submodule 状态
+status-jstudio: ## 查看 jstudio submodule 状态
 	@echo "🔍 jstudio submodule 状态:"
-	@git -C $(READER_DIR) status --short --branch --untracked-files=all
+	@git -C $(JSTUDIO_DIR) status --short --branch --untracked-files=all
 
-jstudio-commit: ## 提交 jstudio submodule 代码（非 AI，自动生成 message）
+commit-jstudio: ## 提交 jstudio submodule 代码（非 AI，自动生成 message）
 	@echo "📝 自动提交 jstudio submodule 代码..."
-	@cd $(READER_DIR) && \
+	@cd $(JSTUDIO_DIR) && \
 		git add . && \
 		staged_files=$$(git diff --cached --name-only 2>/dev/null); \
 		if [ -z "$$staged_files" ]; then \
@@ -228,12 +228,12 @@ jstudio-commit: ## 提交 jstudio submodule 代码（非 AI，自动生成 messa
 		git commit -m "$$msg"; \
 		echo "☑️ jstudio 已提交: $$msg"
 	@echo "🔗 更新主仓库 submodule 指针..."
-	@git add $(READER_DIR)
+	@git add $(JSTUDIO_DIR)
 	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
 
-jstudio-push: ## AI 生成 commit message 并推送 jstudio submodule
+push-jstudio: ## AI 生成 commit message 并推送 jstudio submodule
 	@echo "🤖 AI 生成 jstudio 变更说明..."
-	@cd $(READER_DIR) && \
+	@cd $(JSTUDIO_DIR) && \
 		diff_stat="$$(git diff --stat 2>/dev/null)"; \
 		if [ -z "$$diff_stat" ]; then \
 			diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
@@ -266,12 +266,12 @@ jstudio-push: ## AI 生成 commit message 并推送 jstudio submodule
 		git add . && git commit -m "$$msg" && git push origin HEAD; \
 		echo "✅ jstudio 已推送: $$msg"
 	@echo "🔗 更新主仓库 submodule 指针..."
-	@git add $(READER_DIR)
+	@git add $(JSTUDIO_DIR)
 	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
 
-jstudio-push-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG='message' 可指定提交信息）
+push-jstudio-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG='message' 可指定提交信息）
 	@echo "📤 非 AI 推送 jstudio submodule..."
-	@cd $(READER_DIR) && \
+	@cd $(JSTUDIO_DIR) && \
 		git add . && \
 		if git diff --cached --quiet; then \
 			echo "ℹ️ jstudio 没有待提交变更，直接 push 已有 commits..."; \
@@ -282,23 +282,23 @@ jstudio-push-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG=
 			echo "☑️ jstudio 已推送: $$msg"; \
 		fi
 	@echo "🔗 更新主仓库 submodule 指针..."
-	@git add $(READER_DIR)
+	@git add $(JSTUDIO_DIR)
 	@echo "☑️ 已暂存主仓库 submodule 指针；请在主仓库提交该指针变更"
 
-reader-uninstall: ## 卸载 reader app（macOS）
-	@echo "🗑️  卸载 jstudio reader..."
+uninstall-jstudio: ## 卸载 jstudio app（macOS）
+	@echo "🗑️  卸载 jstudio..."
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		if [ ! -w "$(READER_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-		$$SUDO rm -rf "$(READER_INSTALL_APP_DIR)/jstudio.app"; \
-		echo "☑️ 已卸载 $(READER_INSTALL_APP_DIR)/jstudio.app"; \
+		if [ ! -w "$(JSTUDIO_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		$$SUDO rm -rf "$(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
+		echo "☑️ 已卸载 $(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
 	else \
 		echo "ℹ️ 非 macOS 平台请删除自定义安装位置，并取消 JSTUDIO_BIN 环境变量。"; \
 	fi
 
-reader-clean: ## 清理 reader 构建产物
-	@echo "🧹 清理 reader 构建产物..."
-	@rm -rf $(READER_DIR)/dist $(READER_TAURI_DIR)/target
-	@echo "☑️ reader 构建产物已清理"
+clean-jstudio: ## 清理 jstudio 构建产物
+	@echo "🧹 清理 jstudio 构建产物..."
+	@rm -rf $(JSTUDIO_DIR)/dist $(JSTUDIO_TAURI_DIR)/target
+	@echo "☑️ jstudio 构建产物已清理"
 
 build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
 	@echo "🔴 构建 j-indicator..."

@@ -183,4 +183,6 @@ allow:
 - Shell(make reader-install:*)
 - Shell(touch /Applications/jstudio.app:*)
 - Shell(mv .git/modules/apps/reader:*)
+- Shell(make help:*)
+- Shell(pwd &&:*)
 deny: []
