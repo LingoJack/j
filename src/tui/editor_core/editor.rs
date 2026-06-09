@@ -24,7 +24,7 @@ use super::{
 };
 
 #[cfg(test)]
-use super::theme::BorderStyle;
+use super::theme::{BorderStyle, ThemeColor};
 
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
@@ -1321,6 +1321,11 @@ mod tests {
             code_border_style: BorderStyle::default(),
             table_header: Color::White,
             table_body: Color::White,
+            popup_border: Color::Cyan,
+            popup_title: Color::Cyan,
+            popup_bg: Color::Reset,
+            popup_highlight_bg: ThemeColor::Reverse,
+            popup_highlight_fg: ThemeColor::Reverse,
             code_default: Color::White,
             code_keyword: Color::Magenta,
             code_string: Color::Green,

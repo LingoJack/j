@@ -5,8 +5,8 @@
 
 use ratatui::style::Color;
 
-// 从主 theme 模块导入 BorderStyle
-pub use crate::theme::BorderStyle;
+// 从主 theme 模块导入 BorderStyle 和 ThemeColor
+pub use crate::theme::{BorderStyle, ThemeColor};
 
 /// 编辑器主题
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +51,13 @@ pub struct EditorTheme {
 
     // ===== 标签 =====
     pub label_ai: Color,
+
+    // ===== Popup =====
+    pub popup_border: Color,
+    pub popup_title: Color,
+    pub popup_bg: Color,
+    pub popup_highlight_bg: ThemeColor,
+    pub popup_highlight_fg: ThemeColor,
 
     // ===== 代码高亮 =====
     pub code_default: Color,

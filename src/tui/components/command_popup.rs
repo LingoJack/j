@@ -79,9 +79,9 @@ pub fn draw_command_popup(f: &mut Frame, main_area: Rect, config: &CommandPopupC
 
     // 颜色配置
     let accent = t.md_h1;
-    let dim_color = t.text_dim;
     let popup_bg = t.bg_primary;
     let text_color = t.text_normal;
+    let selected_text_style = t.popup_highlight_fg.apply_fg(Style::default());
 
     // 构建列表项：pointer + key + label
     let list_items: Vec<ListItem<'_>> = config
@@ -91,16 +91,25 @@ pub fn draw_command_popup(f: &mut Frame, main_area: Rect, config: &CommandPopupC
         .map(|(i, item)| {
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
+            let pointer_style = if is_selected {
+                selected_text_style
+            } else {
+                Style::default().fg(text_color)
+            };
+            let key_style = if is_selected {
+                selected_text_style.add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD)
+            };
+            let label_style = if is_selected {
+                selected_text_style
+            } else {
+                Style::default().fg(t.text_dim)
+            };
             ListItem::new(Line::from(vec![
-                Span::styled(
-                    pointer.to_string(),
-                    Style::default().fg(if is_selected { accent } else { text_color }),
-                ),
-                Span::styled(
-                    format!("{:<8}", item.key),
-                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(item.label.to_string(), Style::default().fg(dim_color)),
+                Span::styled(pointer.to_string(), pointer_style),
+                Span::styled(format!("{:<8}", item.key), key_style),
+                Span::styled(item.label.to_string(), label_style),
             ]))
         })
         .collect();
@@ -120,7 +129,11 @@ pub fn draw_command_popup(f: &mut Frame, main_area: Rect, config: &CommandPopupC
                 ))
                 .style(Style::default().bg(popup_bg)),
         )
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
+        .highlight_style(
+            t.popup_highlight_fg
+                .apply_fg(t.popup_highlight_bg.apply_bg(Style::default()))
+                .add_modifier(Modifier::BOLD),
+        );
 
     f.render_widget(Clear, popup_area);
     f.render_stateful_widget(list, popup_area, &mut list_state);

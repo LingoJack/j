@@ -613,10 +613,16 @@ impl MarkdownEditor {
         self.cmd_popup_selected = self.cmd_popup_selected.min(item_count.saturating_sub(1));
 
         // 构建列表项
-        let accent = self.theme.md_h1;
-        let popup_bg = self.theme.bg_primary;
+        let accent = self.theme.popup_border;
+        let popup_bg = self.theme.popup_bg;
         let dim_color = self.theme.text_dim;
         let label_ai = self.theme.label_ai;
+        let selected_style = self.theme.popup_highlight_fg.apply_fg(Style::default());
+        let highlight_style = self
+            .theme
+            .popup_highlight_fg
+            .apply_fg(self.theme.popup_highlight_bg.apply_bg(Style::default()))
+            .add_modifier(Modifier::BOLD);
         let gap_str = " ".repeat(GAP);
         let list_items: Vec<ListItem> = items
             .iter()
@@ -624,11 +630,15 @@ impl MarkdownEditor {
             .map(|(i, cmd)| {
                 let is_selected = i == self.cmd_popup_selected;
                 let name_style = if is_selected {
-                    Style::default().fg(label_ai).add_modifier(Modifier::BOLD)
+                    selected_style.add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(label_ai)
                 };
-                let desc_style = Style::default().fg(dim_color);
+                let desc_style = if is_selected {
+                    selected_style
+                } else {
+                    Style::default().fg(dim_color)
+                };
                 let pointer = if is_selected { "❯ " } else { "  " };
                 // name 列动态对齐到 max_name_w（命令名都是 ASCII，char 数等于显示宽度）。
                 let name_padded = format!("{:<width$}", cmd.name, width = max_name_w);
@@ -656,12 +666,7 @@ impl MarkdownEditor {
                     ))
                     .style(Style::default().bg(popup_bg)),
             )
-            .highlight_style(
-                Style::default()
-                    .bg(accent)
-                    .fg(popup_bg)
-                    .add_modifier(Modifier::BOLD),
-            );
+            .highlight_style(highlight_style);
 
         f.render_widget(Clear, popup_area);
         f.render_stateful_widget(list, popup_area, &mut list_state);
@@ -689,10 +694,17 @@ impl MarkdownEditor {
         self.themes.popup_selected = self.themes.popup_selected.min(item_count.saturating_sub(1));
 
         // 构建列表项
-        let accent = self.theme.md_h1;
-        let popup_bg = self.theme.bg_primary;
+        let accent = self.theme.popup_border;
+        let title_color = self.theme.popup_title;
+        let popup_bg = self.theme.popup_bg;
         let text_color = self.theme.text_normal;
         let current_color = self.theme.md_link;
+        let selected_style = self.theme.popup_highlight_fg.apply_fg(Style::default());
+        let highlight_style = self
+            .theme
+            .popup_highlight_fg
+            .apply_fg(self.theme.popup_highlight_bg.apply_bg(Style::default()))
+            .add_modifier(Modifier::BOLD);
         let list_items: Vec<ListItem> = self
             .themes
             .gallery
@@ -704,7 +716,7 @@ impl MarkdownEditor {
                 let pointer = if is_selected { "❯ " } else { "  " };
                 let check = if is_current { " ●" } else { "" };
                 let name_style = if is_selected {
-                    Style::default().fg(text_color).add_modifier(Modifier::BOLD)
+                    selected_style.add_modifier(Modifier::BOLD)
                 } else if is_current {
                     Style::default().fg(current_color)
                 } else {
@@ -728,16 +740,13 @@ impl MarkdownEditor {
                     .border_style(Style::default().fg(accent))
                     .title(Span::styled(
                         " 选择主题 ",
-                        Style::default().fg(accent).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(title_color)
+                            .add_modifier(Modifier::BOLD),
                     ))
                     .style(Style::default().bg(popup_bg)),
             )
-            .highlight_style(
-                Style::default()
-                    .bg(accent)
-                    .fg(popup_bg)
-                    .add_modifier(Modifier::BOLD),
-            );
+            .highlight_style(highlight_style);
 
         f.render_widget(Clear, popup_area);
         f.render_stateful_widget(list, popup_area, &mut list_state);

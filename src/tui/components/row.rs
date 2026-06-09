@@ -11,6 +11,15 @@ use super::cursor::cursor_spans;
 use super::label::{label_span, value_style};
 use super::pointer::pointer_span;
 
+/// 选中态下用于次要信息的样式。
+fn secondary_style(selected: bool, theme: &Theme) -> Style {
+    if selected {
+        Style::default().fg(theme.config_label_selected)
+    } else {
+        Style::default().fg(theme.config_dim)
+    }
+}
+
 /// 开关字段行的上下文参数
 #[derive(Debug)]
 pub struct ToggleRowCtx<'a> {
@@ -107,10 +116,7 @@ pub fn selectable_row<'a>(
     Line::from(vec![
         pointer_span(selected, theme),
         Span::styled(primary.to_string(), name_style),
-        Span::styled(
-            format!("  {secondary}"),
-            Style::default().fg(theme.config_dim),
-        ),
+        Span::styled(format!("  {secondary}"), secondary_style(selected, theme)),
     ])
 }
 
@@ -149,17 +155,12 @@ pub fn toggle_list_item<'a>(ctx: &ToggleListItemCtx<'_>) -> Line<'a> {
         Span::styled(" ", Style::default()),
         Span::styled(ctx.name.clone(), name_style),
     ];
+    let detail_style = secondary_style(ctx.selected, ctx.theme);
     if let Some(d) = &ctx.desc {
-        spans.push(Span::styled(
-            format!("  {d}"),
-            Style::default().fg(ctx.theme.config_dim),
-        ));
+        spans.push(Span::styled(format!("  {d}"), detail_style));
     }
     if let Some(t) = &ctx.tag {
-        spans.push(Span::styled(
-            format!(" [{t}]"),
-            Style::default().fg(ctx.theme.config_dim),
-        ));
+        spans.push(Span::styled(format!(" [{t}]"), detail_style));
     }
     Line::from(spans)
 }

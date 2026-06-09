@@ -78,16 +78,22 @@ pub(super) fn draw_tab_skills_list<'a>(app: &ChatApp, max_width: usize) -> ItemL
         ];
         let tag = skill.source.label();
         if !tag.is_empty() {
-            name_spans.push(Span::styled(
-                format!(" [{tag}]"),
-                Style::default().fg(t.config_dim),
-            ));
+            let detail_style = if is_selected {
+                Style::default().fg(t.config_label_selected)
+            } else {
+                Style::default().fg(t.config_dim)
+            };
+            name_spans.push(Span::styled(format!(" [{tag}]"), detail_style));
         }
         list.push(Line::from(name_spans));
 
         // 描述行：自动折行（用 push_raw 避免 field_line_indices 被污染）
         if !skill.frontmatter.description.is_empty() {
-            let desc_style = Style::default().fg(t.config_dim);
+            let desc_style = if is_selected {
+                Style::default().fg(t.config_label_selected)
+            } else {
+                Style::default().fg(t.config_dim)
+            };
             let col_width = max_width.saturating_sub(DESC_INDENT + RIGHT_PAD);
             if col_width == 0 {
                 continue;

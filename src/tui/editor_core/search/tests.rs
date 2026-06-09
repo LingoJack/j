@@ -1,6 +1,8 @@
 use super::*;
 use ratatui::style::Color;
 
+use crate::theme::ThemeColor;
+
 /// 测试用主题
 fn test_theme() -> EditorTheme {
     EditorTheme {
@@ -29,6 +31,11 @@ fn test_theme() -> EditorTheme {
         table_header: Color::White,
         table_body: Color::White,
         code_border_style: BorderStyle::default(),
+        popup_border: Color::Cyan,
+        popup_title: Color::Cyan,
+        popup_bg: Color::Reset,
+        popup_highlight_bg: ThemeColor::Reverse,
+        popup_highlight_fg: ThemeColor::Reverse,
         code_default: Color::White,
         code_keyword: Color::Magenta,
         code_string: Color::Green,

@@ -131,39 +131,78 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
                 }
                 AtPopupItem::Skill(s) => {
                     let pointer = if is_selected { "❯ " } else { "  " };
+                    let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+                    let pointer_style = if is_selected {
+                        selected_style
+                    } else {
+                        Style::default().fg(t.text_normal)
+                    };
+                    let tag_style = if is_selected {
+                        selected_style.add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD)
+                    };
+                    let name_style = if is_selected {
+                        selected_style
+                    } else {
+                        Style::default().fg(t.text_white)
+                    };
                     ListItem::new(Line::from(vec![
-                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                        Span::styled(
-                            "[skill]   ".to_string(),
-                            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(s.as_str().to_string(), Style::default().fg(t.text_white)),
+                        Span::styled(pointer.to_string(), pointer_style),
+                        Span::styled("[skill]   ".to_string(), tag_style),
+                        Span::styled(s.as_str().to_string(), name_style),
                     ]))
                 }
                 AtPopupItem::Command(s) => {
                     let pointer = if is_selected { "❯ " } else { "  " };
+                    let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+                    let pointer_style = if is_selected {
+                        selected_style
+                    } else {
+                        Style::default().fg(t.text_normal)
+                    };
+                    let tag_style = if is_selected {
+                        selected_style.add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD)
+                    };
+                    let name_style = if is_selected {
+                        selected_style
+                    } else {
+                        Style::default().fg(t.text_white)
+                    };
                     ListItem::new(Line::from(vec![
-                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                        Span::styled(
-                            "[command] ".to_string(),
-                            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(s.as_str().to_string(), Style::default().fg(t.text_white)),
+                        Span::styled(pointer.to_string(), pointer_style),
+                        Span::styled("[command] ".to_string(), tag_style),
+                        Span::styled(s.as_str().to_string(), name_style),
                     ]))
                 }
                 AtPopupItem::File(s) => {
                     let pointer = if is_selected { "❯ " } else { "  " };
                     let is_dir = s.ends_with('/');
-                    let name_color = if is_dir { Color::Cyan } else { t.text_white };
+                    let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+                    let pointer_style = if is_selected {
+                        selected_style
+                    } else {
+                        Style::default().fg(t.text_normal)
+                    };
+                    let tag_style = if is_selected {
+                        selected_style.add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                            .fg(t.label_user)
+                            .add_modifier(Modifier::BOLD)
+                    };
+                    let name_style = if is_selected {
+                        selected_style
+                    } else {
+                        let name_color = if is_dir { Color::Cyan } else { t.text_white };
+                        Style::default().fg(name_color)
+                    };
                     ListItem::new(Line::from(vec![
-                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                        Span::styled(
-                            "[file]    ".to_string(),
-                            Style::default()
-                                .fg(t.label_user)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(s.as_str().to_string(), Style::default().fg(name_color)),
+                        Span::styled(pointer.to_string(), pointer_style),
+                        Span::styled("[file]    ".to_string(), tag_style),
+                        Span::styled(s.as_str().to_string(), name_style),
                     ]))
                 }
             }
@@ -217,12 +256,20 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
             let pointer = if is_selected { "❯ " } else { "  " };
             let is_dir = name.ends_with('/');
             let name_color = if is_dir { Color::Cyan } else { t.label_user };
+            let selected_style = t.popup_highlight_fg.apply_fg(Style::default());
+            let pointer_style = if is_selected {
+                selected_style
+            } else {
+                Style::default().fg(t.text_normal)
+            };
+            let name_style = if is_selected {
+                selected_style.add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(name_color).add_modifier(Modifier::BOLD)
+            };
             ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                Span::styled(
-                    name.clone(),
-                    Style::default().fg(name_color).add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(pointer.to_string(), pointer_style),
+                Span::styled(name.clone(), name_style),
             ]))
         })
         .collect();

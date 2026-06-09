@@ -242,20 +242,28 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                 .add_modifier(Modifier::BOLD)
         };
 
+        let detail_style = if is_selected {
+            Style::default().fg(t.config_label_selected)
+        } else {
+            Style::default().fg(t.config_dim)
+        };
+        let tool_calls_style = if is_selected {
+            Style::default().fg(t.config_label_selected)
+        } else {
+            Style::default().fg(t.text_dim)
+        };
+
         list.push(Line::from(vec![
             Span::styled(pointer.to_string(), pointer_style),
             Span::styled(format!("{:<12}", safe_name), name_style),
-            Span::styled(
-                format!("{:<22}", role_display),
-                Style::default().fg(t.config_dim),
-            ),
+            Span::styled(format!("{:<22}", role_display), detail_style),
             Span::styled(
                 format!("{:<16}", status_text),
                 Style::default().fg(status_color),
             ),
             Span::styled(
                 format!("{} 次调用", snap.tool_calls_count),
-                Style::default().fg(t.text_dim),
+                tool_calls_style,
             ),
         ]));
     }
