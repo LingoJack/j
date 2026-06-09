@@ -38,15 +38,26 @@ pub(crate) fn render_write_edit_result(
                 ),
             ]));
         }
-        // 显示完整错误信息
+        // 显示完整错误信息，并在超过展示上限时给出截断提示，避免多行错误看起来“断在半截”。
         let error_style = Style::default().fg(theme.toast_error_border);
-        for line in content.lines().take(ERROR_RESULT_MAX_LINES) {
+        let total_lines = content.lines().count();
+        let display_lines: Vec<&str> = content.lines().take(ERROR_RESULT_MAX_LINES).collect();
+        for line in display_lines {
             for wrapped in wrap_text(line, content_w.saturating_sub(6)) {
                 lines.push(Line::from(Span::styled(
                     format!("    {}", wrapped),
                     error_style,
                 )));
             }
+        }
+        if total_lines > ERROR_RESULT_MAX_LINES {
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "    ... (共 {} 行，显示前 {} 行)",
+                    total_lines, ERROR_RESULT_MAX_LINES
+                ),
+                Style::default().fg(theme.text_dim),
+            )));
         }
         return;
     }

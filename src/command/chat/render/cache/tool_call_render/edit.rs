@@ -40,6 +40,13 @@ pub(crate) fn render_edit_call_request_expanded(
         render_kv_line("new", &summary, content_w, lines, theme);
     }
 
+    // confirm_token（批量替换二次确认）
+    if let Some(confirm_token) = parsed.get("confirm_token").and_then(|v| v.as_str())
+        && !confirm_token.is_empty()
+    {
+        render_kv_line("token", confirm_token, content_w, lines, theme);
+    }
+
     // replace_all
     if let Some(replace_all) = parsed.get("replace_all").and_then(|v| v.as_bool())
         && replace_all
