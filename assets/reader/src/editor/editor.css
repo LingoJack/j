@@ -38,7 +38,7 @@
   }
 
   .md-code-lang-input {
-    @apply border-0 outline-none caret-[var(--color-seeyue-accent)] transition-colors focus:bg-seeyue-elevated focus:text-seeyue-fg-strong;
+    @apply border-0 outline-none caret-[var(--color-seeyue-accent)];
   }
 
   .md-code-lang-input::placeholder {
@@ -63,7 +63,7 @@
   }
 
   .md-table-cell-input {
-    @apply block w-full min-w-[60px] resize-none overflow-hidden border-0 bg-transparent px-[14px] py-2 text-inherit outline-none caret-[var(--color-seeyue-accent)] selection:bg-[rgba(204,120,92,0.2)] focus:bg-seeyue-elevated focus:shadow-[inset_0_0_0_2px_var(--color-seeyue-accent)];
+    @apply block w-full min-w-[60px] resize-none overflow-hidden border-0 bg-transparent px-[14px] py-2 text-inherit outline-none caret-[var(--color-seeyue-accent)] selection:bg-[rgba(204,120,92,0.2)];
   }
 
   .md-table-cell-textarea {

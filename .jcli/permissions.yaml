@@ -165,4 +165,5 @@ allow:
 - Shell(git status:*)
 - Shell(git restore:*)
 - Shell(python3 -:*)
+- Shell(set -euo:*)
 deny: []

@@ -1,6 +1,6 @@
 //! 确认/交互区域渲染：工具确认框、Ask 问答、权限确认、Plan 审批
 
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::command::chat::app::{ChatApp, ToolCallStatus};
@@ -185,7 +185,7 @@ pub(crate) fn render_ask_questions(
 
             let pointer_style = if is_cursor {
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(t.tool_confirm_hint)
                     .bg(confirm_bg)
                     .add_modifier(Modifier::BOLD)
             } else {
@@ -193,7 +193,7 @@ pub(crate) fn render_ask_questions(
             };
             let check_style = if is_cursor || is_selected_multi {
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(t.tool_confirm_hint)
                     .bg(confirm_bg)
                     .add_modifier(Modifier::BOLD)
             } else {
@@ -201,7 +201,7 @@ pub(crate) fn render_ask_questions(
             };
             let label_style = if is_cursor {
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(t.tool_confirm_hint)
                     .bg(confirm_bg)
                     .add_modifier(Modifier::BOLD)
             } else {
@@ -251,7 +251,7 @@ pub(crate) fn render_ask_questions(
                     lines.push(bordered_line(
                         vec![Span::styled(
                             desc_text,
-                            Style::default().fg(t.text_dim).bg(confirm_bg),
+                            Style::default().fg(t.tool_confirm_hint).bg(confirm_bg),
                         )],
                         bubble_max_width,
                         border_color,
@@ -268,7 +268,7 @@ pub(crate) fn render_ask_questions(
 
             if app.ui.tool_interact_typing {
                 let pointer_style = Style::default()
-                    .fg(Color::Cyan)
+                    .fg(t.tool_confirm_hint)
                     .bg(confirm_bg)
                     .add_modifier(Modifier::BOLD);
 
@@ -289,7 +289,7 @@ pub(crate) fn render_ask_questions(
                 };
 
                 // 普通文本样式
-                let text_style = Style::default().fg(t.text_white).bg(confirm_bg);
+                let text_style = Style::default().fg(t.text_normal).bg(confirm_bg);
                 // 块状光标样式（使用主题定义的光标颜色）
                 let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
 
@@ -371,7 +371,7 @@ pub(crate) fn render_ask_questions(
                 let pointer_str = if is_cursor { " ❯ " } else { "   " };
                 let pointer_style = if is_cursor {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(t.tool_confirm_hint)
                         .bg(confirm_bg)
                         .add_modifier(Modifier::BOLD)
                 } else {
@@ -398,7 +398,7 @@ pub(crate) fn render_ask_questions(
                 };
                 let text_style = if is_cursor {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(t.tool_confirm_hint)
                         .bg(confirm_bg)
                         .add_modifier(Modifier::BOLD)
                 } else if draft.is_empty() {
@@ -436,7 +436,7 @@ pub(crate) fn render_ask_questions(
         lines.push(bordered_line(
             vec![Span::styled(
                 hint,
-                Style::default().fg(t.text_dim).bg(confirm_bg),
+                Style::default().fg(t.tool_confirm_hint).bg(confirm_bg),
             )],
             bubble_max_width,
             border_color,
@@ -520,7 +520,7 @@ pub(crate) fn render_tool_confirm_content(
     // 工具确认选项
     {
         let arrow_style = Style::default()
-            .fg(Color::Cyan)
+            .fg(t.tool_confirm_hint)
             .add_modifier(Modifier::BOLD);
         let selected = app.ui.tool_interact_selected;
 
@@ -572,10 +572,10 @@ pub(crate) fn render_tool_confirm_content(
                     String::new()
                 };
 
-                let text_style = Style::default().fg(t.text_white).bg(confirm_bg);
+                let text_style = Style::default().fg(t.text_normal).bg(confirm_bg);
                 let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
                 let pointer_style = Style::default()
-                    .fg(Color::Cyan)
+                    .fg(t.tool_confirm_hint)
                     .bg(confirm_bg)
                     .add_modifier(Modifier::BOLD);
 
@@ -649,7 +649,7 @@ pub(crate) fn render_tool_confirm_content(
                 let pointer_str = if is_selected { "❯ " } else { "  " };
                 let pointer_style = if is_selected {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(t.tool_confirm_hint)
                         .bg(confirm_bg)
                         .add_modifier(Modifier::BOLD)
                 } else {
@@ -671,7 +671,7 @@ pub(crate) fn render_tool_confirm_content(
                 };
                 let text_style = if is_selected {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(t.tool_confirm_hint)
                         .bg(confirm_bg)
                         .add_modifier(Modifier::BOLD)
                 } else if input.is_empty() {
@@ -793,7 +793,7 @@ pub(crate) fn render_agent_perm_confirm_area(
         vec![Span::styled(
             " [Y/Enter] 允许   [N/Esc] 拒绝",
             Style::default()
-                .fg(t.text_dim)
+                .fg(t.tool_confirm_hint)
                 .add_modifier(Modifier::BOLD)
                 .bg(confirm_bg),
         )],
@@ -885,7 +885,7 @@ pub(crate) fn render_plan_approval_confirm_area(
         lines.push(bordered_line(
             vec![Span::styled(
                 " ... (内容已截断)".to_string(),
-                Style::default().fg(t.text_dim).bg(confirm_bg),
+                Style::default().fg(t.tool_confirm_hint).bg(confirm_bg),
             )],
             bubble_max_width,
             border_color,
@@ -904,7 +904,7 @@ pub(crate) fn render_plan_approval_confirm_area(
     // Y/N 提示行（支持折行）
     let hint_text = " [Y/Enter] 批准   [C] 批准并清空   [N/Esc] 拒绝";
     let hint_style = Style::default()
-        .fg(t.text_dim)
+        .fg(t.tool_confirm_hint)
         .add_modifier(Modifier::BOLD)
         .bg(confirm_bg);
     for wrapped in wrap_text(hint_text, content_w) {
