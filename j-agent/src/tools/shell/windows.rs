@@ -14,6 +14,10 @@ use crate::tools::{
     schema_to_tool_params,
 };
 #[cfg(windows)]
+use crate::util::shell_runtime::{
+    ResolvedShellRuntime, parse_runtime_override, resolve_shell_runtime,
+};
+#[cfg(windows)]
 use schemars::JsonSchema;
 #[cfg(windows)]
 use serde::Deserialize;
@@ -47,6 +51,9 @@ struct PowerShellParams {
     /// Timeout in seconds, default 120, max 600. The process is automatically killed on timeout and partial output is returned. For build commands use 300-600.
     #[serde(default)]
     timeout: Option<u64>,
+    /// Optional shell runtime override: auto / pwsh / powershell / git_bash / cmd.
+    #[serde(default)]
+    runtime: Option<String>,
     /// If true, run the command in background and return a task_id immediately. Use TaskOutput to retrieve results.
     #[serde(default)]
     run_in_background: bool,
@@ -66,6 +73,21 @@ impl PowerShellTool {
     // 对 agent 暴露统一工具名为 Shell，避免 Windows/Unix 在提示词、权限规则、
     // 渲染与分类链路中出现名称分叉；底层实现仍然执行 PowerShell。
     pub const NAME: &'static str = "Shell";
+
+    fn resolve_runtime_override(runtime: Option<&str>) -> Result<ResolvedShellRuntime, ToolResult> {
+        let preferred = parse_runtime_override(runtime).map_err(|err| ToolResult {
+            output: err,
+            is_error: true,
+            images: vec![],
+            plan_decision: PlanDecision::None,
+        })?;
+        resolve_shell_runtime(preferred).map_err(|err| ToolResult {
+            output: format!("shell runtime 不可用: {}", err),
+            is_error: true,
+            images: vec![],
+            plan_decision: PlanDecision::None,
+        })
+    }
 }
 
 #[cfg(windows)]
@@ -147,13 +169,19 @@ impl Tool for PowerShellTool {
         }
 
         if params.run_in_background {
-            return self.execute_background(params.command, params.cwd, timeout_secs);
+            return self.execute_background(
+                params.command,
+                params.cwd,
+                timeout_secs,
+                params.runtime.as_deref(),
+            );
         }
 
         self.execute_sync(
             &params.command,
             params.cwd.as_deref(),
             timeout_secs,
+            params.runtime.as_deref(),
             cancelled,
         )
     }
@@ -189,12 +217,16 @@ impl PowerShellTool {
         command: &str,
         cwd: Option<&str>,
         timeout_secs: u64,
+        runtime: Option<&str>,
         cancelled: &Arc<AtomicBool>,
     ) -> ToolResult {
-        let mut cmd = std::process::Command::new("powershell.exe");
-        cmd.args(["-NoProfile", "-NonInteractive", "-Command"])
-            .arg(command)
-            .stdout(std::process::Stdio::piped())
+        let resolved = match Self::resolve_runtime_override(runtime) {
+            Ok(resolved) => resolved,
+            Err(err) => return err,
+        };
+
+        let mut cmd = resolved.build_command(command);
+        cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
         // 设置工作目录：优先用显式 cwd，其次用 thread-local worktree CWD
@@ -439,7 +471,19 @@ impl PowerShellTool {
         command: String,
         cwd: Option<String>,
         timeout_secs: u64,
+        runtime: Option<&str>,
     ) -> ToolResult {
+        let preferred = match parse_runtime_override(runtime) {
+            Ok(preferred) => preferred,
+            Err(err) => {
+                return ToolResult {
+                    output: err,
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
         let effective_cwd = cwd
             .clone()
             .or_else(|| thread_cwd().map(|p| p.to_string_lossy().to_string()));
@@ -452,10 +496,19 @@ impl PowerShellTool {
         let cmd = command.clone();
 
         std::thread::spawn(move || {
-            let mut child_cmd = std::process::Command::new("powershell.exe");
+            let resolved = match resolve_shell_runtime(preferred) {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    let mut buf = output_buffer.lock().unwrap_or_else(|e| e.into_inner());
+                    *buf = format!("shell runtime 不可用: {}", err);
+                    drop(buf);
+                    manager.complete_task(&tid, "error", format!("shell runtime 不可用: {}", err));
+                    return;
+                }
+            };
+
+            let mut child_cmd = resolved.build_command(&cmd);
             child_cmd
-                .args(["-NoProfile", "-NonInteractive", "-Command"])
-                .arg(&cmd)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
 

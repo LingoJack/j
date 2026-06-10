@@ -26,7 +26,14 @@ pub const INSTALL_SOURCE: &str = match option_env!("INSTALL_SOURCE") {
 };
 
 /// 配置编辑界面的字段列表
-pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model", "supports_vision"];
+pub const CONFIG_FIELDS: &[&str] = &[
+    "name",
+    "api_base",
+    "api_key",
+    "model",
+    "supports_vision",
+    "tool_call_mode",
+];
 /// 全局配置字段（Tab 分页版，去掉 tools_enabled 和 skills_enabled）
 pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "system_prompt",
@@ -41,6 +48,7 @@ pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "thinking_style",
     "flat_bubble",
     "welcome_quote",
+    "shell_runtime",
     "compact_enabled",
     "compact_token_threshold",
     "compact_keep_recent",
@@ -169,7 +177,7 @@ pub mod config_key {
     pub const WEEK_NUM: &str = "week_num";
     pub const LAST_DAY: &str = "last_day";
     pub const GIT_REPO: &str = "git_repo";
-    #[cfg_attr(not(feature = "browser_cdp"), allow(dead_code))]
+    #[allow(dead_code)]
     pub const BROWSER_HEADLESS: &str = "browser_headless";
     pub const NOTEBOOK_PANEL_RATIO: &str = "notebook_panel_ratio";
     pub const NOTEBOOK_EXPANDED_DIRS: &str = "notebook_expanded_dirs";
@@ -177,6 +185,8 @@ pub mod config_key {
     pub const COLOR_MODE: &str = "color_mode";
     /// 代码块边框样式：rounded（圆角） / plain（直角）
     pub const CODE_BLOCK_BORDER_STYLE: &str = "code_block_border_style";
+    /// 默认 shell 运行时：auto / pwsh / powershell / git_bash / cmd / sh / bash
+    pub const SHELL_RUNTIME: &str = "shell_runtime";
 }
 
 /// 已知 config key 对应的合法 value 候选列表（用于自动补全）
@@ -189,8 +199,11 @@ pub fn config_value_candidates(key: &str) -> Option<&'static [&'static str]> {
 }
 
 /// setting 段中所有可配置的已知 key（用于自动补全，即使配置文件中尚未出现）
-pub const SETTING_KNOWN_KEYS: &[&str] =
-    &[config_key::CODE_BLOCK_BORDER_STYLE, config_key::COLOR_MODE];
+pub const SETTING_KNOWN_KEYS: &[&str] = &[
+    config_key::CODE_BLOCK_BORDER_STYLE,
+    config_key::COLOR_MODE,
+    config_key::SHELL_RUNTIME,
+];
 
 // ========== 搜索引擎 ==========
 

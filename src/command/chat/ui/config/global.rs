@@ -30,8 +30,8 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
         (0, 3),  // system_prompt, agent_md, style
         (3, 2),  // max_history_messages, max_context_tokens
         (5, 2),  // max_tool_rounds, tool_confirm_timeout
-        (7, 5),  // theme, auto_restore_session, thinking_style, flat_bubble, welcome_quote
-        (12, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
+        (7, 6), // theme, auto_restore_session, thinking_style, flat_bubble, welcome_quote, shell_runtime
+        (13, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
@@ -76,6 +76,7 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                 "thinking_style" => {
                     global_theme_row(app.state.agent_config.thinking_style.display_name(), &ctx)
                 }
+                "shell_runtime" => global_theme_row(&value, &ctx),
                 "system_prompt" | "agent_md" | "style" => {
                     let mut preview_ctx = ctx;
                     preview_ctx.hint = "Enter 编辑".to_string();

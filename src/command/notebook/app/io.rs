@@ -275,40 +275,16 @@ fn save_if_changed(
 
 // ========== 剪切板 ==========
 
-/// 复制内容到系统剪切板
+/// 复制内容到系统剪切板（使用 arboard 库，支持 macOS/Linux/Windows）
 #[allow(dead_code)]
 pub fn copy_to_clipboard(content: &str) -> bool {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
+    use arboard::Clipboard;
 
-    let (cmd, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("pbcopy", vec![])
-    } else if cfg!(target_os = "linux") {
-        if Command::new("which")
-            .arg("xclip")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            ("xclip", vec!["-selection", "clipboard"])
-        } else {
-            ("xsel", vec!["--clipboard", "--input"])
-        }
-    } else {
-        return false;
+    let mut clipboard = match Clipboard::new() {
+        Ok(c) => c,
+        Err(_) => return false,
     };
-
-    let child = Command::new(cmd).args(&args).stdin(Stdio::piped()).spawn();
-
-    match child {
-        Ok(mut child) => {
-            if let Some(ref mut stdin) = child.stdin {
-                let _ = stdin.write_all(content.as_bytes());
-            }
-            child.wait().map(|s| s.success()).unwrap_or(false)
-        }
-        Err(_) => false,
-    }
+    clipboard.set_text(content).is_ok()
 }
 
 // ========== 外部操作 ==========

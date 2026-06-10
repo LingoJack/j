@@ -45,26 +45,6 @@ impl ChatApp {
             return actions;
         }
 
-        // 如果在 ToolConfirm 模式，仍然需要轮询工具执行结果
-        if self.ui.mode == ChatMode::ToolConfirm {
-            let completed = self.tool_executor.poll_results();
-            for (id, name, output, is_error) in completed {
-                self.broadcast_ws(WsOutbound::ToolResult {
-                    id,
-                    name,
-                    output,
-                    is_error,
-                });
-            }
-            if let Some(ref rx) = self.ask_request_rx
-                && let Ok(ask_req) = rx.try_recv()
-            {
-                self.init_ask_mode(ask_req);
-                self.ui.msg_lines_cache = None;
-            }
-            return actions;
-        }
-
         // 如果上一帧设置了 pending_tool_execution，本帧才真正执行
         if self.tool_executor.pending_tool_execution {
             self.tool_executor.pending_tool_execution = false;
@@ -186,9 +166,10 @@ impl ChatApp {
             && let Ok(ask_req) = rx.try_recv()
         {
             self.init_ask_mode(ask_req);
-            actions.push(Action::EnterMode(ChatMode::ToolConfirm));
+            if self.ui.mode != ChatMode::ToolConfirm {
+                actions.push(Action::EnterMode(ChatMode::ToolConfirm));
+            }
             self.ui.msg_lines_cache = None;
-            return actions;
         }
 
         if let Some(ref agent) = self.main_agent {
@@ -453,7 +434,12 @@ impl ChatApp {
     }
 
     /// 结束加载状态（流式完成或错误）
-    pub(super) fn finish_loading(&mut self, had_error: bool, was_cancelled: bool) {
+    pub(super) fn finish_loading(
+        &mut self,
+        had_error: bool,
+        was_cancelled: bool,
+        preserve_partial_reply_on_error: bool,
+    ) {
         if let Some(ref agent) = self.main_agent {
             agent.cancel();
         }
@@ -590,9 +576,35 @@ impl ChatApp {
                 self.ui.scroll_offset = usize::MAX;
             }
         } else {
+            let content = {
+                let sc = safe_lock(
+                    &self.state.streaming_content,
+                    "finish_loading::streaming_content_error",
+                );
+                sc.clone()
+            };
+
+            if preserve_partial_reply_on_error && !content.is_empty() {
+                let mut msg = ChatMessage::text(MessageRole::Assistant, content);
+                let reasoning = safe_lock(
+                    &self.state.streaming_reasoning_content,
+                    "finish_loading::error_reasoning_content",
+                )
+                .clone();
+                if !reasoning.is_empty() {
+                    msg.reasoning_content = Some(reasoning);
+                }
+                self.push_both_channels(msg);
+            }
+
             safe_lock(
                 &self.state.streaming_content,
-                "finish_loading::streaming_content_error",
+                "finish_loading::streaming_content_error_clear",
+            )
+            .clear();
+            safe_lock(
+                &self.state.streaming_reasoning_content,
+                "finish_loading::reasoning_content_error_clear",
             )
             .clear();
         }
@@ -603,16 +615,18 @@ impl ChatApp {
         self.persist_new_display_messages();
 
         // 检查排队的任务
-        let next_task = {
-            let mut tasks = safe_lock(&self.state.queued_tasks, "finish_loading::queued_tasks");
-            if !tasks.is_empty() {
-                Some(tasks.remove(0))
-            } else {
-                None
+        if !had_error && !was_cancelled {
+            let next_task = {
+                let mut tasks = safe_lock(&self.state.queued_tasks, "finish_loading::queued_tasks");
+                if !tasks.is_empty() {
+                    Some(tasks.remove(0))
+                } else {
+                    None
+                }
+            };
+            if let Some(task_text) = next_task {
+                self.send_message_internal(task_text);
             }
-        };
-        if let Some(task_text) = next_task {
-            self.send_message_internal(task_text);
         }
     }
 }

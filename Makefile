@@ -1,9 +1,15 @@
-SHELL := /bin/bash
+# 跨平台适配：Git Bash on Windows 使用 /usr/bin/bash，其他 Unix 用 /bin/bash
+SHELL := $(shell which bash 2>/dev/null || echo /bin/bash)
 
 # ============================================
 # 变量定义
 # ============================================
-INSTALL_DIR := /usr/local/bin
+# 跨平台安装目录
+ifeq ($(OS),Windows_NT)
+	INSTALL_DIR := $(USERPROFILE)/.cargo/bin
+else
+	INSTALL_DIR := /usr/local/bin
+endif
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
 JSTUDIO_DIR := apps/jstudio
@@ -315,13 +321,15 @@ clean-jstudio: ## 清理 jstudio 构建产物
 	@rm -rf $(JSTUDIO_DIR)/dist $(JSTUDIO_TAURI_DIR)/target
 	@echo "☑️ jstudio 构建产物已清理"
 
-build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
+build-indicator: ## 构建 j-indicator (仅 macOS)
+	@if [ "$(OS)" = "Windows_NT" ]; then echo "ℹ️ j-indicator 仅支持 macOS，跳过"; exit 0; fi
 	@echo "🔴 构建 j-indicator..."
 	@mkdir -p $(TARGET_DIR)
 	@swiftc helpers/indicator.swift -o $(TARGET_DIR)/j-indicator -O
 	@echo "☑️ j-indicator 构建完成: $(TARGET_DIR)/j-indicator"
 
-build-ax: ## 构建 j-ax (macOS Accessibility API helper)
+build-ax: ## 构建 j-ax (仅 macOS)
+	@if [ "$(OS)" = "Windows_NT" ]; then echo "ℹ️ j-ax 仅支持 macOS，跳过"; exit 0; fi
 	@echo "♿ 构建 j-ax..."
 	@mkdir -p $(TARGET_DIR)
 	@swiftc helpers/ax.swift -o $(TARGET_DIR)/j-ax -O -framework Cocoa -framework ApplicationServices
@@ -338,40 +346,43 @@ release: ## 构建发布版本（release, INSTALL_SOURCE=github）
 # ============================================
 # 安装相关
 # ============================================
-install: ## 从本地 cargo build --release 安装到 /usr/local/bin（与 GitHub 安装路径一致）
+install: ## 从本地构建安装（Unix → /usr/local/bin，Windows → ~/.cargo/bin）
 	@echo "📦 从本地构建安装 j-cli..."
 	@$(MAKE) release
-	@if [ ! -d "$(INSTALL_DIR)" ]; then \
-		echo "   创建安装目录 $(INSTALL_DIR)..."; \
-		sudo mkdir -p "$(INSTALL_DIR)"; \
-	fi; \
-	if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-	echo "   正在安装到 $(INSTALL_DIR)..."; \
-	$$SUDO rm -f "$(INSTALL_DIR)/j"; \
-	$$SUDO cp "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
-	$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
-	for helper in j-indicator j-ax; do \
-		if [ -f "$(TARGET_DIR)/$$helper" ]; then \
-			$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
-			$$SUDO cp "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
-			$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
-			echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
-		fi; \
-	done; \
-	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
-	if [ -x "$(INSTALL_DIR)/j" ]; then \
+	@mkdir -p "$(INSTALL_DIR)"; \
+	if [ "$(OS)" = "Windows_NT" ]; then \
+		cp -f "$(TARGET_DIR)/j.exe" "$(INSTALL_DIR)/j.exe"; \
+		echo "☑️ 安装成功！"; \
+		echo "   安装位置: $(INSTALL_DIR)/j.exe"; \
+	else \
+		if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		$$SUDO rm -f "$(INSTALL_DIR)/j"; \
+		$$SUDO cp "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
+		$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
+		for helper in j-indicator j-ax; do \
+			if [ -f "$(TARGET_DIR)/$$helper" ]; then \
+				$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
+				$$SUDO cp "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
+				$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
+				echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
+			fi; \
+		done; \
 		echo "☑️ 安装成功！"; \
 		echo "   安装位置: $(INSTALL_DIR)/j"; \
-		echo "   版本: v$$version (本地构建)"; \
-	else \
-		echo "✖️ 安装失败"; exit 1; \
-	fi
+	fi; \
+	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "   版本: v$$version (本地构建)"
 
 uninstall: ## 卸载
 	@echo "🗑️  卸载..."
-	@if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-	$$SUDO rm -f "$(INSTALL_DIR)/j" "$(INSTALL_DIR)/j-indicator" "$(INSTALL_DIR)/j-ax"; \
-	echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 卸载"
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		rm -f "$(INSTALL_DIR)/j.exe"; \
+		echo "☑️ j 已从 $(INSTALL_DIR) 卸载"; \
+	else \
+		if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		$$SUDO rm -f "$(INSTALL_DIR)/j" "$(INSTALL_DIR)/j-indicator" "$(INSTALL_DIR)/j-ax"; \
+		echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 卸载"; \
+	fi
 
 # ============================================
 # 发布相关
@@ -609,29 +620,37 @@ coverage: ## 生成代码覆盖率报告
 PPT_PORT := 8765
 PPT_PATH := docs/thesis-ppt/
 
+# 跨平台端口检测函数
+define KILL_PORT
+if [ "$(OS)" = "Windows_NT" ]; then \
+	pid=$$(netstat -ano | grep ":$(PPT_PORT)" | grep LISTENING | awk '{print $$5}' | head -1); \
+	if [ -n "$$pid" ]; then taskkill //PID $$pid //F 2>/dev/null || true; fi; \
+else \
+	lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
+fi
+endef
+
+# 跨平台打开 URL 函数
+define OPEN_URL
+if [ "$(OS)" = "Windows_NT" ]; then start "$$url"; else open "$$url"; fi
+endef
+
 ppt-serve: ## 启动毕业设计 PPT 本地服务（http://localhost:$(PPT_PORT)/$(PPT_PATH)）
 	@echo "🎤 启动 PPT 服务..."
-	@if lsof -ti:$(PPT_PORT) >/dev/null 2>&1; then \
-		echo "ℹ️ 端口 $(PPT_PORT) 已被占用，先停止旧服务..."; \
-		lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
-		sleep 0.5; \
-	fi
-	@cd $(CURDIR) && python3 -m http.server $(PPT_PORT) >/dev/null 2>&1 &
+	@$(KILL_PORT)
+	@sleep 0.5
+	@cd $(CURDIR) && (python3 -m http.server $(PPT_PORT) || python -m http.server $(PPT_PORT)) >/dev/null 2>&1 &
 	@sleep 1
 	@url="http://localhost:$(PPT_PORT)/$(PPT_PATH)"; \
 	echo "☑️ PPT 已启动: $$url"; \
 	echo "   按键: ← → 翻页 · S 演讲者视图 · T 切换主题 · F 全屏"; \
 	echo "   停止: make ppt-stop"; \
-	open "$$url"
+	$(OPEN_URL)
 
 ppt-stop: ## 停止 PPT 本地服务
 	@echo "🛑 停止 PPT 服务..."
-	@if lsof -ti:$(PPT_PORT) >/dev/null 2>&1; then \
-		lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
-		echo "☑️ 已停止端口 $(PPT_PORT) 上的服务"; \
-	else \
-		echo "ℹ️ 端口 $(PPT_PORT) 未在运行"; \
-	fi
+	@$(KILL_PORT)
+	@echo "☑️ 已停止端口 $(PPT_PORT) 上的服务"
 
 # ============================================
 # PPT 一键导出 .pptx（图片版 · 与 HTML 视觉 100% 一致 + 内嵌逐字稿）
@@ -639,7 +658,14 @@ ppt-stop: ## 停止 PPT 本地服务
 PPT_DECK_DIR  := presentation/ppt
 PPT_SCRIPT_DIR := $(PPT_DECK_DIR)/scripts
 PPT_VENV      := $(PPT_SCRIPT_DIR)/.venv
-PPT_PY        := $(PPT_VENV)/bin/python3
+# 跨平台 Python venv 路径
+ifeq ($(OS),Windows_NT)
+	PPT_PY    := $(PPT_VENV)/Scripts/python.exe
+	PPT_PIP   := $(PPT_VENV)/Scripts/pip.exe
+else
+	PPT_PY    := $(PPT_VENV)/bin/python3
+	PPT_PIP   := $(PPT_VENV)/bin/pip
+endif
 PPT_OUT       := $(PPT_DECK_DIR)/jcli-thesis.pptx
 
 ppt-deps: ## 安装 PPT 导出依赖（puppeteer + python-pptx，幂等）
@@ -652,11 +678,11 @@ ppt-deps: ## 安装 PPT 导出依赖（puppeteer + python-pptx，幂等）
 	fi
 	@if [ ! -x "$(PPT_PY)" ]; then \
 		echo "  创建 venv..."; \
-		python3 -m venv $(PPT_VENV); \
+		(python3 || python) -m venv $(PPT_VENV); \
 	fi
 	@if ! $(PPT_PY) -c "import pptx, bs4" 2>/dev/null; then \
 		echo "  安装 python-pptx + beautifulsoup4..."; \
-		$(PPT_VENV)/bin/pip install --quiet python-pptx beautifulsoup4 lxml Pillow; \
+		$(PPT_PIP) install --quiet python-pptx beautifulsoup4 lxml Pillow; \
 	else \
 		echo "  ✓ python-pptx 已安装"; \
 	fi
@@ -671,8 +697,13 @@ ppt-build: ppt-render ## 一键导出 .pptx（图片版 + 逐字稿）
 	@$(PPT_PY) $(PPT_SCRIPT_DIR)/png-to-pptx.py
 	@echo ""
 	@echo "✅ 完成！文件: $(PPT_OUT)"
-	@du -h $(PPT_OUT) | awk '{print "   大小: "$$1}'
-	@open $(PPT_OUT) 2>/dev/null || true
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		dir "$(PPT_OUT)" | tail -1; \
+		start "" "$(PPT_OUT)"; \
+	else \
+		du -h $(PPT_OUT) | awk '{print "   大小: "$$1}'; \
+		open $(PPT_OUT) 2>/dev/null || true; \
+	fi
 
 ppt-clean: ## 清理 PPT 导出产物
 	@echo "🧹 清理 PPT 导出产物..."

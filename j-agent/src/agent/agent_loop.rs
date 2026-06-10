@@ -1,4 +1,6 @@
-use super::api::{build_request_with_tools, call_llm_non_stream, create_llm_client};
+use super::api::{
+    build_request_with_tools, call_llm_non_stream, create_llm_client, extract_pseudo_tool_tag,
+};
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
@@ -188,7 +190,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         // 同时排除 deferred 工具（需要 LoadTool 加载后才可用）。
         // 注意：必须 clone 成 Vec 后 drop guard，否则 to_llm_tools_non_deferred 内部
         // 会调用 LoadTool::description() 二次 lock 同一 Mutex，造成自死锁。
-        let tools = if tools_enabled {
+        let tools = if tools_enabled && provider.tool_call_mode.allows_tools() {
             let deferred: Vec<String> = match deferred_tools.lock() {
                 Ok(guard) => guard.clone(),
                 Err(e) => e.into_inner().clone(),
@@ -560,6 +562,17 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                 return;
             }
         };
+        let requested_tool_names = request
+            .tools
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| item.function.name.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let tools_requested = !requested_tool_names.is_empty();
 
         // ── 指数退避重试循环：包裹整个流式请求+读取过程 ──
         // retry_attempt 从 1 开始，每次创建流或读流失败后自增并重试
@@ -1091,6 +1104,19 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     drop(stream_buf);
                     let _ = tx.send(StreamMsg::Chunk);
                 }
+                if tools_requested
+                    && provider.tools_allowed(tools_enabled)
+                    && let Some(ref content) = fallback_result.content
+                    && let Some(tag) = extract_pseudo_tool_tag(content, &requested_tool_names)
+                {
+                    let error_msg = ChatError::ToolCallProtocolMismatch(format!(
+                        "当前 provider/model 启用了工具，但响应未返回结构化 tool_calls，而是输出了伪工具标签 <{}>。本轮已按普通文本收下回复，并建议将该 provider 的 tool_call_mode 设为 disabled，或切换到真正返回 tool_calls 的模型。",
+                        tag
+                    ));
+                    write_error_log("agent_loop", &error_msg.to_string());
+                    let _ = tx.send(StreamMsg::Error(error_msg));
+                    return;
+                }
                 // 非标准 finish_reason 且无内容时，报告错误
                 if let Some(ref reason) = fallback_result.finish_reason
                     && !matches!(
@@ -1286,6 +1312,20 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     }
                 }
             } else {
+                if tools_requested
+                    && provider.tools_allowed(tools_enabled)
+                    && let Some(tag) =
+                        extract_pseudo_tool_tag(&assistant_text, &requested_tool_names)
+                {
+                    let error_msg = ChatError::ToolCallProtocolMismatch(format!(
+                        "当前 provider/model 启用了工具，但流式响应未返回结构化 tool_calls，而是输出了伪工具标签 <{}>。本轮已按普通文本收下回复，并建议将该 provider 的 tool_call_mode 设为 disabled，或切换到真正返回 tool_calls 的模型。",
+                        tag
+                    ));
+                    write_error_log("agent_loop", &error_msg.to_string());
+                    let _ = tx.send(StreamMsg::Error(error_msg));
+                    return;
+                }
+
                 // 正常结束，但如果有用户增量消息则继续循环
                 let has_pending =
                     !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty();

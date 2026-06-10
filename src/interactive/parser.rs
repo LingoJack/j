@@ -52,10 +52,12 @@ pub fn execute_interactive_command(
                 if shell_session.is_none() {
                     *shell_session = super::shell::ShellSession::new(config);
                 }
-                if let Some(session) = shell_session.as_mut()
-                    && !session.execute(raw_input)
-                {
-                    *shell_session = super::shell::ShellSession::new(config);
+                if let Some(session) = shell_session.as_mut() {
+                    if !session.execute(raw_input) {
+                        *shell_session = super::shell::ShellSession::new(config);
+                    }
+                } else {
+                    let _ = super::shell::execute_shell_once(raw_input, config);
                 }
             }
         }

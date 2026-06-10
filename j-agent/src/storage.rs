@@ -4,9 +4,10 @@ pub mod session;
 pub mod types;
 
 pub use config::{
-    AgentConfig, ModelProvider, agent_config_path, agent_data_dir, load_agent_config, load_memory,
-    load_soul, load_style, load_system_prompt, memory_path, save_agent_config, save_memory,
-    save_soul, save_style, save_system_prompt, soul_path, system_prompt_path,
+    AgentConfig, ModelProvider, ToolCallMode, agent_config_path, agent_data_dir,
+    default_shell_runtime, load_agent_config, load_memory, load_soul, load_style,
+    load_system_prompt, memory_path, save_agent_config, save_memory, save_soul, save_style,
+    save_system_prompt, soul_path, system_prompt_path,
 };
 pub use persist::{
     PlanStatePersist, SandboxStatePersist, SessionHookPersist, SubAgentSnapshotPersist,

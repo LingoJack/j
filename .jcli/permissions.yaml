@@ -9,4 +9,8 @@ allow:
 - Shell(networksetup -getwebproxy:*)
 - Shell(mkdir -p:*)
 - Shell(curl -x:*)
+- Shell(git status:*)
+- Shell(git diff:*)
+- Shell(git ls-tree:*)
+- Shell(cd apps/jstudio:*)
 deny: []

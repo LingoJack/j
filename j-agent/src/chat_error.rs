@@ -37,6 +37,8 @@ pub enum ChatError {
     // ── 请求构建 ──
     /// 构建请求失败（参数无效等）
     RequestBuild(String),
+    /// 模型未返回结构化 tool_calls，而是输出伪工具标签文本
+    ToolCallProtocolMismatch(String),
 
     // ── Hook ──
     /// 被 hook 中止
@@ -92,6 +94,7 @@ impl ChatError {
             Self::RequestBuild(msg) => {
                 format!("构建请求失败: {}", truncate(msg, 150))
             }
+            Self::ToolCallProtocolMismatch(msg) => truncate(msg, 220),
             Self::HookAborted => "请求被 hook 中止".to_string(),
             Self::RuntimeFailed(msg) => {
                 format!(
@@ -127,6 +130,7 @@ impl std::fmt::Display for ChatError {
             Self::StreamInterrupted(msg) => write!(f, "流式响应中断: {}", msg),
             Self::StreamDeserialize(msg) => write!(f, "流式反序列化失败: {}", msg),
             Self::RequestBuild(msg) => write!(f, "构建请求失败: {}", msg),
+            Self::ToolCallProtocolMismatch(msg) => write!(f, "工具协议不兼容: {}", msg),
             Self::HookAborted => write!(f, "LLM 请求被 hook 中止"),
             Self::RuntimeFailed(msg) => write!(f, "运行时错误: {}", msg),
             Self::AgentPanic(msg) => write!(f, "Agent 异常: {}", msg),

@@ -40,6 +40,7 @@ fn test_hook_def_to_hook_kind_bash() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
     };
     let kind = HookKind::from(def);
     match kind {
@@ -62,6 +63,7 @@ fn test_hook_def_to_hook_kind_llm() {
         retry: 2,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
     };
     let kind = def.into_hook_kind().unwrap();
     match kind {
@@ -86,6 +88,7 @@ fn test_hook_def_llm_explicit_timeout() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
     };
     let kind = def.into_hook_kind().unwrap();
     match kind {
@@ -177,6 +180,7 @@ fn test_execute_shell_hook_echo() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
         dir_path: None,
     };
     let ctx = HookContext {
@@ -198,6 +202,7 @@ fn test_execute_shell_hook_empty_output() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
         dir_path: None,
     };
     let ctx = HookContext::default();
@@ -215,6 +220,7 @@ fn test_execute_shell_hook_nonzero_exit() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
         dir_path: None,
     };
     let ctx = HookContext::default();
@@ -231,6 +237,7 @@ fn test_execute_shell_hook_reads_stdin() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
         dir_path: None,
     };
     let ctx = HookContext {
@@ -298,6 +305,7 @@ fn test_hook_manager_session_hooks() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -369,6 +377,7 @@ fn test_hook_manager_builtin_before_session() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -402,6 +411,7 @@ fn test_hook_manager_remove_session_hook() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
     assert_eq!(manager.list_hooks().len(), 1);
@@ -428,6 +438,7 @@ fn test_hook_chain_execution() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
     manager.register_session_hook(
@@ -441,6 +452,7 @@ fn test_hook_chain_execution() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -475,6 +487,7 @@ fn test_hook_stop_stops_chain() {
             retry: 0,
             on_error: OnError::Stop,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
     manager.register_session_hook(
@@ -488,6 +501,7 @@ fn test_hook_stop_stops_chain() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -533,6 +547,7 @@ fn test_on_error_skip_continues_chain() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
     manager.register_session_hook(
@@ -546,6 +561,7 @@ fn test_on_error_skip_continues_chain() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -582,6 +598,7 @@ fn test_on_error_stop_stops_chain() {
             retry: 0,
             on_error: OnError::Stop,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
     manager.register_session_hook(
@@ -595,6 +612,7 @@ fn test_on_error_stop_stops_chain() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -639,13 +657,15 @@ on_error: stop"#;
 #[test]
 fn test_shell_hook_stderr_captured() {
     // 验证 stderr 输出不会导致死锁，且进程正常完成
+    let command = r#"echo '{"user_input": "ok"}'; echo "debug info" >&2"#;
     let hook = ShellHook {
         name: None,
-        command: r#"echo '{"user_input": "ok"}'; echo "debug info" >&2"#.to_string(),
+        command: command.to_string(),
         timeout: 5,
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
         dir_path: None,
     };
     let ctx = HookContext {
@@ -660,13 +680,15 @@ fn test_shell_hook_stderr_captured() {
 #[test]
 fn test_shell_hook_stderr_in_error() {
     // 验证失败时 stderr 内容包含在错误信息中
+    let command = r#"echo "something went wrong" >&2; exit 1"#;
     let hook = ShellHook {
         name: None,
-        command: r#"echo "something went wrong" >&2; exit 1"#.to_string(),
+        command: command.to_string(),
         timeout: 5,
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
         dir_path: None,
     };
     let ctx = HookContext::default();
@@ -701,6 +723,7 @@ fn test_hook_entry_session_index() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
     manager.register_session_hook(
@@ -714,6 +737,7 @@ fn test_hook_entry_session_index() {
             retry: 0,
             on_error: OnError::Stop,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -946,6 +970,7 @@ fn test_hook_def_bash_missing_command() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
     };
     assert!(def.into_hook_kind().is_err());
 }
@@ -961,6 +986,7 @@ fn test_hook_def_llm_missing_prompt() {
         retry: 0,
         on_error: OnError::Skip,
         filter: HookFilter::default(),
+        runtime: None,
     };
     assert!(def.into_hook_kind().is_err());
 }
@@ -990,6 +1016,7 @@ fn test_hook_entry_hook_type() {
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 
@@ -1005,6 +1032,7 @@ fn test_hook_entry_hook_type() {
             retry: 1,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            runtime: None,
         },
     );
 

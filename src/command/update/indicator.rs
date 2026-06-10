@@ -101,7 +101,3 @@ pub(crate) fn install_indicator_from_release(version: &str) {
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
-
-/// 非 macOS 平台的空实现
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn install_indicator_from_release(_version: &str) {}
