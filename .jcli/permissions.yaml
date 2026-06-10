@@ -192,4 +192,8 @@ allow:
 - Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/:*)
 - Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src/:*)
 - Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src/editor/:*)
+- Shell(ls -laR:*)
+- Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src-tauri/src/:*)
+- Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src-tauri/src/commands/:*)
+- Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src-tauri/:*)
 deny: []
