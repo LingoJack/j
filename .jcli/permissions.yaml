@@ -187,4 +187,5 @@ allow:
 - Shell(pwd &&:*)
 - Shell(npx prettier:*)
 - Shell(cd /Users/jacklingo/dev_custom/jcli/apps/jstudio:*)
+- Shell(brew install:*)
 deny: []
