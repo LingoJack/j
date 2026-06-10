@@ -127,7 +127,10 @@ fn find_program_in_path(program: &str) -> Option<PathBuf> {
 }
 
 fn candidate_paths(dir: &Path, program: &str) -> Vec<PathBuf> {
+    #[cfg(windows)]
     let mut candidates = vec![dir.join(program)];
+    #[cfg(not(windows))]
+    let candidates = vec![dir.join(program)];
     #[cfg(windows)]
     {
         let has_ext = Path::new(program).extension().is_some();
@@ -149,6 +152,7 @@ fn invalid_runtime_message(value: &str) -> String {
     format!("未知 shell runtime: {value}；允许值: {allowed}")
 }
 
+#[cfg(windows)]
 fn is_git_bash_path(path: &Path) -> bool {
     let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
@@ -578,9 +582,11 @@ pub fn kill_process_tree(pid: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use super::is_git_bash_path;
     use super::{
-        ShellRuntime, is_git_bash_path, parse_runtime_override,
-        resolve_hook_shell_runtime_for_tests, resolve_shell_runtime_for_tests,
+        ShellRuntime, parse_runtime_override, resolve_hook_shell_runtime_for_tests,
+        resolve_shell_runtime_for_tests,
     };
     use std::path::Path;
 
@@ -629,6 +635,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     fn git_bash_path_detection_skips_wsl_launcher() {
         assert!(is_git_bash_path(Path::new(
             r"C:\Program Files\Git\bin\bash.exe"

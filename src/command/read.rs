@@ -70,7 +70,7 @@ fn launch_jstudio(target: &Path) -> Result<(), String> {
         return spawn_jstudio_bin(&bin, target);
     }
 
-    #[cfg(not(windows))]
+    #[cfg(all(unix, not(target_os = "macos")))]
     if let Some(bin) = first_existing_path(UNIX_BIN_PATHS) {
         return spawn_jstudio_bin(&bin, target);
     }

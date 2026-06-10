@@ -52,7 +52,7 @@ pub(crate) fn perform_update(interactive: bool) {
     }
 
     // 检查是否有权限写入目标目录
-    let Some((_exe_path, exe_dir)) = get_exe_dir() else {
+    let Some((exe_path, exe_dir)) = get_exe_dir() else {
         println!("{}", "无法获取当前可执行文件路径或目录".red());
         return;
     };

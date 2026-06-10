@@ -9,7 +9,7 @@ use crate::tools::{
     PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
     schema_to_tool_params,
 };
-use crate::util::shell_runtime::{ShellRuntime, parse_runtime_override, resolve_shell_runtime};
+use crate::util::shell_runtime::{parse_runtime_override, resolve_shell_runtime};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};

@@ -13,4 +13,6 @@ allow:
 - Shell(git diff:*)
 - Shell(git ls-tree:*)
 - Shell(cd apps/jstudio:*)
+- Edit
+- Shell(cargo clippy:*)
 deny: []
