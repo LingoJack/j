@@ -189,4 +189,7 @@ allow:
 - Shell(cd /Users/jacklingo/dev_custom/jcli/apps/jstudio:*)
 - Shell(npx eslint:*)
 - Shell(cargo test:*)
+- Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/:*)
+- Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src/:*)
+- Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src/editor/:*)
 deny: []
