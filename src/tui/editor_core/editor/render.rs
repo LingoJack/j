@@ -45,6 +45,12 @@ impl MarkdownEditor {
         let wrap_width = content_width.saturating_sub(line_num_width);
         self.wrap.set_width(wrap_width);
 
+        // 确保块级缓存有效（fenced 代码块、表格 - 用于快速判断行所属 block 类型）。
+        // rebuild_wrap_cache 会通过 renderer.compute_line_visible_widths() 读取 block_cache，
+        // 所以这里必须在重建 wrap cache 之前更新；否则折行高度会基于旧 block 信息计算。
+        self.renderer
+            .ensure_cache_valid(self.buffer.lines(), wrap_width);
+
         // 折行宽度按"光标行 vs 其它行"区分：光标换行时强制重建一次缓存，
         // 让旧光标行回到"渲染宽"路径、新光标行切到"源码宽"路径。
         self.maybe_mark_wrap_dirty_for_cursor();
@@ -66,11 +72,33 @@ impl MarkdownEditor {
             }
         }
 
-        // 确保块级缓存有效（fenced 代码块、表格 - 用于快速判断行所属 block 类型）
-        self.renderer
-            .ensure_cache_valid(self.buffer.lines(), wrap_width);
+        // ---- 阶段 1：基于光标位置同步并 clamp 视口 ----
+        // 后续渲染范围必须以最终 scroll_offset 为准；否则光标追踪或滚动到 EOF 时，
+        // all_visual_lines 可能覆盖不到真正可见的尾部内容，导致底部提前出现 `~`。
+        if !self.viewport.scroll_locked {
+            let cursor_visual_global = self.wrap.logical_to_visual(cursor_row, cursor_col);
 
-        // ---- 阶段 1：基于当前 scroll_offset 计算渲染范围 ----
+            let visible_start_global = self.viewport.scroll_offset;
+            let visible_end_global = visible_start_global + content_height;
+
+            if cursor_visual_global < visible_start_global {
+                self.viewport.scroll_offset = cursor_visual_global;
+            } else if cursor_visual_global >= visible_end_global {
+                self.viewport.scroll_offset =
+                    cursor_visual_global.saturating_sub(content_height.saturating_sub(1));
+            }
+        }
+
+        // 视口上界 clamp（避免滚过最后一个完整视口）。
+        let max_offset = self
+            .wrap
+            .visual_line_count()
+            .saturating_sub(content_height.max(1));
+        if self.viewport.scroll_offset > max_offset {
+            self.viewport.scroll_offset = max_offset;
+        }
+
+        // ---- 阶段 2：基于最终 scroll_offset 计算渲染范围 ----
         // 计算视口范围内需要渲染的逻辑行（O(log n)）
         //
         // 现在 wrap_engine 的 visual_line_count() 已经包含表格/代码块的真实渲染高度
@@ -85,12 +113,20 @@ impl MarkdownEditor {
         // 扩展范围：往前一点确保表格首行进入渲染窗口（其它续行被 wrap_engine
         // 标为 count=0，不影响 visual 坐标，但渲染必须从首行触发）。
         let mut render_start = start_logical.saturating_sub(2).min(cursor_row);
-        let render_end = (end_logical + 3).min(line_count).max(cursor_row + 1);
+        let mut render_end = (end_logical + 3).min(line_count).max(cursor_row + 1);
 
         // 如果 render_start 落在某个表格的续行内，把它前推到表格首行
         if let Some((tbl_start, _)) = self.wrap.table_block_for_line(render_start) {
             render_start = render_start.min(tbl_start);
         }
+
+        let target_visual_end = self
+            .viewport
+            .scroll_offset
+            .saturating_add(content_height)
+            .min(self.wrap.visual_line_count());
+        render_end =
+            self.expand_render_end_to_cover_visual_range(render_end, target_visual_end, line_count);
 
         // 为视口范围构建详细视觉行缓存（只构建未缓存的行）
         self.wrap
@@ -140,33 +176,6 @@ impl MarkdownEditor {
                 }
                 all_visual_lines.extend(rendered);
             }
-        }
-
-        // ---- 阶段 2：基于光标位置同步视口（如果未锁定） ----
-        // 现在视觉坐标是统一的：wrap_engine 的视觉行号 = all_visual_lines 在全局
-        // 渲染坐标中的索引（除了 Insert 模式下光标在表格里时偶发的 ±1 抖动）。
-        if !self.viewport.scroll_locked {
-            let cursor_visual_global = self.wrap.logical_to_visual(cursor_row, cursor_col);
-
-            let visible_start_global = self.viewport.scroll_offset;
-            let visible_end_global = visible_start_global + content_height;
-
-            if cursor_visual_global < visible_start_global {
-                self.viewport.scroll_offset = cursor_visual_global;
-            } else if cursor_visual_global >= visible_end_global {
-                self.viewport.scroll_offset =
-                    cursor_visual_global.saturating_sub(content_height - 1);
-            }
-        }
-
-        // 视口上界 clamp（避免越界）
-        let max_offset = self
-            .wrap
-            .visual_line_count()
-            .saturating_sub(1)
-            .max(self.viewport.scroll_offset);
-        if self.viewport.scroll_offset > max_offset {
-            self.viewport.scroll_offset = max_offset;
         }
 
         // 保存"未叠选区高亮"的渲染输出，用于鼠标拖选复制时提取可见文本。
@@ -355,6 +364,25 @@ impl MarkdownEditor {
         if self.vim.mode() == &Mode::HelpPopup {
             self.render_help_popup(f, area);
         }
+    }
+
+    fn expand_render_end_to_cover_visual_range(
+        &self,
+        render_end: usize,
+        target_visual_end: usize,
+        line_count: usize,
+    ) -> usize {
+        if target_visual_end == 0 {
+            return render_end.min(line_count);
+        }
+
+        let mut expanded_end = render_end.min(line_count);
+        while expanded_end < line_count
+            && self.wrap.visual_offset_of(expanded_end) < target_visual_end
+        {
+            expanded_end += 1;
+        }
+        expanded_end
     }
 
     /// 渲染状态栏

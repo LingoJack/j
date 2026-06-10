@@ -151,3 +151,84 @@ vl[0] 渲染出 N 个 char，vl[1] 续行从整行渲染产物的 char index 等
 - "按渲染宽折行" vs "按源码宽折行"必须和**渲染端 Insert/Normal 的 source vs rendered 路径口径完全一致**，否则会出现 Normal 模式下光标移动也触发 rebuild、或者光标行折行规则与显示规则错配的诡异表现。
 - 这类 bug 单元测试很难发现——单测 wrap_engine 会说"visible 区间首尾相接、覆盖整行"，单测 inline_width 会说"标记符号是 0 宽"，但没有任何单测覆盖**"vl[0] 独立解析产物 vs 整行解析产物的 char 数是否一致"**。改这块代码时**必须**用真实编辑器手动验证一段含 `**bold**` 的长文本，在不同 wrap_width 下都拉过一遍，看折行边界处是否连贯。
 - 折行场景下 heading 图标 / bullet / blockquote 竖条等块级前缀目前是**有意放弃**的，前缀字符以源码形式 fall through 到 inline。如果后续要在折行场景也保留图标，必须让 `compute_visible_widths` 和渲染端的前缀剥离逻辑深度对齐（heading `# ` 渲染成 `◆ ` 同宽、`## ` 渲染成 `◇ ` 少 1 列、`### ` 渲染成 `〈 〉` 多 2 列、`> ` 渲染成 `\| ` 同宽…），并把前缀图标作为 vl[0] 的额外 prefix span 单独画——别再回头去走"vl[0] 独立解析 truncated"那条路。
+
+---
+
+## 3. Markdown 编辑器：滚动到尾部时内容显示不全、底部提前出现 `~`
+
+**涉及文件**
+
+- `src/tui/editor_core/editor/render.rs`：`render()` 中视口同步、`render_start` / `render_end` 计算、`expand_render_end_to_cover_visual_range`
+- `src/tui/editor_core/editor.rs`：EOF 渲染回归测试
+
+### 现象
+
+编辑器打开较长文档并定位到文件尾部时，底部内容没有完整显示；实际还有文本行应出现在视口内，但屏幕底部提前出现 Vim 风格的 `~` 占位行。
+
+### 触发条件
+
+常见于以下组合：
+
+1. 文档超过一屏。
+2. 打开时光标策略为 EOF，或其它逻辑在本帧 render 内把 `scroll_offset` 同步到文件尾部附近。
+3. 末尾附近包含多视觉行内容（长段落折行、表格 / 代码块等块级渲染），固定逻辑行缓冲无法覆盖完整视口。
+
+### 根因
+
+旧渲染流程先用**进入 render 时的旧 `scroll_offset`** 计算 `start_logical` / `end_logical`，构建 `all_visual_lines`；随后才根据光标位置把 `scroll_offset` 同步到 EOF。
+
+这会造成两个问题：
+
+1. 当光标追踪改变了 `scroll_offset` 时，当帧已经构建好的 `all_visual_lines` 仍对应旧视口，不一定覆盖新视口所需的全局视觉行。
+2. `render_end = end_logical + 3` 只是固定经验缓冲，不能保证覆盖 `scroll_offset + content_height`。遇到末尾长折行或块级渲染时，局部渲染数组长度不足，`visible_end_local` 被 `all_visual_lines.len()` 截断，后续行就被 `~` 填充。
+
+### 修复
+
+1. 在构建渲染范围前，先根据光标位置同步并 clamp 最终 `scroll_offset`。
+2. 基于最终 `scroll_offset` 重新计算视口对应的逻辑行范围。
+3. 新增 `expand_render_end_to_cover_visual_range`，按视觉坐标动态扩展 `render_end`，直到 `wrap.visual_offset_of(render_end)` 覆盖 `scroll_offset + content_height`，或已经到 EOF。
+4. 保留表格续行前推到表格首行的逻辑，保证块级渲染从正确的逻辑行触发。
+5. 增加 `render_tail_content_uses_final_scroll_offset` 回归测试，验证 EOF 光标触发的首帧渲染会把最后一行纳入渲染缓存。
+
+### 教训 / 防回归
+
+- 渲染窗口必须以**最终视口状态**为准。只要 render 内会改 `scroll_offset`，就不能先构建可见内容再同步滚动。
+- 不要用固定逻辑行数量猜测视觉范围覆盖。折行、表格、代码块都会让“逻辑行数量”和“屏幕行数量”失去稳定比例。
+- 判断“是否覆盖视口”要回到视觉坐标：目标是覆盖 `[scroll_offset, scroll_offset + content_height)`，而不是覆盖“多几行源码”。
+
+---
+
+## 4. Markdown 编辑器：渲染态每个块尾部内容被裁掉，源码态正常
+
+**涉及文件**
+
+- `src/tui/editor_core/renderer.rs`：`compute_line_visible_widths()`、`block_prefix_source_widths()`
+- `src/tui/editor_core/editor/render.rs`：block cache 与 wrap cache 的更新顺序
+
+### 现象
+
+Markdown 渲染态下，heading / list / blockquote 等块级内容在行尾或块尾会少一截；切回源码态显示正常。
+
+### 根因
+
+渲染态和源码态的字符宽度口径混用了：
+
+1. `compute_visible_widths()` 通过 `pulldown-cmark` 计算 inline 标记的可见宽度，会把 `**bold**`、链接 URL 等 inline 标记记为 0 宽。
+2. 但 `pulldown-cmark` 同时也会把 `# `、`> `、`- `、`1. ` 等块级前缀作为 Markdown block syntax 吞掉。
+3. `wrap_engine` 因此低估了块级行的源码占宽；renderer 实际渲染时又会绘制 heading/list/blockquote 的块级前缀或按源码片段渲染。
+4. 最终 wrap 认为这一行还能容纳更多尾部字符，但 TUI 实际绘制宽度已经超出可用区域，终端从右侧裁剪，表现为“每个渲染块尾部少内容”。
+
+另外，`render()` 里旧顺序是先 `rebuild_wrap_cache()` 再更新 renderer 的 `block_cache`。如果块级缓存过期，wrap 高度 / 宽度判断也可能基于旧块信息计算。
+
+### 修复
+
+1. `render()` 中先调用 `renderer.ensure_cache_valid()`，再根据当前 block cache 重建 wrap cache。
+2. 新增 `block_prefix_source_widths()`：对 heading/list/blockquote 这类块级前缀行，不再使用 `pulldown-cmark` 的 inline 宽度图，而是按源码字符宽度保留前缀宽度。
+3. 普通段落仍继续使用 `inline_width::compute_visible_widths()`，保证 `**bold**`、inline code、link URL 等 inline 标记仍按渲染态隐藏宽度处理。
+4. 增加 `block_prefix_widths_keep_source_prefix_visible` 和 `regular_inline_widths_still_hide_inline_markers` 测试，防止块级前缀被再次误当成 0 宽，同时保证普通 inline 标记逻辑不回退。
+
+### 教训 / 防回归
+
+- 宽度计算必须区分 block syntax 和 inline syntax。不能直接把 parser 的“可见文本”结果无条件当成 editor 的折行宽度图。
+- 源码坐标、渲染坐标、终端 cell 宽度三者必须有明确边界；一旦混用，就会出现源码态正常、渲染态尾部裁剪的 bug。
+- wrap cache 依赖 block cache 时，必须先更新 block cache，再重建 wrap cache。

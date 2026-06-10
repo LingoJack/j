@@ -23,6 +23,46 @@ use crate::util::text::char_width;
 
 use block_cache::BlockCache;
 
+fn block_prefix_source_widths(line: &str) -> Option<Vec<u8>> {
+    let trimmed = line.trim_start();
+    if is_markdown_block_prefix_line(trimmed) {
+        Some(
+            line.chars()
+                .map(|ch| char_width(ch).min(u8::MAX as usize) as u8)
+                .collect(),
+        )
+    } else {
+        None
+    }
+}
+
+fn is_markdown_block_prefix_line(trimmed: &str) -> bool {
+    trimmed.starts_with("# ")
+        || trimmed.starts_with("## ")
+        || trimmed.starts_with("### ")
+        || trimmed.starts_with("#### ")
+        || trimmed.starts_with('>')
+        || trimmed.starts_with("- [ ]")
+        || trimmed.starts_with("- [x]")
+        || trimmed.starts_with("- [X]")
+        || trimmed.starts_with("- ")
+        || trimmed.starts_with("* ")
+        || is_ordered_list_line(trimmed)
+}
+
+fn is_ordered_list_line(trimmed: &str) -> bool {
+    let Some(marker_end) = trimmed.find(['.', ')']) else {
+        return false;
+    };
+    let marker = &trimmed[..marker_end];
+    if marker.is_empty() || !marker.chars().all(|ch| ch.is_ascii_digit()) {
+        return false;
+    }
+    trimmed
+        .get(marker_end + 1..marker_end + 2)
+        .is_some_and(|ch| ch == " ")
+}
+
 /// Markdown 渲染器
 pub struct MarkdownRenderer {
     theme: EditorTheme,
@@ -129,6 +169,9 @@ impl MarkdownRenderer {
                     || self.block_cache.is_table_line(i)
                 {
                     return None;
+                }
+                if let Some(widths) = block_prefix_source_widths(line) {
+                    return Some(widths);
                 }
                 Some(inline_width::compute_visible_widths(line))
             })
@@ -671,4 +714,33 @@ fn extract_span_range(
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{block_prefix_source_widths, inline_width};
+    use crate::util::text::display_width;
+
+    #[test]
+    fn block_prefix_widths_keep_source_prefix_visible() {
+        let heading = "### tail should not be hidden";
+        let widths = block_prefix_source_widths(heading).expect("heading should use source widths");
+        let inline_widths = inline_width::compute_visible_widths(heading);
+
+        assert_eq!(
+            widths.iter().map(|w| *w as usize).sum::<usize>(),
+            display_width(heading)
+        );
+        assert!(
+            inline_widths.iter().take(4).any(|w| *w == 0),
+            "pulldown-cmark consumes heading marker as block syntax; block lines must not use that width map"
+        );
+    }
+
+    #[test]
+    fn regular_inline_widths_still_hide_inline_markers() {
+        assert!(block_prefix_source_widths("normal **bold** text").is_none());
+        let widths = inline_width::compute_visible_widths("normal **bold** text");
+        assert!(widths.iter().any(|w| *w == 0));
+    }
 }
