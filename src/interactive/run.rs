@@ -1,12 +1,14 @@
 use super::completer::CopilotHelper;
 use super::parser::execute_interactive_command;
 use super::shell::{
-    ShellSession, enter_interactive_shell, expand_env_vars, inject_envs_to_process,
+    ShellSession, enter_interactive_shell, execute_shell_once, expand_env_vars,
+    inject_envs_to_process,
 };
 use crate::config::YamlConfig;
 use crate::constants::{HISTORY_FILE, SHELL_PREFIX_CN, SHELL_PREFIX_EN, WELCOME_MESSAGE, cmd};
 use crate::{error, info};
 use colored::Colorize;
+use j_agent::util::shell_runtime::set_default_shell_runtime;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use rustyline::{
@@ -15,6 +17,8 @@ use rustyline::{
 
 /// 启动交互式命令行循环
 pub fn run_interactive(config: &mut YamlConfig) {
+    set_default_shell_runtime(config.shell_runtime());
+
     let rl_config = Config::builder()
         .completion_type(CompletionType::Circular)
         .edit_mode(EditMode::Emacs)
@@ -81,6 +85,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 let args: Vec<String> = args.iter().map(|a| expand_env_vars(a)).collect();
 
                 *config = crate::config::YamlConfig::load();
+                set_default_shell_runtime(config.shell_runtime());
 
                 let verbose = config.is_verbose();
                 let start = if verbose {
@@ -134,11 +139,14 @@ fn execute_with_shell_session(
     if shell_session.is_none() {
         *shell_session = ShellSession::new(config);
     }
-    if let Some(session) = shell_session.as_mut()
-        && !session.execute(cmd)
-    {
-        *shell_session = ShellSession::new(config);
+    if let Some(session) = shell_session.as_mut() {
+        if !session.execute(cmd) {
+            *shell_session = ShellSession::new(config);
+        }
+        return;
     }
+
+    let _ = execute_shell_once(cmd, config);
 }
 
 fn history_file_path() -> std::path::PathBuf {
@@ -150,13 +158,21 @@ fn history_file_path() -> std::path::PathBuf {
 fn build_prompt() -> String {
     let cwd = format_cwd();
     let git_info = format_git_info();
-    let label = format!(
-        "{}{}{}",
-        "(".green(),
-        "jcli".bright_blue().bold(),
-        ")".green()
-    );
-    format!("\n{} {}{}\n{} ", label, cwd.cyan(), git_info, "❯".cyan())
+
+    // Workaround: rustyline 的 Windows 后端 calculate_position 缺少 ANSI stripping，
+    // 把颜色码当可见字符计算宽度，导致光标定位偏移。
+    // Unix 后端有 esc_seq 状态机不受影响。详见 rustyline windows.rs:503 vs unix.rs:1096。
+    if cfg!(target_os = "windows") {
+        format!("\n(jcli) {}{}\n> ", cwd, git_info)
+    } else {
+        let label = format!(
+            "{}{}{}",
+            "(".green(),
+            "jcli".bright_blue().bold(),
+            ")".green()
+        );
+        format!("\n{} {}{}\n{} ", label, cwd.cyan(), git_info, "❯".cyan())
+    }
 }
 
 fn format_git_info() -> String {

@@ -143,6 +143,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     api_key: "sk-your-api-key".to_string(),
                     model: "gpt-4o".to_string(),
                     supports_vision: false,
+                    tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
                 }],
                 active_index: 0,
                 system_prompt: None,

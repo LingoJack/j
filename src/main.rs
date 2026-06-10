@@ -12,10 +12,12 @@ mod util;
 use clap::Parser;
 use cli::Cli;
 use config::YamlConfig;
+use j_agent::util::shell_runtime::set_default_shell_runtime;
 
 fn main() {
     // 加载配置
     let mut config = YamlConfig::load();
+    set_default_shell_runtime(config.shell_runtime());
 
     // 初始化颜色色阶（必须在任何 Theme 加载之前完成）
     let color_mode = config

@@ -4,6 +4,7 @@ use crate::constants::{
     REPORT_DIR, SCRIPTS_DIR, VERSION, config_key, section,
 };
 use crate::util::LockFileGuard;
+use j_agent::util::shell_runtime::ShellRuntime;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -201,6 +202,10 @@ impl YamlConfig {
             config_key::SEARCH_ENGINE.into(),
             DEFAULT_SEARCH_ENGINE.into(),
         );
+        config.setting.insert(
+            config_key::SHELL_RUNTIME.into(),
+            ShellRuntime::Auto.as_str().into(),
+        );
 
         config
     }
@@ -210,6 +215,22 @@ impl YamlConfig {
         self.log
             .get(config_key::MODE)
             .is_some_and(|m| m == config_key::VERBOSE)
+    }
+
+    /// 获取默认 shell runtime；缺失或非法值回退到 auto。
+    pub fn shell_runtime(&self) -> ShellRuntime {
+        self.get_property(section::SETTING, config_key::SHELL_RUNTIME)
+            .and_then(|value| ShellRuntime::parse(value))
+            .unwrap_or_default()
+    }
+
+    /// 设置默认 shell runtime 并保存。
+    pub fn set_shell_runtime(&mut self, runtime: ShellRuntime) -> Result<(), String> {
+        self.set_property(
+            section::SETTING,
+            config_key::SHELL_RUNTIME,
+            runtime.as_str(),
+        )
     }
 
     // ========== 根据 section 名称获取对应的 map ==========
@@ -377,5 +398,26 @@ impl YamlConfig {
         }
 
         envs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::YamlConfig;
+    use j_agent::util::shell_runtime::ShellRuntime;
+
+    #[test]
+    fn shell_runtime_defaults_to_auto() {
+        let config = YamlConfig::default_config();
+        assert_eq!(config.shell_runtime(), ShellRuntime::Auto);
+    }
+
+    #[test]
+    fn shell_runtime_invalid_value_falls_back_to_auto() {
+        let mut config = YamlConfig::default();
+        config
+            .setting
+            .insert("shell_runtime".to_string(), "invalid".to_string());
+        assert_eq!(config.shell_runtime(), ShellRuntime::Auto);
     }
 }

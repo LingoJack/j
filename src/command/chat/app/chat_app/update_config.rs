@@ -100,6 +100,19 @@ impl ChatApp {
                     self.show_toast(format!("当前 Provider 支持视觉已{}", status), false);
                     return;
                 }
+                if self.ui.model_field_idx < CONFIG_FIELDS.len()
+                    && CONFIG_FIELDS[self.ui.model_field_idx] == "tool_call_mode"
+                    && let Some(p) = self
+                        .state
+                        .agent_config
+                        .providers
+                        .get_mut(self.ui.config_provider_idx)
+                {
+                    p.tool_call_mode = p.tool_call_mode.next();
+                    let display_name = p.tool_call_mode.display_name().to_string();
+                    self.show_toast(format!("当前 Provider 工具协议: {}", display_name), false);
+                    return;
+                }
                 self.ui.config_edit_buf =
                     config_field_raw_value_model(self, self.ui.model_field_idx);
                 self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
@@ -161,6 +174,22 @@ impl ChatApp {
                         let next = self.state.agent_config.thinking_style.next();
                         self.state.agent_config.thinking_style = next;
                         self.show_toast(format!("思考动画: {}", next.display_name()), false);
+                        return;
+                    }
+                    if field == "shell_runtime" {
+                        let current = crate::config::YamlConfig::load().shell_runtime();
+                        let next = current.next();
+                        if let Err(err) =
+                            crate::command::chat::render::helpers::config_field_set_global(
+                                self,
+                                idx,
+                                next.as_str(),
+                            )
+                        {
+                            self.show_toast(format!("默认 Shell 保存失败: {}", err), true);
+                            return;
+                        }
+                        self.show_toast(format!("默认 Shell: {}", next.display_name()), false);
                         return;
                     }
                     if field == "system_prompt" {
@@ -286,7 +315,13 @@ impl ChatApp {
                 config_field_set_model(self, self.ui.model_field_idx, &val);
             }
             ConfigTab::Global => {
-                config_field_set_global(self, self.ui.config_field_idx, &val);
+                if let Err(err) = config_field_set_global(self, self.ui.config_field_idx, &val) {
+                    self.show_toast(format!("保存失败: {}", err), true);
+                    self.ui.config_editing = false;
+                    self.ui.config_edit_buf.clear();
+                    self.ui.config_edit_cursor = 0;
+                    return;
+                }
             }
             // 这些 Tab 不支持字段编辑提交
             ConfigTab::Session
@@ -307,6 +342,7 @@ impl ChatApp {
             api_key: String::new(),
             model: String::new(),
             supports_vision: false,
+            tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
         };
         self.state.agent_config.providers.push(new_provider);
         self.ui.config_provider_idx = self.state.agent_config.providers.len() - 1;

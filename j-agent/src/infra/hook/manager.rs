@@ -177,6 +177,7 @@ impl HookManager {
                                 retry: sh.retry,
                                 on_error: sh.on_error,
                                 filter: sh.filter.clone(),
+                                runtime: sh.runtime,
                             },
                         });
                     }
@@ -192,6 +193,7 @@ impl HookManager {
                                 retry: lh.retry,
                                 on_error: lh.on_error,
                                 filter: lh.filter.clone(),
+                                runtime: None,
                             },
                         });
                     }

@@ -329,13 +329,21 @@ pub const TEAMMATE_LOG_RESULT_MAX_CHARS: usize = 200;
 pub const TEAMMATE_PROMPT_PREVIEW_MAX_CHARS: usize = 100;
 
 /// 配置字段列表
-pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model", "supports_vision"];
+pub const CONFIG_FIELDS: &[&str] = &[
+    "name",
+    "api_base",
+    "api_key",
+    "model",
+    "supports_vision",
+    "tool_call_mode",
+];
 
 /// 全局配置字段（Tab 分页版，去掉 tools_enabled 和 skills_enabled）
 pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "system_prompt",
     "agent_md",
     "style",
+    "shell_runtime",
     "max_history_messages",
     "max_context_tokens",
     "max_tool_rounds",

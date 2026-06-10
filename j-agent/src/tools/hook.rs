@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use crate::constants::HOOK_LOG_DESC_MAX_LEN;
 use crate::infra::hook::{HookDef, HookEvent, HookFilter, HookManager, HookType, OnError};
 use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::util::shell_runtime::parse_runtime_override;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -44,6 +45,9 @@ struct RegisterHookParams {
     /// Retry count on error (default 0 for bash, 1 for llm; only applies to Err path)
     #[serde(default)]
     retry: Option<u32>,
+    /// Shell runtime override for shell hooks: auto / pwsh / powershell / git_bash / cmd / sh / bash
+    #[serde(default)]
+    runtime: Option<String>,
     /// Index of the session hook to remove (required for remove). Use session_idx from list output.
     #[serde(default)]
     index: Option<usize>,
@@ -290,6 +294,8 @@ impl RegisterHookTool {
             OnError::Stop => "stop",
         };
 
+        let runtime = parse_runtime_override(params.runtime.as_deref())?;
+
         let hook_def = HookDef {
             r#type: hook_type,
             command: params.command.clone(),
@@ -299,6 +305,7 @@ impl RegisterHookTool {
             retry,
             on_error,
             filter: HookFilter::default(),
+            runtime,
         };
 
         let detail = match hook_type {
