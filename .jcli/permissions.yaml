@@ -17,4 +17,6 @@ allow:
 - Shell(cargo clippy:*)
 - Shell(git submodule:*)
 - Shell(cd /Users/jacklingo/dev_custom/jcli:*)
+- Shell(which rg:*)
+- Shell(cargo check:*)
 deny: []

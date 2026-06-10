@@ -20,7 +20,7 @@ pub struct RowContext<'a> {
     pub theme: &'a Theme,
 }
 
-/// Global tab 行的共享渲染参数（label + desc + hint + selected + theme）
+/// Global tab 行的共享渲染参数（label + desc + hint + selected + theme + desc_max_width）
 #[derive(Debug)]
 pub struct GlobalRowCtx<'a> {
     pub label: String,
@@ -28,6 +28,8 @@ pub struct GlobalRowCtx<'a> {
     pub hint: String,
     pub selected: bool,
     pub theme: &'a Theme,
+    /// 说明文字最大显示宽度（根据屏幕宽度动态计算）
+    pub desc_max_width: usize,
 }
 
 impl<'a> GlobalRowCtx<'a> {
@@ -39,7 +41,24 @@ impl<'a> GlobalRowCtx<'a> {
             hint: "Enter \u{5207}\u{6362}".to_string(),
             selected,
             theme,
+            desc_max_width: 30,
         }
+    }
+
+    /// 根据屏幕宽度设置 desc 最大显示宽度
+    ///
+    /// 计算逻辑：屏幕宽度减去 pointer(4) + label(16) + gap(2) + value 估算(12) + 右侧呼吸(6)
+    pub fn with_screen_width(mut self, screen_width: usize) -> Self {
+        const POINTER_W: usize = 4;
+        const LABEL_W: usize = 16;
+        const GAP_W: usize = 2;
+        const VALUE_ESTIMATE: usize = 12;
+        const RIGHT_PAD: usize = 6;
+        let available =
+            screen_width.saturating_sub(POINTER_W + LABEL_W + GAP_W + VALUE_ESTIMATE + RIGHT_PAD);
+        // 至少 15，最大 50，避免极端值
+        self.desc_max_width = available.clamp(15, 50);
+        self
     }
 }
 
@@ -143,7 +162,7 @@ pub(crate) fn global_text_row<'a>(
             label_span(&ctx.label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(display_value, vs),
-            desc_span_with_selected(&ctx.desc, 30, selected, theme),
+            desc_span_with_selected(&ctx.desc, ctx.desc_max_width, selected, theme),
         ])
     }
 }
@@ -173,7 +192,7 @@ pub(crate) fn global_toggle_row<'a>(is_on: bool, ctx: &GlobalRowCtx<'_>) -> Line
         label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(toggle_text, toggle_style),
-        desc_span_with_selected(&ctx.desc, 30, selected, theme),
+        desc_span_with_selected(&ctx.desc, ctx.desc_max_width, selected, theme),
         Span::styled(
             if selected {
                 format!("  ({})", ctx.hint)
@@ -199,7 +218,7 @@ pub fn global_preview_row<'a>(raw: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
         label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(render_preview_value(raw), vs),
-        desc_span_with_selected(&ctx.desc, 30, selected, theme),
+        desc_span_with_selected(&ctx.desc, ctx.desc_max_width, selected, theme),
         Span::styled(
             if selected {
                 format!("  ({})", ctx.hint)
@@ -235,7 +254,35 @@ pub fn global_theme_row<'a>(name: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
                     .add_modifier(Modifier::BOLD)
             },
         ),
-        desc_span_with_selected(&ctx.desc, 30, selected, theme),
+        desc_span_with_selected(&ctx.desc, ctx.desc_max_width, selected, theme),
+        Span::styled(
+            if selected {
+                format!("  ({})", ctx.hint)
+            } else {
+                String::new()
+            },
+            if selected {
+                Style::default().fg(theme.config_label_selected)
+            } else {
+                Style::default().fg(theme.config_dim)
+            },
+        ),
+    ])
+}
+
+/// Global tab 选择行（三列: label | value | desc）
+///
+/// 与 `global_theme_row` 类似，但无画板图标，风格更朴素，适用于非主题类枚举选择（如 shell_runtime）。
+pub fn global_select_row<'a>(name: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
+    let selected = ctx.selected;
+    let theme = ctx.theme;
+    let vs = value_style(selected, false, theme);
+    Line::from(vec![
+        pointer_span(selected, theme),
+        label_span(&ctx.label, LABEL_WIDTH, selected, theme),
+        Span::styled("  ", Style::default()),
+        Span::styled(name.to_string(), vs),
+        desc_span_with_selected(&ctx.desc, ctx.desc_max_width, selected, theme),
         Span::styled(
             if selected {
                 format!("  ({})", ctx.hint)
