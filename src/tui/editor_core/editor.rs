@@ -1381,6 +1381,52 @@ mod tests {
     }
 
     #[test]
+    fn render_tail_content_uses_final_scroll_offset() {
+        use ratatui::{Terminal, backend::TestBackend};
+
+        let content = (0..40)
+            .map(|idx| format!("tail-regression-line-{idx}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut editor = MarkdownEditor::new(
+            "test",
+            &content,
+            test_theme(),
+            noop_highlight,
+            Vec::new(),
+            CursorPolicy::EndOfFile,
+        );
+
+        let backend = TestBackend::new(80, 8);
+        let mut terminal = Terminal::new(backend).expect("TestBackend should create terminal");
+        terminal
+            .draw(|frame| editor.render(frame, frame.area()))
+            .expect("editor render should succeed");
+
+        let rendered_text = editor
+            .render_meta
+            .rendered_lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            rendered_text.contains("tail-regression-line-39"),
+            "尾部最后一行应被纳入渲染缓存；实际渲染内容：{rendered_text:?}"
+        );
+        assert!(
+            editor.viewport.scroll_offset > 0,
+            "EOF 光标应把视口同步到文档尾部附近"
+        );
+    }
+
+    #[test]
     fn move_cursor_visual_down_skips_table_block_to_line_after() {
         // 文档：3 行普通文字 + 空行 + 4 行表格 + 1 行结尾。
         // GFM 表格要求与上文有空行分隔，否则 pulldown-cmark 会把首行并入段落。
