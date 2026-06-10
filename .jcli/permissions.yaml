@@ -15,4 +15,6 @@ allow:
 - Shell(cd apps/jstudio:*)
 - Edit
 - Shell(cargo clippy:*)
+- Shell(git submodule:*)
+- Shell(cd /Users/jacklingo/dev_custom/jcli:*)
 deny: []

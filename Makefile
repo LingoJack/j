@@ -20,6 +20,10 @@ JSTUDIO_INSTALL_APP_DIR ?= /Applications
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+SUBMODULES := $(shell git config --file .gitmodules --get-regexp path 2>/dev/null | awk '{print $$2}')
+
+# Submodule 目录参数（单个操作时必填，如 DIR=apps/jstudio）
+DIR ?=
 
 # ============================================
 # 伪目标声明
@@ -44,6 +48,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         build-remote \
         init-jstudio dev-jstudio build-jstudio install-jstudio uninstall-jstudio clean-jstudio \
         status-jstudio commit-jstudio push-jstudio push-jstudio-non-ai \
+        sm-status sm-diff sm-log sm-cd sm-pull sm-commit sm-push sm-push-quick sm-update-pointer \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -64,6 +69,160 @@ help: ## 显示此帮助信息
 	@echo "  make test       # 运行测试"
 	@echo "  make fmt        # 格式化代码"
 	@echo "  make clean      # 清理构建产物"
+
+# ============================================
+# Submodule 通用操作（sm-* 前缀）
+# ============================================
+
+# --- 公共函数 ---
+
+# 更新主仓库 submodule 指针（参数: $1 = submodule 路径）
+define SM_UPDATE_POINTER
+@echo "🔗 更新主仓库 submodule 指针..."
+@git add $(DIR)
+@if git diff --cached --quiet -- $(DIR); then \
+	echo "ℹ️ 主仓库 submodule 指针无变化"; \
+else \
+	sm_name=$$(basename $(DIR)); \
+	git commit -m "chore: update $$sm_name submodule pointer"; \
+	echo "☑️ 主仓库 submodule 指针已提交"; \
+fi
+endef
+
+# --- 查看类命令 ---
+
+sm-status: ## 查看所有/单个 submodule 状态（DIR= 可选，指定单个）
+	@if [ -n "$(DIR)" ]; then \
+		echo "🔍 submodule 状态: $(DIR)"; \
+		echo "--- $(DIR) ---"; \
+		git -C $(DIR) status --short --branch --untracked-files=all; \
+		echo "  当前 commit: $$(git -C $(DIR) rev-parse --short HEAD)"; \
+	else \
+		echo "🔍 所有 submodule 状态:"; \
+		for sm in $(SUBMODULES); do \
+			echo ""; \
+			echo "--- $$sm ---"; \
+			git -C $$sm status --short --branch --untracked-files=all 2>/dev/null || echo "  ⚠️ 未初始化"; \
+			echo "  当前 commit: $$(git -C $$sm rev-parse --short HEAD 2>/dev/null || echo 'N/A')"; \
+		done; \
+	fi
+
+sm-diff: ## 查看 submodule diff（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-diff DIR=apps/jstudio"; exit 1; fi
+	@git -C $(DIR) diff --stat
+	@echo ""
+	@git -C $(DIR) diff
+
+sm-log: ## 查看 submodule 最近提交（DIR= 可选，默认所有）
+	@if [ -n "$(DIR)" ]; then \
+		echo "📜 $(DIR) 最近 5 条提交:"; \
+		git -C $(DIR) log --oneline -5; \
+	else \
+		for sm in $(SUBMODULES); do \
+			echo ""; \
+			echo "📜 $$sm 最近 5 条提交:"; \
+			git -C $$sm log --oneline -5 2>/dev/null || echo "  ⚠️ 未初始化"; \
+		done; \
+	fi
+
+sm-cd: ## 打印 submodule 绝对路径（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-cd DIR=apps/jstudio"; exit 1; fi
+	@echo "$$(cd $(DIR) && pwd)"
+
+# --- 同步类命令 ---
+
+sm-pull: ## 拉取并更新所有/单个 submodule（DIR= 可选）
+	@if [ -n "$(DIR)" ]; then \
+		echo "📥 拉取 $(DIR) 远程更新..."; \
+		git submodule update --remote $(DIR); \
+		echo "☑️ $(DIR) 已更新"; \
+	else \
+		echo "📥 拉取所有 submodule 远程更新..."; \
+		git submodule update --remote; \
+		echo "☑️ 所有 submodule 已更新"; \
+	fi
+
+# --- 提交推送类命令 ---
+
+sm-commit: ## 非 AI 自动提交 submodule（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-commit DIR=apps/jstudio"; exit 1; fi
+	@echo "📝 自动提交 $(DIR) submodule 代码..."
+	@cd $(DIR) && \
+		git add . && \
+		staged_files=$$(git diff --cached --name-only 2>/dev/null); \
+		if [ -z "$$staged_files" ]; then \
+			echo "ℹ️ $(DIR) 没有待提交变更"; \
+			exit 0; \
+		fi; \
+		file_count=$$(echo "$$staged_files" | wc -l | tr -d ' '); \
+		if [ "$$file_count" -eq 1 ]; then \
+			msg="update: $$(echo "$$staged_files" | head -1)"; \
+		else \
+			first=$$(echo "$$staged_files" | head -1); \
+			msg="update: $$first and $$((file_count - 1)) other file(s)"; \
+		fi; \
+		git commit -m "$$msg"; \
+		echo "☑️ $(DIR) 已提交: $$msg"
+	$(SM_UPDATE_POINTER)
+
+sm-push: ## AI 生成 commit message 并推送 submodule（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-push DIR=apps/jstudio"; exit 1; fi
+	@echo "🤖 AI 生成 $(DIR) 变更说明..."
+	@cd $(DIR) && \
+		diff_stat="$$(git diff --stat 2>/dev/null)"; \
+		if [ -z "$$diff_stat" ]; then \
+			diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
+		fi; \
+		if [ -z "$$diff_stat" ]; then \
+			echo "ℹ️ $(DIR) 没有检测到本地变更，直接 push 已有 commits..."; \
+			git push origin HEAD; \
+			exit 0; \
+		fi; \
+		prompt_file=$$(mktemp); \
+		stat_file=$$(mktemp); \
+		diff_file=$$(mktemp); \
+		trap 'rm -f "$$prompt_file" "$$stat_file" "$$diff_file"' EXIT; \
+		printf '%s\n' "$$diff_stat" > "$$stat_file"; \
+		git diff 2>/dev/null | head -200 > "$$diff_file"; \
+		sm_name=$$(basename $(DIR)); \
+		prompt_dir=$$(cd $(DIR) && git rev-parse --show-toplevel | sed 's|/[^/]*$$||'); \
+		awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" ' \
+			/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
+			/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
+			{ print }' "$$prompt_dir/prompts/commit-message.md" > "$$prompt_file"; \
+		ai_out=$$(mktemp); \
+		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+		echo ""; \
+		echo "📄 AI 原始输出:"; \
+		echo "----------------------------------------"; \
+		cat "$$ai_out"; \
+		echo "----------------------------------------"; \
+		msg=$$(perl -0777 -pe 's/<\s*\/\s*result\s*>/<\/result>/g' "$$ai_out" | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'); \
+		rm -f "$$ai_out"; \
+		if [ -z "$$msg" ]; then msg="更新 $$sm_name: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
+		git add . && git commit -m "$$msg" && git push origin HEAD; \
+		echo "✅ $(DIR) 已推送: $$msg"
+	$(SM_UPDATE_POINTER)
+
+sm-push-quick: ## 非 AI 快速 push submodule（DIR= 必填，MSG='message' 可指定提交信息）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-push-quick DIR=apps/jstudio"; exit 1; fi
+	@echo "📤 非 AI 推送 $(DIR) submodule..."
+	@cd $(DIR) && \
+		git add . && \
+		if git diff --cached --quiet; then \
+			echo "ℹ️ $(DIR) 没有待提交变更，直接 push 已有 commits..."; \
+			git push origin HEAD; \
+		else \
+			sm_name=$$(basename $(DIR)); \
+			msg="$${MSG:-更新 $$sm_name: $$(date +'%Y-%m-%d %H:%M:%S')}"; \
+			git commit -m "$$msg" && git push origin HEAD; \
+			echo "☑️ $(DIR) 已推送: $$msg"; \
+		fi
+	$(SM_UPDATE_POINTER)
+
+sm-update-pointer: ## 仅更新主仓库 submodule 指针（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-update-pointer DIR=apps/jstudio"; exit 1; fi
+	$(SM_UPDATE_POINTER)
 
 # ============================================
 # 目录和 Git 操作
@@ -211,100 +370,17 @@ install-jstudio: build-jstudio ## 安装 jstudio app（macOS 安装到 /Applicat
 		fi; \
 	fi
 
-status-jstudio: ## 查看 jstudio submodule 状态
-	@echo "🔍 jstudio submodule 状态:"
-	@git -C $(JSTUDIO_DIR) status --short --branch --untracked-files=all
+status-jstudio: ## → make sm-status DIR=apps/jstudio
+	@$(MAKE) sm-status DIR=$(JSTUDIO_DIR)
 
-commit-jstudio: ## 提交 jstudio submodule 代码（非 AI，自动生成 message）
-	@echo "📝 自动提交 jstudio submodule 代码..."
-	@cd $(JSTUDIO_DIR) && \
-		git add . && \
-		staged_files=$$(git diff --cached --name-only 2>/dev/null); \
-		if [ -z "$$staged_files" ]; then \
-			echo "ℹ️ jstudio 没有待提交变更"; \
-			exit 0; \
-		fi; \
-		file_count=$$(echo "$$staged_files" | wc -l | tr -d ' '); \
-		if [ "$$file_count" -eq 1 ]; then \
-			msg="update: $$(echo "$$staged_files" | head -1)"; \
-		else \
-			first=$$(echo "$$staged_files" | head -1); \
-			msg="update: $$first and $$((file_count - 1)) other file(s)"; \
-		fi; \
-		git commit -m "$$msg"; \
-		echo "☑️ jstudio 已提交: $$msg"
-	@echo "🔗 更新并提交主仓库 submodule 指针..."
-	@git add $(JSTUDIO_DIR)
-	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
-		echo "ℹ️ 主仓库 submodule 指针无变化"; \
-	else \
-		git commit -m "chore: update jstudio submodule pointer"; \
-		echo "☑️ 主仓库 submodule 指针已提交"; \
-	fi
+commit-jstudio: ## → make sm-commit DIR=apps/jstudio
+	@$(MAKE) sm-commit DIR=$(JSTUDIO_DIR)
 
-push-jstudio: ## AI 生成 commit message 并推送 jstudio submodule
-	@echo "🤖 AI 生成 jstudio 变更说明..."
-	@cd $(JSTUDIO_DIR) && \
-		diff_stat="$$(git diff --stat 2>/dev/null)"; \
-		if [ -z "$$diff_stat" ]; then \
-			diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
-		fi; \
-		if [ -z "$$diff_stat" ]; then \
-			echo "ℹ️ jstudio 没有检测到本地变更，直接 push 已有 commits..."; \
-			git push origin HEAD; \
-			exit 0; \
-		fi; \
-		prompt_file=$$(mktemp); \
-		stat_file=$$(mktemp); \
-		diff_file=$$(mktemp); \
-		trap 'rm -f "$$prompt_file" "$$stat_file" "$$diff_file"' EXIT; \
-		printf '%s\n' "$$diff_stat" > "$$stat_file"; \
-		git diff 2>/dev/null | head -200 > "$$diff_file"; \
-		awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" ' \
-			/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
-			/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
-			{ print }' ../../prompts/commit-message.md > "$$prompt_file"; \
-		ai_out=$$(mktemp); \
-		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
-		echo ""; \
-		echo "📄 AI 原始输出:"; \
-		echo "----------------------------------------"; \
-		cat "$$ai_out"; \
-		echo "----------------------------------------"; \
-		msg=$$(perl -0777 -pe 's/<\s*\/\s*result\s*>/<\/result>/g' "$$ai_out" | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'); \
-		rm -f "$$ai_out"; \
-		if [ -z "$$msg" ]; then msg="更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
-		git add . && git commit -m "$$msg" && git push origin HEAD; \
-		echo "✅ jstudio 已推送: $$msg"
-	@echo "🔗 更新并提交主仓库 submodule 指针..."
-	@git add $(JSTUDIO_DIR)
-	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
-		echo "ℹ️ 主仓库 submodule 指针无变化"; \
-	else \
-		git commit -m "chore: update jstudio submodule pointer"; \
-		echo "☑️ 主仓库 submodule 指针已提交"; \
-	fi
+push-jstudio: ## → make sm-push DIR=apps/jstudio
+	@$(MAKE) sm-push DIR=$(JSTUDIO_DIR)
 
-push-jstudio-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG='message' 可指定提交信息）
-	@echo "📤 非 AI 推送 jstudio submodule..."
-	@cd $(JSTUDIO_DIR) && \
-		git add . && \
-		if git diff --cached --quiet; then \
-			echo "ℹ️ jstudio 没有待提交变更，直接 push 已有 commits..."; \
-			git push origin HEAD; \
-		else \
-			msg="$${MSG:-更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')}"; \
-			git commit -m "$$msg" && git push origin HEAD; \
-			echo "☑️ jstudio 已推送: $$msg"; \
-		fi
-	@echo "🔗 更新并提交主仓库 submodule 指针..."
-	@git add $(JSTUDIO_DIR)
-	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
-		echo "ℹ️ 主仓库 submodule 指针无变化"; \
-	else \
-		git commit -m "chore: update jstudio submodule pointer"; \
-		echo "☑️ 主仓库 submodule 指针已提交"; \
-	fi
+push-jstudio-non-ai: ## → make sm-push-quick DIR=apps/jstudio
+	@$(MAKE) sm-push-quick DIR=$(JSTUDIO_DIR)
 
 uninstall-jstudio: ## 卸载 jstudio app（macOS）
 	@echo "🗑️  卸载 jstudio..."
