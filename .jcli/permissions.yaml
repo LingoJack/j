@@ -2,4 +2,11 @@ allow_all: false
 allow:
 - Shell(cat .jcli/permissions.yaml:*)
 - Shell(git add:*)
+- Shell(curl -v:*)
+- Shell(cat ~/.cargo/config.toml:*)
+- Shell(echo "HTTP_PROXY=$HTTP_PROXY";:*)
+- Shell(ls ~/.cargo/config.toml:*)
+- Shell(networksetup -getwebproxy:*)
+- Shell(mkdir -p:*)
+- Shell(curl -x:*)
 deny: []
