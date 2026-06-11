@@ -3,9 +3,62 @@ use crate::constants::{
 };
 use crate::context::compact::CompactConfig;
 use crate::theme_name::ThemeName;
-use serde::{Deserialize, Serialize};
+use crate::util::shell_runtime::ShellRuntime;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallMode {
+    #[default]
+    Native,
+    Disabled,
+}
+
+impl<'de> Deserialize<'de> for ToolCallMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::parse(&value))
+    }
+}
+
+impl ToolCallMode {
+    pub const ALL: &[ToolCallMode] = &[ToolCallMode::Native, ToolCallMode::Disabled];
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Disabled => "disabled",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Native => "原生工具调用",
+            Self::Disabled => "禁用工具调用",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "disabled" | "off" | "false" => Self::Disabled,
+            _ => Self::Native,
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        let idx = Self::ALL.iter().position(|m| m == self).unwrap_or(0);
+        Self::ALL[(idx + 1) % Self::ALL.len()]
+    }
+
+    pub fn allows_tools(&self) -> bool {
+        matches!(self, Self::Native)
+    }
+}
 
 /// 单个模型提供方配置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -21,6 +74,15 @@ pub struct ModelProvider {
     /// 是否支持视觉/多模态（默认 false）
     #[serde(default)]
     pub supports_vision: bool,
+    /// 工具调用协议模式（默认 native）
+    #[serde(default)]
+    pub tool_call_mode: ToolCallMode,
+}
+
+impl ModelProvider {
+    pub fn tools_allowed(&self, global_tools_enabled: bool) -> bool {
+        global_tools_enabled && self.tool_call_mode.allows_tools()
+    }
 }
 
 /// 思考指示器动画风格
@@ -266,6 +328,10 @@ impl Default for AgentConfig {
     }
 }
 
+pub fn default_shell_runtime() -> ShellRuntime {
+    ShellRuntime::Auto
+}
+
 // ========== 通用文本文件读写辅助 ==========
 
 /// 从文件加载文本内容，trim 后返回；文件不存在或内容为空返回 None
@@ -448,5 +514,40 @@ pub fn save_soul(content: &str) -> bool {
             eprintln!("[ERROR] ✖️ 保存 soul.md 失败: {}", e);
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ModelProvider, ToolCallMode};
+
+    #[test]
+    fn provider_tools_allowed_respects_global_switch() {
+        let provider = ModelProvider {
+            name: "test".to_string(),
+            api_base: "https://example.com/v1".to_string(),
+            api_key: "key".to_string(),
+            model: "model".to_string(),
+            supports_vision: false,
+            tool_call_mode: ToolCallMode::Native,
+        };
+
+        assert!(provider.tools_allowed(true));
+        assert!(!provider.tools_allowed(false));
+    }
+
+    #[test]
+    fn tool_call_mode_deserializes_alias_values() {
+        let provider: ModelProvider = serde_json::from_value(serde_json::json!({
+            "name": "test",
+            "api_base": "https://example.com/v1",
+            "api_key": "key",
+            "model": "model",
+            "supports_vision": false,
+            "tool_call_mode": "off"
+        }))
+        .unwrap();
+
+        assert_eq!(provider.tool_call_mode, ToolCallMode::Disabled);
     }
 }

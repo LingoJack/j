@@ -3,9 +3,11 @@ use crate::command::chat::agent_md;
 use crate::command::chat::app::ChatApp;
 use crate::command::chat::context::compact::BUILTIN_EXEMPT_TOOLS;
 use crate::command::chat::storage::{
-    load_style, load_system_prompt, save_style, save_system_prompt,
+    ToolCallMode, load_style, load_system_prompt, save_style, save_system_prompt,
 };
+use crate::config::YamlConfig;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
+use j_agent::util::shell_runtime::ShellRuntime;
 
 // ========== Model tab helpers ==========
 
@@ -20,6 +22,7 @@ pub fn config_field_label_model(idx: usize) -> &'static str {
         "api_key" => "API Key",
         "model" => "模型名称",
         "supports_vision" => "支持视觉",
+        "tool_call_mode" => "工具协议",
         _ => CONFIG_FIELDS[idx],
     }
 }
@@ -58,6 +61,7 @@ pub fn config_field_value_model(app: &ChatApp, idx: usize) -> String {
                 "关闭".into()
             }
         }
+        "tool_call_mode" => p.tool_call_mode.display_name().to_string(),
         _ => String::new(),
     }
 }
@@ -81,6 +85,7 @@ pub fn config_field_raw_value_model(app: &ChatApp, idx: usize) -> String {
         "api_key" => p.api_key.clone(),
         "model" => p.model.clone(),
         "supports_vision" => p.supports_vision.to_string(),
+        "tool_call_mode" => p.tool_call_mode.as_str().to_string(),
         _ => String::new(),
     }
 }
@@ -110,6 +115,9 @@ pub fn config_field_set_model(app: &mut ChatApp, idx: usize, value: &str) {
             );
             app.ui.msg_lines_cache = None;
         }
+        "tool_call_mode" => {
+            p.tool_call_mode = ToolCallMode::parse(value);
+        }
         _ => {}
     }
 }
@@ -134,6 +142,7 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "thinking_style" => "思考动画",
         "flat_bubble" => "气泡背景",
         "welcome_quote" => "欢迎诗句",
+        "shell_runtime" => "默认 Shell",
         "compact_enabled" => "上下文压缩",
         "compact_token_threshold" => "压缩阈值(K)",
         "compact_keep_recent" => "保留最近轮数",
@@ -159,6 +168,9 @@ pub fn config_field_desc_global(idx: usize) -> &'static str {
         "auto_restore_session" => "启动时自动恢复上次会话",
         "flat_bubble" => "开启后气泡背景色与主背景色一致",
         "welcome_quote" => "欢迎界面显示诗句引言",
+        "shell_runtime" => {
+            "全 CLI 默认 shell 策略，Windows 默认优先 pwsh / powershell / git bash / cmd"
+        }
         "thinking_style" => "AI 思考时的加载动画风格",
         "compact_enabled" => "开启后自动压缩过长的上下文",
         "compact_token_threshold" => "上下文 Token 数超过此值时触发压缩(K)，0=使用默认值",
@@ -215,6 +227,10 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
             .thinking_style
             .display_name()
             .to_string(),
+        "shell_runtime" => YamlConfig::load()
+            .shell_runtime()
+            .display_name()
+            .to_string(),
         "compact_enabled" => {
             if app.state.agent_config.compact.enabled {
                 "开启".into()
@@ -263,6 +279,7 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
             }
         }
         "thinking_style" => app.state.agent_config.thinking_style.as_str().to_string(),
+        "shell_runtime" => YamlConfig::load().shell_runtime().as_str().to_string(),
         "compact_enabled" => {
             if app.state.agent_config.compact.enabled {
                 "true".into()
@@ -297,9 +314,9 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
 }
 
 /// 将用户输入的值写入 Global 配置页指定索引字段。
-pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
+pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) -> Result<(), String> {
     let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(idx) else {
-        return;
+        return Ok(());
     };
     match *field_name {
         "system_prompt" => {
@@ -358,6 +375,13 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
                 "true" | "1" | "开启" | "on" | "yes"
             );
         }
+        "shell_runtime" => {
+            let runtime = ShellRuntime::parse(value).unwrap_or_default();
+            let mut config = YamlConfig::load();
+            config.set_shell_runtime(runtime)?;
+            // 保持运行中的 shell 策略也同步更新，后续新命令立即生效。
+            j_agent::util::shell_runtime::set_default_shell_runtime(runtime);
+        }
         "thinking_style" => {
             app.state.agent_config.thinking_style =
                 crate::command::chat::storage::config::ThinkingStyle::parse(value.trim());
@@ -390,4 +414,5 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
         }
         _ => {}
     }
+    Ok(())
 }

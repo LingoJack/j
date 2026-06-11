@@ -310,11 +310,55 @@ pub fn build_request_with_tools(
     Ok(ChatRequest {
         model: provider.model.clone(),
         messages: llm_messages,
-        tools: if tools.is_empty() { None } else { Some(tools) },
+        tools: if !provider.tool_call_mode.allows_tools() || tools.is_empty() {
+            None
+        } else {
+            Some(tools)
+        },
         stream: None,
         max_tokens: None,
         extra: serde_json::Map::new(),
     })
+}
+
+pub fn extract_pseudo_tool_tag<'a>(text: &'a str, known_tools: &[String]) -> Option<&'a str> {
+    if known_tools.is_empty() {
+        return None;
+    }
+
+    let trimmed = text.trim_start();
+    let first_line = trimmed
+        .lines()
+        .find(|line| !line.trim().is_empty())?
+        .trim_start();
+    if first_line.starts_with("```") || !first_line.starts_with('<') {
+        return None;
+    }
+
+    let rest = &first_line[1..];
+    if rest.starts_with('/') {
+        return None;
+    }
+    let end = rest.find('>')?;
+    let raw_tag = &rest[..end];
+    let tag = raw_tag.split_whitespace().next()?;
+    let first = tag.chars().next()?;
+    if !first.is_ascii_uppercase() {
+        return None;
+    }
+    if !tag
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+    {
+        return None;
+    }
+
+    if !known_tools.iter().any(|name| name == tag) {
+        return None;
+    }
+
+    let closing_tag = format!("</{tag}>");
+    (trimmed.contains(&closing_tag) || first_line.ends_with("/>")).then_some(tag)
 }
 
 /// 流式调用 API，通过回调逐步输出，返回完整的助手回复内容
@@ -525,4 +569,65 @@ fn sanitize_api_body(body: &str) -> String {
         }
     }
     result.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_request_with_tools, extract_pseudo_tool_tag};
+    use crate::llm::{FunctionObject, ToolDefinition};
+    use crate::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallMode};
+
+    fn provider(tool_call_mode: ToolCallMode) -> ModelProvider {
+        ModelProvider {
+            name: "test".to_string(),
+            api_base: "https://example.com/v1".to_string(),
+            api_key: "key".to_string(),
+            model: "model".to_string(),
+            supports_vision: false,
+            tool_call_mode,
+        }
+    }
+
+    #[test]
+    fn disabled_tool_call_mode_omits_tools_from_request() {
+        let request = build_request_with_tools(
+            &provider(ToolCallMode::Disabled),
+            &[ChatMessage::text(MessageRole::User, "hello")],
+            vec![ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionObject {
+                    name: "Shell".to_string(),
+                    description: Some("test".to_string()),
+                    parameters: Some(serde_json::json!({"type":"object"})),
+                    strict: None,
+                },
+            }],
+            None,
+        )
+        .unwrap();
+
+        assert!(request.tools.is_none());
+    }
+
+    #[test]
+    fn detect_pseudo_tool_tags_from_plain_text() {
+        let known_tools = vec!["Grep".to_string(), "Glob".to_string()];
+        assert_eq!(
+            extract_pseudo_tool_tag("<Grep>\n<pattern>mcp</pattern>\n</Grep>", &known_tools),
+            Some("Grep")
+        );
+        assert_eq!(
+            extract_pseudo_tool_tag("<tool>noop</tool>", &known_tools),
+            None
+        );
+        assert_eq!(extract_pseudo_tool_tag("normal text", &known_tools), None);
+        assert_eq!(
+            extract_pseudo_tool_tag("示例: <Task>demo</Task>", &known_tools),
+            None
+        );
+        assert_eq!(
+            extract_pseudo_tool_tag("<Task>\nfoo\n</Task>", &known_tools),
+            None
+        );
+    }
 }

@@ -234,6 +234,7 @@ impl ChatApp {
                 api_key: String::new(),
                 model: String::new(),
                 supports_vision: false,
+                tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
             });
         let agent_provider: Arc<Mutex<ModelProvider>> = Arc::new(Mutex::new(default_provider));
         let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -1028,7 +1029,7 @@ impl ChatApp {
         if let Ok(mut mgr) = self.teammate_manager.lock() {
             mgr.stop_all();
         }
-        self.finish_loading(false, true);
+        self.finish_loading(false, true, false);
     }
 
     pub fn switch_model(&mut self) {
@@ -1144,8 +1145,10 @@ impl ChatApp {
     }
 
     pub fn handle_terminal_exec(command: &str) -> (String, Option<i32>) {
-        use std::process::Command;
-        let output = Command::new("sh").arg("-c").arg(command).output();
+        let output = match j_agent::util::shell_runtime::resolve_shell_runtime(None) {
+            Ok(runtime) => runtime.build_command(command).output(),
+            Err(err) => return (format!("未找到可用 shell: {}", err), None),
+        };
         match output {
             Ok(out) => {
                 let mut result = String::new();
@@ -1168,9 +1171,14 @@ impl ChatApp {
 
 #[cfg(test)]
 mod tests {
+    use super::super::action::Action;
+    use super::super::agent_handle::MainAgentHandle;
     use super::ChatApp;
     use crate::command::chat::app::types::{ToolCallStatus, ToolExecStatus};
     use crate::command::chat::app::ui_state::ChatMode;
+    use crate::command::chat::error::ChatError;
+    use std::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn reject_with_reason_resets_tool_confirm_ui_for_next_pending_tool() {
@@ -1229,5 +1237,96 @@ mod tests {
         app.reject_pending_tool("不要执行");
 
         assert!(matches!(app.ui.mode, ChatMode::Chat));
+    }
+
+    #[test]
+    fn poll_stream_actions_keeps_consuming_done_while_in_tool_confirm() {
+        let mut app = ChatApp::new("test-tool-confirm-done".to_string());
+        let (tx, rx) = mpsc::channel();
+        tx.send(crate::command::chat::app::types::StreamMsg::Done)
+            .unwrap();
+        app.main_agent = Some(MainAgentHandle {
+            stream_rx: rx,
+            cancel_token: CancellationToken::new(),
+        });
+        app.ui.mode = ChatMode::ToolConfirm;
+
+        let actions = app.poll_stream_actions();
+
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::StreamDone))
+        );
+    }
+
+    #[test]
+    fn poll_stream_actions_keeps_consuming_error_while_in_tool_confirm() {
+        let mut app = ChatApp::new("test-tool-confirm-error".to_string());
+        let (tx, rx) = mpsc::channel();
+        tx.send(crate::command::chat::app::types::StreamMsg::Error(
+            ChatError::Other("boom".to_string()),
+        ))
+        .unwrap();
+        app.main_agent = Some(MainAgentHandle {
+            stream_rx: rx,
+            cancel_token: CancellationToken::new(),
+        });
+        app.ui.mode = ChatMode::ToolConfirm;
+
+        let actions = app.poll_stream_actions();
+
+        assert!(actions.iter().any(
+            |action| matches!(action, Action::StreamError(ChatError::Other(msg)) if msg == "boom")
+        ));
+    }
+
+    #[test]
+    fn tool_call_protocol_mismatch_keeps_error_toast_while_preserving_streamed_reply() {
+        let mut app = ChatApp::new("test-tool-call-protocol-mismatch".to_string());
+        app.state.is_loading = true;
+        crate::util::safe_lock(
+            &app.state.streaming_content,
+            "test::tool_call_protocol_mismatch_streaming_content",
+        )
+        .push_str("partial reply");
+        crate::util::safe_lock(
+            &app.state.queued_tasks,
+            "test::tool_call_protocol_mismatch_queued_tasks",
+        )
+        .push("follow-up task".to_string());
+
+        app.update_stream_error(&ChatError::ToolCallProtocolMismatch(
+            "provider returned pseudo tool tags".to_string(),
+        ));
+
+        let toast = app
+            .ui
+            .toast
+            .as_ref()
+            .map(|(msg, is_error, _)| (msg.clone(), *is_error));
+        assert_eq!(
+            toast,
+            Some((
+                "请求失败: provider returned pseudo tool tags".to_string(),
+                true
+            ))
+        );
+
+        let display = crate::util::safe_lock(
+            &app.display_messages,
+            "test::tool_call_protocol_mismatch_display_messages",
+        );
+        assert!(display.iter().any(|msg| msg.role
+            == crate::command::chat::storage::MessageRole::Assistant
+            && msg.content == "partial reply"));
+        drop(display);
+
+        let queued_tasks = crate::util::safe_lock(
+            &app.state.queued_tasks,
+            "test::tool_call_protocol_mismatch_queued_tasks_check",
+        );
+        assert_eq!(queued_tasks.len(), 1);
+        assert_eq!(queued_tasks[0], "follow-up task");
     }
 }

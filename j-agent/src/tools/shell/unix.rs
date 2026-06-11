@@ -9,6 +9,7 @@ use crate::tools::{
     PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
     schema_to_tool_params,
 };
+use crate::util::shell_runtime::{parse_runtime_override, resolve_shell_runtime};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -35,6 +36,9 @@ struct ShellParams {
     /// Timeout in seconds, default 120, max 600. The process is automatically killed on timeout and partial output is returned. For build commands (npm run build, cargo build, etc.) use 300-600.
     #[serde(default)]
     timeout: Option<u64>,
+    /// Optional shell runtime override: auto / bash / sh.
+    #[serde(default)]
+    runtime: Option<String>,
     /// If true, run the command in background and return a task_id immediately. Use TaskOutput to retrieve results.
     #[serde(default)]
     run_in_background: bool,
@@ -135,17 +139,28 @@ impl Tool for ShellTool {
         }
 
         if params.run_in_background {
-            return self.execute_background(params.command, params.cwd, timeout_secs);
+            return self.execute_background(
+                params.command,
+                params.cwd,
+                timeout_secs,
+                params.runtime.as_deref(),
+            );
         }
 
         if params.interactive {
-            return self.execute_interactive(&params.command, params.cwd.as_deref(), timeout_secs);
+            return self.execute_interactive(
+                &params.command,
+                params.cwd.as_deref(),
+                timeout_secs,
+                params.runtime.as_deref(),
+            );
         }
 
         self.execute_sync(
             &params.command,
             params.cwd.as_deref(),
             timeout_secs,
+            params.runtime.as_deref(),
             cancelled,
         )
     }
@@ -181,12 +196,34 @@ impl ShellTool {
         command: &str,
         cwd: Option<&str>,
         timeout_secs: u64,
+        runtime: Option<&str>,
         cancelled: &Arc<AtomicBool>,
     ) -> ToolResult {
-        let mut cmd = std::process::Command::new("bash");
-        cmd.arg("-c")
-            .arg(command)
-            .stdout(std::process::Stdio::piped())
+        let preferred = match parse_runtime_override(runtime) {
+            Ok(preferred) => preferred,
+            Err(err) => {
+                return ToolResult {
+                    output: err,
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+        let resolved = match resolve_shell_runtime(preferred) {
+            Ok(resolved) => resolved,
+            Err(err) => {
+                return ToolResult {
+                    output: format!("shell runtime 不可用: {}", err),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+
+        let mut cmd = resolved.build_command(command);
+        cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
         // 设置工作目录：优先用显式 cwd，其次用 thread-local worktree CWD
@@ -444,7 +481,19 @@ impl ShellTool {
         command: String,
         cwd: Option<String>,
         timeout_secs: u64,
+        runtime: Option<&str>,
     ) -> ToolResult {
+        let preferred = match parse_runtime_override(runtime) {
+            Ok(preferred) => preferred,
+            Err(err) => {
+                return ToolResult {
+                    output: err.clone(),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
         // 显式 cwd 优先，其次取 thread-local worktree CWD（后台任务在新线程中运行，
         // 所以要在这里捕获，而不是在新线程中重新读取）
         let effective_cwd = cwd
@@ -459,10 +508,19 @@ impl ShellTool {
         let cmd = command.clone();
 
         std::thread::spawn(move || {
-            let mut child_cmd = std::process::Command::new("bash");
+            let resolved = match resolve_shell_runtime(preferred) {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    let mut buf = output_buffer.lock().unwrap_or_else(|e| e.into_inner());
+                    *buf = format!("shell runtime 不可用: {}", err);
+                    drop(buf);
+                    manager.complete_task(&tid, "error", format!("shell runtime 不可用: {}", err));
+                    return;
+                }
+            };
+
+            let mut child_cmd = resolved.build_command(&cmd);
             child_cmd
-                .arg("-c")
-                .arg(&cmd)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
 
@@ -598,8 +656,31 @@ impl ShellTool {
         command: &str,
         cwd: Option<&str>,
         _timeout_secs: u64,
+        runtime: Option<&str>,
     ) -> ToolResult {
         use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+        let preferred = match parse_runtime_override(runtime) {
+            Ok(preferred) => preferred,
+            Err(err) => {
+                return ToolResult {
+                    output: err,
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+        let resolved = match resolve_shell_runtime(preferred) {
+            Ok(resolved) => resolved,
+            Err(err) => {
+                return ToolResult {
+                    output: format!("shell runtime 不可用: {}", err),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
 
         let effective_cwd = cwd
             .map(|s| s.to_string())
@@ -623,8 +704,10 @@ impl ShellTool {
             }
         };
 
-        let mut builder = CommandBuilder::new("bash");
-        builder.arg("-c");
+        let mut builder = CommandBuilder::new(&resolved.program);
+        for arg in &resolved.args {
+            builder.arg(arg);
+        }
         builder.arg(command);
         if let Some(ref dir) = effective_cwd {
             builder.cwd(dir);

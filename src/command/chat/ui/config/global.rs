@@ -3,7 +3,8 @@ use crate::command::chat::render::helpers::{
     config_field_desc_global, config_field_label_global, config_field_value_global,
 };
 use crate::command::chat::ui::components::{
-    GlobalRowCtx, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
+    GlobalRowCtx, global_preview_row, global_select_row, global_text_row, global_theme_row,
+    global_toggle_row,
 };
 use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
 use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
@@ -13,7 +14,7 @@ use ratatui::{
 };
 
 /// Global tab 内容（三列布局: label | value | desc，--- 分隔分组）
-pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
+pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp, screen_width: u16) -> ItemList<'a> {
     let t = &app.ui.theme;
     let mut list = ItemList::new(t.bg_primary);
 
@@ -30,8 +31,8 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
         (0, 3),  // system_prompt, agent_md, style
         (3, 2),  // max_history_messages, max_context_tokens
         (5, 2),  // max_tool_rounds, tool_confirm_timeout
-        (7, 5),  // theme, auto_restore_session, thinking_style, flat_bubble, welcome_quote
-        (12, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
+        (7, 6), // theme, auto_restore_session, thinking_style, flat_bubble, welcome_quote, shell_runtime
+        (13, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
@@ -61,7 +62,8 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                 config_field_value_global(app, i)
             };
             let desc = config_field_desc_global(i);
-            let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+            let ctx = GlobalRowCtx::new(label, desc, is_selected, t)
+                .with_screen_width(screen_width as usize);
 
             let line = match *field_name {
                 "auto_restore_session" => {
@@ -76,6 +78,7 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                 "thinking_style" => {
                     global_theme_row(app.state.agent_config.thinking_style.display_name(), &ctx)
                 }
+                "shell_runtime" => global_select_row(&value, &ctx),
                 "system_prompt" | "agent_md" | "style" => {
                     let mut preview_ctx = ctx;
                     preview_ctx.hint = "Enter 编辑".to_string();

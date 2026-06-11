@@ -374,15 +374,14 @@ fn get_latest_version_windows(auth_token: &Option<String>) -> Option<String> {
     }
 
     // 方法1: 通过 GitHub API 获取
-    let ps_script = format!(
-        "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
-         try {{ \
+    let ps_script = "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+         try { \
              $r = Invoke-WebRequest -Uri 'https://api.github.com/repos/LingoJack/jcli/releases/latest' \
-                 -Headers @{{'User-Agent'='j-cli-updater'}} -UseBasicParsing; \
+                 -Headers @{'User-Agent'='j-cli-updater'} -UseBasicParsing; \
              $j = $r.Content | ConvertFrom-Json; \
              Write-Output $j.tag_name \
-         }} catch {{ Write-Output '' }}"
-    );
+         } catch { Write-Output '' }"
+        .to_string();
 
     if let Ok(output) = std::process::Command::new("powershell.exe")
         .args(["-NoProfile", "-Command", &ps_script])
@@ -399,17 +398,17 @@ fn get_latest_version_windows(auth_token: &Option<String>) -> Option<String> {
     }
 
     // 方法2: 从 releases 页面解析重定向 Location
-    let ps_script2 = format!(
+    let ps_script2 =
         "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
-         try {{ \
+         try { \
              $r = Invoke-WebRequest -Uri 'https://github.com/LingoJack/jcli/releases/latest' \
                  -MaximumRedirection 0 -ErrorAction SilentlyContinue; \
              Write-Output '' \
-         }} catch {{ \
+         } catch { \
              $loc = $_.Exception.Response.Headers['Location']; \
-             if ($loc) {{ Write-Output $loc }} else {{ Write-Output '' }} \
-         }}"
-    );
+             if ($loc) { Write-Output $loc } else { Write-Output '' } \
+         }"
+        .to_string();
 
     if let Ok(output) = std::process::Command::new("powershell.exe")
         .args(["-NoProfile", "-Command", &ps_script2])

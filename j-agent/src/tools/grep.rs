@@ -2,15 +2,14 @@ use super::{
     PlanDecision, Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path,
     schema_to_tool_params,
 };
+use grep_matcher::Matcher;
+use grep_regex::RegexMatcherBuilder;
+use grep_searcher::{SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkFinish, SinkMatch};
 use ignore::WalkBuilder;
-use regex::Regex;
-use regex::RegexBuilder;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
 use std::borrow::Cow;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -95,11 +94,11 @@ impl Tool for GrepTool {
             Err(e) => return e,
         };
 
-        let re = match RegexBuilder::new(&params.pattern)
+        let matcher = match RegexMatcherBuilder::new()
             .case_insensitive(params.ignore_case)
-            .build()
+            .build(&params.pattern)
         {
-            Ok(re) => re,
+            Ok(m) => m,
             Err(e) => {
                 return ToolResult {
                     output: format!("正则表达式无效: {}", e),
@@ -127,6 +126,11 @@ impl Tool for GrepTool {
         let walker = build_file_walker(search_path, params.glob.as_deref());
 
         let mut results = SearchResults::default();
+        let mut searcher = SearcherBuilder::new()
+            .line_number(true)
+            .before_context(params.context)
+            .after_context(params.context)
+            .build();
 
         for entry in walker.build() {
             if cancelled.load(Ordering::Relaxed) {
@@ -163,10 +167,11 @@ impl Tool for GrepTool {
 
             search_single_file(
                 path,
-                &re,
+                &matcher,
+                &mut searcher,
                 &params.output_mode,
-                params.context,
                 params.head_limit,
+                cancelled,
                 &mut results,
             );
         }
@@ -227,82 +232,179 @@ fn matches_file_type(path: &Path, type_extensions: &[&str]) -> bool {
 }
 
 /// 在单个文件中搜索正则匹配，将结果写入 `results`
-fn search_single_file(
+fn search_single_file<M: Matcher>(
     path: &Path,
-    re: &Regex,
+    matcher: &M,
+    searcher: &mut grep_searcher::Searcher,
     output_mode: &str,
-    context: usize,
     head_limit: Option<usize>,
+    cancelled: &Arc<AtomicBool>,
     results: &mut SearchResults,
 ) {
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return,
+    let path_str = path.display().to_string();
+    let mut sink = GrepSink {
+        path_str: &path_str,
+        output_mode,
+        head_limit,
+        cancelled,
+        results,
+        file_has_match: false,
+        file_count: 0,
+        // 缓冲当前匹配行的上下文行（匹配行之前收集）
+        pending_context: Vec::new(),
     };
 
-    let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
-    let path_str = path.display().to_string();
+    // search_path 可能因二进制文件等跳过，忽略错误
+    let _ = searcher.search_path(matcher, path, &mut sink);
+}
 
-    let mut file_has_match = false;
-    let mut file_count = 0;
+/// 自定义 Sink，收集 ripgrep 搜索结果
+struct GrepSink<'a> {
+    path_str: &'a str,
+    output_mode: &'a str,
+    head_limit: Option<usize>,
+    cancelled: &'a Arc<AtomicBool>,
+    results: &'a mut SearchResults,
+    file_has_match: bool,
+    file_count: usize,
+    /// 匹配行之前的上下文行缓冲
+    pending_context: Vec<String>,
+}
 
-    for (line_num, line) in lines.iter().enumerate() {
-        if !re.is_match(line) {
-            continue;
+impl GrepSink<'_> {
+    /// 检查是否应该终止搜索
+    fn should_stop(&self) -> bool {
+        if self.cancelled.load(Ordering::Relaxed) {
+            return true;
         }
-
-        file_has_match = true;
-        file_count += 1;
-        results.total_count += 1;
-
-        if output_mode == "content" {
-            if head_limit.is_some_and(|l| results.line_matches.len() >= l) {
-                break;
-            }
-
-            let result_line = build_content_line(&path_str, line_num, line, &lines, context);
-            results.line_matches.push(result_line);
+        // content 模式下 head_limit 已满足
+        if self.output_mode == "content"
+            && self
+                .head_limit
+                .is_some_and(|l| self.results.line_matches.len() >= l)
+        {
+            return true;
         }
-    }
-
-    if output_mode == "files_with_matches" && file_has_match {
-        results.file_entries.push(path_str);
-    } else if output_mode == "count" && file_count > 0 {
-        results
-            .file_entries
-            .push(format!("{}:{}", path_str, file_count));
+        false
     }
 }
 
-/// 构建单行 content 匹配结果（可选上下文行）
-fn build_content_line(
-    path_str: &str,
-    line_num: usize,
-    line: &str,
-    all_lines: &[String],
-    context: usize,
-) -> String {
-    let mut result_line = format!("{}:{}:{}", path_str, line_num + 1, line);
+impl Sink for GrepSink<'_> {
+    type Error = std::io::Error;
 
-    if context > 0 {
-        let start = line_num.saturating_sub(context);
-        let end = (line_num + context + 1).min(all_lines.len());
-        let ctx_lines: Vec<String> = all_lines
-            .iter()
-            .enumerate()
-            .take(end)
-            .skip(start)
-            .filter(|(i, _)| *i != line_num)
-            .map(|(i, l)| format!("{}-{}:{}", path_str, i + 1, l))
-            .collect();
-
-        if !ctx_lines.is_empty() {
-            result_line = format!("{}\n{}", result_line, ctx_lines.join("\n"));
+    fn matched(
+        &mut self,
+        _searcher: &grep_searcher::Searcher,
+        mat: &SinkMatch<'_>,
+    ) -> Result<bool, Self::Error> {
+        if self.should_stop() {
+            return Ok(false);
         }
+
+        self.file_has_match = true;
+        self.file_count += 1;
+        self.results.total_count += 1;
+
+        if self.output_mode == "content" {
+            if self
+                .head_limit
+                .is_some_and(|l| self.results.line_matches.len() >= l)
+            {
+                return Ok(false);
+            }
+
+            // 先刷新之前缓冲的上下文行
+            let context_lines: Vec<String> = self.pending_context.drain(..).collect();
+
+            let line_num = mat.line_number().unwrap_or(0);
+            let line_text = std::str::from_utf8(mat.bytes())
+                .unwrap_or("")
+                .trim_end_matches('\n')
+                .trim_end_matches('\r');
+            let matched_line = format!("{}:{}:{}", self.path_str, line_num, line_text);
+
+            // 上下文行 + 匹配行 组合
+            if context_lines.is_empty() {
+                self.results.line_matches.push(matched_line);
+            } else {
+                let mut block = context_lines;
+                block.push(matched_line);
+                self.results.line_matches.push(
+                    block
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                );
+            }
+        } else if self.output_mode == "files_with_matches" {
+            // 只需知道有匹配即可
+            return Ok(false);
+        }
+        // count 模式只计数
+
+        Ok(true)
     }
 
-    result_line
+    fn context(
+        &mut self,
+        _searcher: &grep_searcher::Searcher,
+        context: &SinkContext<'_>,
+    ) -> Result<bool, Self::Error> {
+        if self.should_stop() {
+            return Ok(false);
+        }
+
+        if self.output_mode != "content" {
+            return Ok(true);
+        }
+
+        let line_num = context.line_number().unwrap_or(0);
+        let line_text = std::str::from_utf8(context.bytes())
+            .unwrap_or("")
+            .trim_end_matches('\n')
+            .trim_end_matches('\r');
+
+        // 使用 `-` 分隔符标识上下文行（与原实现一致）
+        let ctx_line = format!("{}-{}:{}", self.path_str, line_num, line_text);
+
+        match context.kind() {
+            SinkContextKind::Before => {
+                // Before context 缓冲，等匹配行时一起输出
+                self.pending_context.push(ctx_line);
+            }
+            SinkContextKind::After => {
+                // After context 直接追加到最近的匹配行
+                if let Some(last) = self.results.line_matches.last_mut() {
+                    last.push_str(&format!("\n{}", ctx_line));
+                }
+            }
+            SinkContextKind::Other => {}
+        }
+
+        Ok(true)
+    }
+
+    fn context_break(&mut self, _searcher: &grep_searcher::Searcher) -> Result<bool, Self::Error> {
+        // 文件内不连续匹配之间的分隔，清空 pending context
+        self.pending_context.clear();
+        Ok(true)
+    }
+
+    fn finish(
+        &mut self,
+        _searcher: &grep_searcher::Searcher,
+        _: &SinkFinish,
+    ) -> Result<(), Self::Error> {
+        if self.output_mode == "files_with_matches" && self.file_has_match {
+            self.results.file_entries.push(self.path_str.to_string());
+        } else if self.output_mode == "count" && self.file_count > 0 {
+            self.results
+                .file_entries
+                .push(format!("{}:{}", self.path_str, self.file_count));
+        }
+        Ok(())
+    }
 }
 
 // ========== Output Formatting ==========

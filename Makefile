@@ -1,9 +1,15 @@
-SHELL := /bin/bash
+# 跨平台适配：Git Bash on Windows 使用 /usr/bin/bash，其他 Unix 用 /bin/bash
+SHELL := $(shell which bash 2>/dev/null || echo /bin/bash)
 
 # ============================================
 # 变量定义
 # ============================================
-INSTALL_DIR := /usr/local/bin
+# 跨平台安装目录
+ifeq ($(OS),Windows_NT)
+	INSTALL_DIR := $(USERPROFILE)/.cargo/bin
+else
+	INSTALL_DIR := /usr/local/bin
+endif
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
 JSTUDIO_DIR := apps/jstudio
@@ -14,6 +20,10 @@ JSTUDIO_INSTALL_APP_DIR ?= /Applications
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+SUBMODULES := $(shell git config --file .gitmodules --get-regexp path 2>/dev/null | awk '{print $$2}')
+
+# Submodule 目录参数（单个操作时必填，如 DIR=apps/jstudio）
+DIR ?=
 
 # ============================================
 # 伪目标声明
@@ -38,6 +48,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         build-remote \
         init-jstudio dev-jstudio build-jstudio install-jstudio uninstall-jstudio clean-jstudio \
         status-jstudio commit-jstudio push-jstudio push-jstudio-non-ai \
+        sm-status sm-diff sm-log sm-cd sm-pull sm-commit sm-push sm-push-quick sm-update-pointer \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
@@ -58,6 +69,160 @@ help: ## 显示此帮助信息
 	@echo "  make test       # 运行测试"
 	@echo "  make fmt        # 格式化代码"
 	@echo "  make clean      # 清理构建产物"
+
+# ============================================
+# Submodule 通用操作（sm-* 前缀）
+# ============================================
+
+# --- 公共函数 ---
+
+# 更新主仓库 submodule 指针（参数: $1 = submodule 路径）
+define SM_UPDATE_POINTER
+@echo "🔗 更新主仓库 submodule 指针..."
+@git add $(DIR)
+@if git diff --cached --quiet -- $(DIR); then \
+	echo "ℹ️ 主仓库 submodule 指针无变化"; \
+else \
+	sm_name=$$(basename $(DIR)); \
+	git commit -m "chore: update $$sm_name submodule pointer"; \
+	echo "☑️ 主仓库 submodule 指针已提交"; \
+fi
+endef
+
+# --- 查看类命令 ---
+
+sm-status: ## 查看所有/单个 submodule 状态（DIR= 可选，指定单个）
+	@if [ -n "$(DIR)" ]; then \
+		echo "🔍 submodule 状态: $(DIR)"; \
+		echo "--- $(DIR) ---"; \
+		git -C $(DIR) status --short --branch --untracked-files=all; \
+		echo "  当前 commit: $$(git -C $(DIR) rev-parse --short HEAD)"; \
+	else \
+		echo "🔍 所有 submodule 状态:"; \
+		for sm in $(SUBMODULES); do \
+			echo ""; \
+			echo "--- $$sm ---"; \
+			git -C $$sm status --short --branch --untracked-files=all 2>/dev/null || echo "  ⚠️ 未初始化"; \
+			echo "  当前 commit: $$(git -C $$sm rev-parse --short HEAD 2>/dev/null || echo 'N/A')"; \
+		done; \
+	fi
+
+sm-diff: ## 查看 submodule diff（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-diff DIR=apps/jstudio"; exit 1; fi
+	@git -C $(DIR) diff --stat
+	@echo ""
+	@git -C $(DIR) diff
+
+sm-log: ## 查看 submodule 最近提交（DIR= 可选，默认所有）
+	@if [ -n "$(DIR)" ]; then \
+		echo "📜 $(DIR) 最近 5 条提交:"; \
+		git -C $(DIR) log --oneline -5; \
+	else \
+		for sm in $(SUBMODULES); do \
+			echo ""; \
+			echo "📜 $$sm 最近 5 条提交:"; \
+			git -C $$sm log --oneline -5 2>/dev/null || echo "  ⚠️ 未初始化"; \
+		done; \
+	fi
+
+sm-cd: ## 打印 submodule 绝对路径（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-cd DIR=apps/jstudio"; exit 1; fi
+	@echo "$$(cd $(DIR) && pwd)"
+
+# --- 同步类命令 ---
+
+sm-pull: ## 拉取并更新所有/单个 submodule（DIR= 可选）
+	@if [ -n "$(DIR)" ]; then \
+		echo "📥 拉取 $(DIR) 远程更新..."; \
+		git submodule update --remote $(DIR); \
+		echo "☑️ $(DIR) 已更新"; \
+	else \
+		echo "📥 拉取所有 submodule 远程更新..."; \
+		git submodule update --remote; \
+		echo "☑️ 所有 submodule 已更新"; \
+	fi
+
+# --- 提交推送类命令 ---
+
+sm-commit: ## 非 AI 自动提交 submodule（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-commit DIR=apps/jstudio"; exit 1; fi
+	@echo "📝 自动提交 $(DIR) submodule 代码..."
+	@cd $(DIR) && \
+		git add . && \
+		staged_files=$$(git diff --cached --name-only 2>/dev/null); \
+		if [ -z "$$staged_files" ]; then \
+			echo "ℹ️ $(DIR) 没有待提交变更"; \
+			exit 0; \
+		fi; \
+		file_count=$$(echo "$$staged_files" | wc -l | tr -d ' '); \
+		if [ "$$file_count" -eq 1 ]; then \
+			msg="update: $$(echo "$$staged_files" | head -1)"; \
+		else \
+			first=$$(echo "$$staged_files" | head -1); \
+			msg="update: $$first and $$((file_count - 1)) other file(s)"; \
+		fi; \
+		git commit -m "$$msg"; \
+		echo "☑️ $(DIR) 已提交: $$msg"
+	$(SM_UPDATE_POINTER)
+
+sm-push: ## AI 生成 commit message 并推送 submodule（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-push DIR=apps/jstudio"; exit 1; fi
+	@echo "🤖 AI 生成 $(DIR) 变更说明..."
+	@cd $(DIR) && \
+		diff_stat="$$(git diff --stat 2>/dev/null)"; \
+		if [ -z "$$diff_stat" ]; then \
+			diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
+		fi; \
+		if [ -z "$$diff_stat" ]; then \
+			echo "ℹ️ $(DIR) 没有检测到本地变更，直接 push 已有 commits..."; \
+			git push origin HEAD; \
+			exit 0; \
+		fi; \
+		prompt_file=$$(mktemp); \
+		stat_file=$$(mktemp); \
+		diff_file=$$(mktemp); \
+		trap 'rm -f "$$prompt_file" "$$stat_file" "$$diff_file"' EXIT; \
+		printf '%s\n' "$$diff_stat" > "$$stat_file"; \
+		git diff 2>/dev/null | head -200 > "$$diff_file"; \
+		sm_name=$$(basename $(DIR)); \
+		prompt_dir=$$(cd $(DIR) && git rev-parse --show-toplevel | sed 's|/[^/]*$$||'); \
+		awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" ' \
+			/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
+			/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
+			{ print }' "$$prompt_dir/prompts/commit-message.md" > "$$prompt_file"; \
+		ai_out=$$(mktemp); \
+		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+		echo ""; \
+		echo "📄 AI 原始输出:"; \
+		echo "----------------------------------------"; \
+		cat "$$ai_out"; \
+		echo "----------------------------------------"; \
+		msg=$$(perl -0777 -pe 's/<\s*\/\s*result\s*>/<\/result>/g' "$$ai_out" | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'); \
+		rm -f "$$ai_out"; \
+		if [ -z "$$msg" ]; then msg="更新 $$sm_name: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
+		git add . && git commit -m "$$msg" && git push origin HEAD; \
+		echo "✅ $(DIR) 已推送: $$msg"
+	$(SM_UPDATE_POINTER)
+
+sm-push-quick: ## 非 AI 快速 push submodule（DIR= 必填，MSG='message' 可指定提交信息）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-push-quick DIR=apps/jstudio"; exit 1; fi
+	@echo "📤 非 AI 推送 $(DIR) submodule..."
+	@cd $(DIR) && \
+		git add . && \
+		if git diff --cached --quiet; then \
+			echo "ℹ️ $(DIR) 没有待提交变更，直接 push 已有 commits..."; \
+			git push origin HEAD; \
+		else \
+			sm_name=$$(basename $(DIR)); \
+			msg="$${MSG:-更新 $$sm_name: $$(date +'%Y-%m-%d %H:%M:%S')}"; \
+			git commit -m "$$msg" && git push origin HEAD; \
+			echo "☑️ $(DIR) 已推送: $$msg"; \
+		fi
+	$(SM_UPDATE_POINTER)
+
+sm-update-pointer: ## 仅更新主仓库 submodule 指针（DIR= 必填）
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-update-pointer DIR=apps/jstudio"; exit 1; fi
+	$(SM_UPDATE_POINTER)
 
 # ============================================
 # 目录和 Git 操作
@@ -205,100 +370,17 @@ install-jstudio: build-jstudio ## 安装 jstudio app（macOS 安装到 /Applicat
 		fi; \
 	fi
 
-status-jstudio: ## 查看 jstudio submodule 状态
-	@echo "🔍 jstudio submodule 状态:"
-	@git -C $(JSTUDIO_DIR) status --short --branch --untracked-files=all
+status-jstudio: ## → make sm-status DIR=apps/jstudio
+	@$(MAKE) sm-status DIR=$(JSTUDIO_DIR)
 
-commit-jstudio: ## 提交 jstudio submodule 代码（非 AI，自动生成 message）
-	@echo "📝 自动提交 jstudio submodule 代码..."
-	@cd $(JSTUDIO_DIR) && \
-		git add . && \
-		staged_files=$$(git diff --cached --name-only 2>/dev/null); \
-		if [ -z "$$staged_files" ]; then \
-			echo "ℹ️ jstudio 没有待提交变更"; \
-			exit 0; \
-		fi; \
-		file_count=$$(echo "$$staged_files" | wc -l | tr -d ' '); \
-		if [ "$$file_count" -eq 1 ]; then \
-			msg="update: $$(echo "$$staged_files" | head -1)"; \
-		else \
-			first=$$(echo "$$staged_files" | head -1); \
-			msg="update: $$first and $$((file_count - 1)) other file(s)"; \
-		fi; \
-		git commit -m "$$msg"; \
-		echo "☑️ jstudio 已提交: $$msg"
-	@echo "🔗 更新并提交主仓库 submodule 指针..."
-	@git add $(JSTUDIO_DIR)
-	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
-		echo "ℹ️ 主仓库 submodule 指针无变化"; \
-	else \
-		git commit -m "chore: update jstudio submodule pointer"; \
-		echo "☑️ 主仓库 submodule 指针已提交"; \
-	fi
+commit-jstudio: ## → make sm-commit DIR=apps/jstudio
+	@$(MAKE) sm-commit DIR=$(JSTUDIO_DIR)
 
-push-jstudio: ## AI 生成 commit message 并推送 jstudio submodule
-	@echo "🤖 AI 生成 jstudio 变更说明..."
-	@cd $(JSTUDIO_DIR) && \
-		diff_stat="$$(git diff --stat 2>/dev/null)"; \
-		if [ -z "$$diff_stat" ]; then \
-			diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
-		fi; \
-		if [ -z "$$diff_stat" ]; then \
-			echo "ℹ️ jstudio 没有检测到本地变更，直接 push 已有 commits..."; \
-			git push origin HEAD; \
-			exit 0; \
-		fi; \
-		prompt_file=$$(mktemp); \
-		stat_file=$$(mktemp); \
-		diff_file=$$(mktemp); \
-		trap 'rm -f "$$prompt_file" "$$stat_file" "$$diff_file"' EXIT; \
-		printf '%s\n' "$$diff_stat" > "$$stat_file"; \
-		git diff 2>/dev/null | head -200 > "$$diff_file"; \
-		awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" ' \
-			/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
-			/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
-			{ print }' ../../prompts/commit-message.md > "$$prompt_file"; \
-		ai_out=$$(mktemp); \
-		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
-		echo ""; \
-		echo "📄 AI 原始输出:"; \
-		echo "----------------------------------------"; \
-		cat "$$ai_out"; \
-		echo "----------------------------------------"; \
-		msg=$$(perl -0777 -pe 's/<\s*\/\s*result\s*>/<\/result>/g' "$$ai_out" | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'); \
-		rm -f "$$ai_out"; \
-		if [ -z "$$msg" ]; then msg="更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
-		git add . && git commit -m "$$msg" && git push origin HEAD; \
-		echo "✅ jstudio 已推送: $$msg"
-	@echo "🔗 更新并提交主仓库 submodule 指针..."
-	@git add $(JSTUDIO_DIR)
-	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
-		echo "ℹ️ 主仓库 submodule 指针无变化"; \
-	else \
-		git commit -m "chore: update jstudio submodule pointer"; \
-		echo "☑️ 主仓库 submodule 指针已提交"; \
-	fi
+push-jstudio: ## → make sm-push DIR=apps/jstudio
+	@$(MAKE) sm-push DIR=$(JSTUDIO_DIR)
 
-push-jstudio-non-ai: ## 提交并推送 jstudio submodule 代码（非 AI，MSG='message' 可指定提交信息）
-	@echo "📤 非 AI 推送 jstudio submodule..."
-	@cd $(JSTUDIO_DIR) && \
-		git add . && \
-		if git diff --cached --quiet; then \
-			echo "ℹ️ jstudio 没有待提交变更，直接 push 已有 commits..."; \
-			git push origin HEAD; \
-		else \
-			msg="$${MSG:-更新 jstudio: $$(date +'%Y-%m-%d %H:%M:%S')}"; \
-			git commit -m "$$msg" && git push origin HEAD; \
-			echo "☑️ jstudio 已推送: $$msg"; \
-		fi
-	@echo "🔗 更新并提交主仓库 submodule 指针..."
-	@git add $(JSTUDIO_DIR)
-	@if git diff --cached --quiet -- $(JSTUDIO_DIR); then \
-		echo "ℹ️ 主仓库 submodule 指针无变化"; \
-	else \
-		git commit -m "chore: update jstudio submodule pointer"; \
-		echo "☑️ 主仓库 submodule 指针已提交"; \
-	fi
+push-jstudio-non-ai: ## → make sm-push-quick DIR=apps/jstudio
+	@$(MAKE) sm-push-quick DIR=$(JSTUDIO_DIR)
 
 uninstall-jstudio: ## 卸载 jstudio app（macOS）
 	@echo "🗑️  卸载 jstudio..."
@@ -315,13 +397,15 @@ clean-jstudio: ## 清理 jstudio 构建产物
 	@rm -rf $(JSTUDIO_DIR)/dist $(JSTUDIO_TAURI_DIR)/target
 	@echo "☑️ jstudio 构建产物已清理"
 
-build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
+build-indicator: ## 构建 j-indicator (仅 macOS)
+	@if [ "$(OS)" = "Windows_NT" ]; then echo "ℹ️ j-indicator 仅支持 macOS，跳过"; exit 0; fi
 	@echo "🔴 构建 j-indicator..."
 	@mkdir -p $(TARGET_DIR)
 	@swiftc helpers/indicator.swift -o $(TARGET_DIR)/j-indicator -O
 	@echo "☑️ j-indicator 构建完成: $(TARGET_DIR)/j-indicator"
 
-build-ax: ## 构建 j-ax (macOS Accessibility API helper)
+build-ax: ## 构建 j-ax (仅 macOS)
+	@if [ "$(OS)" = "Windows_NT" ]; then echo "ℹ️ j-ax 仅支持 macOS，跳过"; exit 0; fi
 	@echo "♿ 构建 j-ax..."
 	@mkdir -p $(TARGET_DIR)
 	@swiftc helpers/ax.swift -o $(TARGET_DIR)/j-ax -O -framework Cocoa -framework ApplicationServices
@@ -338,40 +422,43 @@ release: ## 构建发布版本（release, INSTALL_SOURCE=github）
 # ============================================
 # 安装相关
 # ============================================
-install: ## 从本地 cargo build --release 安装到 /usr/local/bin（与 GitHub 安装路径一致）
+install: ## 从本地构建安装（Unix → /usr/local/bin，Windows → ~/.cargo/bin）
 	@echo "📦 从本地构建安装 j-cli..."
 	@$(MAKE) release
-	@if [ ! -d "$(INSTALL_DIR)" ]; then \
-		echo "   创建安装目录 $(INSTALL_DIR)..."; \
-		sudo mkdir -p "$(INSTALL_DIR)"; \
-	fi; \
-	if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-	echo "   正在安装到 $(INSTALL_DIR)..."; \
-	$$SUDO rm -f "$(INSTALL_DIR)/j"; \
-	$$SUDO cp "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
-	$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
-	for helper in j-indicator j-ax; do \
-		if [ -f "$(TARGET_DIR)/$$helper" ]; then \
-			$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
-			$$SUDO cp "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
-			$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
-			echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
-		fi; \
-	done; \
-	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
-	if [ -x "$(INSTALL_DIR)/j" ]; then \
+	@mkdir -p "$(INSTALL_DIR)"; \
+	if [ "$(OS)" = "Windows_NT" ]; then \
+		cp -f "$(TARGET_DIR)/j.exe" "$(INSTALL_DIR)/j.exe"; \
+		echo "☑️ 安装成功！"; \
+		echo "   安装位置: $(INSTALL_DIR)/j.exe"; \
+	else \
+		if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		$$SUDO rm -f "$(INSTALL_DIR)/j"; \
+		$$SUDO cp "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
+		$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
+		for helper in j-indicator j-ax; do \
+			if [ -f "$(TARGET_DIR)/$$helper" ]; then \
+				$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
+				$$SUDO cp "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
+				$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
+				echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
+			fi; \
+		done; \
 		echo "☑️ 安装成功！"; \
 		echo "   安装位置: $(INSTALL_DIR)/j"; \
-		echo "   版本: v$$version (本地构建)"; \
-	else \
-		echo "✖️ 安装失败"; exit 1; \
-	fi
+	fi; \
+	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "   版本: v$$version (本地构建)"
 
 uninstall: ## 卸载
 	@echo "🗑️  卸载..."
-	@if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-	$$SUDO rm -f "$(INSTALL_DIR)/j" "$(INSTALL_DIR)/j-indicator" "$(INSTALL_DIR)/j-ax"; \
-	echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 卸载"
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		rm -f "$(INSTALL_DIR)/j.exe"; \
+		echo "☑️ j 已从 $(INSTALL_DIR) 卸载"; \
+	else \
+		if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+		$$SUDO rm -f "$(INSTALL_DIR)/j" "$(INSTALL_DIR)/j-indicator" "$(INSTALL_DIR)/j-ax"; \
+		echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 卸载"; \
+	fi
 
 # ============================================
 # 发布相关
@@ -609,29 +696,37 @@ coverage: ## 生成代码覆盖率报告
 PPT_PORT := 8765
 PPT_PATH := docs/thesis-ppt/
 
+# 跨平台端口检测函数
+define KILL_PORT
+if [ "$(OS)" = "Windows_NT" ]; then \
+	pid=$$(netstat -ano | grep ":$(PPT_PORT)" | grep LISTENING | awk '{print $$5}' | head -1); \
+	if [ -n "$$pid" ]; then taskkill //PID $$pid //F 2>/dev/null || true; fi; \
+else \
+	lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
+fi
+endef
+
+# 跨平台打开 URL 函数
+define OPEN_URL
+if [ "$(OS)" = "Windows_NT" ]; then start "$$url"; else open "$$url"; fi
+endef
+
 ppt-serve: ## 启动毕业设计 PPT 本地服务（http://localhost:$(PPT_PORT)/$(PPT_PATH)）
 	@echo "🎤 启动 PPT 服务..."
-	@if lsof -ti:$(PPT_PORT) >/dev/null 2>&1; then \
-		echo "ℹ️ 端口 $(PPT_PORT) 已被占用，先停止旧服务..."; \
-		lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
-		sleep 0.5; \
-	fi
-	@cd $(CURDIR) && python3 -m http.server $(PPT_PORT) >/dev/null 2>&1 &
+	@$(KILL_PORT)
+	@sleep 0.5
+	@cd $(CURDIR) && (python3 -m http.server $(PPT_PORT) || python -m http.server $(PPT_PORT)) >/dev/null 2>&1 &
 	@sleep 1
 	@url="http://localhost:$(PPT_PORT)/$(PPT_PATH)"; \
 	echo "☑️ PPT 已启动: $$url"; \
 	echo "   按键: ← → 翻页 · S 演讲者视图 · T 切换主题 · F 全屏"; \
 	echo "   停止: make ppt-stop"; \
-	open "$$url"
+	$(OPEN_URL)
 
 ppt-stop: ## 停止 PPT 本地服务
 	@echo "🛑 停止 PPT 服务..."
-	@if lsof -ti:$(PPT_PORT) >/dev/null 2>&1; then \
-		lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
-		echo "☑️ 已停止端口 $(PPT_PORT) 上的服务"; \
-	else \
-		echo "ℹ️ 端口 $(PPT_PORT) 未在运行"; \
-	fi
+	@$(KILL_PORT)
+	@echo "☑️ 已停止端口 $(PPT_PORT) 上的服务"
 
 # ============================================
 # PPT 一键导出 .pptx（图片版 · 与 HTML 视觉 100% 一致 + 内嵌逐字稿）
@@ -639,7 +734,14 @@ ppt-stop: ## 停止 PPT 本地服务
 PPT_DECK_DIR  := presentation/ppt
 PPT_SCRIPT_DIR := $(PPT_DECK_DIR)/scripts
 PPT_VENV      := $(PPT_SCRIPT_DIR)/.venv
-PPT_PY        := $(PPT_VENV)/bin/python3
+# 跨平台 Python venv 路径
+ifeq ($(OS),Windows_NT)
+	PPT_PY    := $(PPT_VENV)/Scripts/python.exe
+	PPT_PIP   := $(PPT_VENV)/Scripts/pip.exe
+else
+	PPT_PY    := $(PPT_VENV)/bin/python3
+	PPT_PIP   := $(PPT_VENV)/bin/pip
+endif
 PPT_OUT       := $(PPT_DECK_DIR)/jcli-thesis.pptx
 
 ppt-deps: ## 安装 PPT 导出依赖（puppeteer + python-pptx，幂等）
@@ -652,11 +754,11 @@ ppt-deps: ## 安装 PPT 导出依赖（puppeteer + python-pptx，幂等）
 	fi
 	@if [ ! -x "$(PPT_PY)" ]; then \
 		echo "  创建 venv..."; \
-		python3 -m venv $(PPT_VENV); \
+		(python3 || python) -m venv $(PPT_VENV); \
 	fi
 	@if ! $(PPT_PY) -c "import pptx, bs4" 2>/dev/null; then \
 		echo "  安装 python-pptx + beautifulsoup4..."; \
-		$(PPT_VENV)/bin/pip install --quiet python-pptx beautifulsoup4 lxml Pillow; \
+		$(PPT_PIP) install --quiet python-pptx beautifulsoup4 lxml Pillow; \
 	else \
 		echo "  ✓ python-pptx 已安装"; \
 	fi
@@ -671,8 +773,13 @@ ppt-build: ppt-render ## 一键导出 .pptx（图片版 + 逐字稿）
 	@$(PPT_PY) $(PPT_SCRIPT_DIR)/png-to-pptx.py
 	@echo ""
 	@echo "✅ 完成！文件: $(PPT_OUT)"
-	@du -h $(PPT_OUT) | awk '{print "   大小: "$$1}'
-	@open $(PPT_OUT) 2>/dev/null || true
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		dir "$(PPT_OUT)" | tail -1; \
+		start "" "$(PPT_OUT)"; \
+	else \
+		du -h $(PPT_OUT) | awk '{print "   大小: "$$1}'; \
+		open $(PPT_OUT) 2>/dev/null || true; \
+	fi
 
 ppt-clean: ## 清理 PPT 导出产物
 	@echo "🧹 清理 PPT 导出产物..."

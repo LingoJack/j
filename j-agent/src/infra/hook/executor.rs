@@ -3,10 +3,11 @@ use crate::infra::hook::definition::*;
 use crate::infra::hook::types::*;
 use crate::storage::ModelProvider;
 use crate::util::log::write_info_log;
+use crate::util::shell_runtime::{kill_process_tree, resolve_hook_shell_runtime};
 use std::env;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -254,10 +255,10 @@ pub(crate) fn execute_shell_hook(
         .map(|p| p.display().to_string())
         .unwrap_or_default();
 
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(&hook.command)
-        .current_dir(&user_cwd)
+    let resolved_runtime = resolve_hook_shell_runtime(hook.runtime)?;
+
+    let mut cmd = resolved_runtime.build_command(&hook.command);
+    cmd.current_dir(&user_cwd)
         .env("JCLI_HOOK_EVENT", context.event.as_str())
         .env("JCLI_CWD", user_cwd.display().to_string())
         .env("JCLI_HOOK_DIR", &hook_dir_str);
@@ -338,19 +339,7 @@ pub(crate) fn execute_shell_hook(
         Ok(Err(e)) => Err(format!("等待 hook 进程失败: {}", e)),
         Err(_) => {
             // 超时：终止进程
-            #[cfg(unix)]
-            {
-                let _ = nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(pid as i32),
-                    nix::sys::signal::Signal::SIGKILL,
-                );
-            }
-            #[cfg(windows)]
-            {
-                let _ = Command::new("taskkill")
-                    .args(["/F", "/T", "/PID", &pid.to_string()])
-                    .status();
-            }
+            kill_process_tree(pid);
             Err(format!("Hook 超时 ({}s): {}", hook.timeout, hook.command))
         }
     }

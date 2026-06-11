@@ -127,6 +127,27 @@ pub(super) fn draw_tab_model_detail<'a>(app: &ChatApp) -> ItemList<'a> {
                 hint: "Enter 切换".to_string(),
                 theme: t,
             })
+        } else if *provider_field == "tool_call_mode" {
+            let mode = app
+                .state
+                .agent_config
+                .providers
+                .get(app.ui.config_provider_idx)
+                .map(|p| p.tool_call_mode.display_name())
+                .unwrap_or("原生工具调用");
+            toggle_row(&ToggleRowCtx {
+                label: label.to_string(),
+                is_on: app
+                    .state
+                    .agent_config
+                    .providers
+                    .get(app.ui.config_provider_idx)
+                    .map(|p| p.tool_call_mode.allows_tools())
+                    .unwrap_or(true),
+                selected: is_selected,
+                hint: format!("Enter 切换 ({mode})"),
+                theme: t,
+            })
         } else {
             text_field_row(&TextFieldRowCtx {
                 label: label.to_string(),

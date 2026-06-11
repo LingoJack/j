@@ -117,7 +117,7 @@ impl ChatApp {
                 state: "idle".to_string(),
             });
         }
-        self.finish_loading(false, false);
+        self.finish_loading(false, false, false);
     }
 
     pub(super) fn update_stream_error(&mut self, e: &crate::command::chat::error::ChatError) {
@@ -130,7 +130,11 @@ impl ChatApp {
             state: "idle".to_string(),
         });
         self.show_toast(format!("请求失败: {}", msg), true);
-        self.finish_loading(true, false);
+        let preserve_streamed_reply = matches!(
+            e,
+            crate::command::chat::error::ChatError::ToolCallProtocolMismatch(_)
+        );
+        self.finish_loading(true, false, preserve_streamed_reply);
     }
 
     pub(super) fn update_stream_cancelled(&mut self) {
@@ -138,7 +142,7 @@ impl ChatApp {
         self.broadcast_ws(WsOutbound::Status {
             state: "idle".to_string(),
         });
-        self.finish_loading(false, true);
+        self.finish_loading(false, true, false);
     }
 
     pub(super) fn update_stream_retrying(

@@ -200,8 +200,9 @@ impl HookFilter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum HookType {
-    /// Shell 命令 hook（默认，通过 `sh -c` 子进程执行）
+    /// Shell 命令 hook（默认；兼容读取旧值 `bash`，也接受 `shell`）
     #[default]
+    #[serde(alias = "shell")]
     Bash,
     /// LLM hook（通过 prompt 模板调用 LLM，返回 HookResult JSON）
     Llm,

@@ -1,6 +1,7 @@
 use crate::infra::hook::types::*;
 use crate::permission::JcliConfig;
 use crate::util::log::{write_error_log, write_info_log};
+use crate::util::shell_runtime::ShellRuntime;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
@@ -30,6 +31,7 @@ pub struct ShellHook {
     pub retry: u32,
     pub on_error: OnError,
     pub filter: HookFilter,
+    pub runtime: Option<ShellRuntime>,
     /// Hook 目录路径（目录布局下有值，session hook 为 None）
     pub dir_path: Option<PathBuf>,
 }
@@ -150,6 +152,9 @@ pub struct HookDef {
     /// 条件过滤：仅当条件匹配时执行（默认无过滤）
     #[serde(default, skip_serializing_if = "HookFilter::is_empty")]
     pub filter: HookFilter,
+    /// shell runtime 覆盖；为空时使用全局默认值
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<ShellRuntime>,
 }
 
 impl HookDef {
@@ -168,6 +173,7 @@ impl HookDef {
                     retry: self.retry,
                     on_error: self.on_error,
                     filter: self.filter,
+                    runtime: self.runtime,
                     dir_path: None,
                 }))
             }
@@ -207,6 +213,7 @@ impl From<HookDef> for HookKind {
                 retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
+                runtime: None,
                 dir_path: None,
             })
         })
@@ -247,6 +254,9 @@ pub struct HookDirDef {
     /// 条件过滤
     #[serde(default, skip_serializing_if = "HookFilter::is_empty")]
     pub filter: HookFilter,
+    /// shell runtime 覆盖；为空时使用全局默认值
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<ShellRuntime>,
 }
 
 impl HookDirDef {
@@ -272,6 +282,7 @@ impl HookDirDef {
                     retry: self.retry,
                     on_error: self.on_error,
                     filter: self.filter,
+                    runtime: self.runtime,
                     dir_path: Some(dir_path.to_path_buf()),
                 })
             }

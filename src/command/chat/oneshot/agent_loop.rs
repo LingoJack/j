@@ -203,6 +203,7 @@ pub(crate) fn run_oneshot_agent(
         loaded_skills,
         agent_config.disabled_skills.clone(),
         agent_config.disabled_tools.clone(),
+        provider.tools_allowed(agent_config.tools_enabled),
         Arc::clone(&deferred_tools_for_load),
         Arc::clone(&tool_registry),
         teammate_manager,

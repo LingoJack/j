@@ -216,7 +216,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         }
         ConfigTab::Global => {
             // Global 没有固定头部，全部是字段列表
-            let list = global::draw_tab_global_lines(app);
+            let list = global::draw_tab_global_lines(app, area.width);
             let (item_lines, item_indices) = list.into_parts();
             list_lines.extend(item_lines);
             field_line_indices.extend(item_indices);

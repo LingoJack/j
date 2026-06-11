@@ -6,6 +6,7 @@ use crate::theme::Theme;
 use crate::{error, info};
 use colored::Colorize;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size as terminal_size};
+use j_agent::util::shell_runtime::{ShellRuntime, resolve_shell_runtime};
 use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use ratatui::style::{Color, Modifier, Style};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -15,11 +16,12 @@ use std::thread;
 /// 进入交互式 shell 子进程
 pub fn enter_interactive_shell(config: &YamlConfig) {
     let os = std::env::consts::OS;
-
-    let shell_path = if os == shell::WINDOWS_OS {
-        shell::WINDOWS_CMD.to_string()
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string())
+    let shell_path = match resolve_interactive_shell_path(config) {
+        Ok(path) => path,
+        Err(err) => {
+            error!("进入 shell 模式失败: {}", err);
+            return;
+        }
     };
 
     info!(
@@ -398,7 +400,13 @@ impl ShellSession {
             return None;
         }
 
-        let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
+        let shell_path = match resolve_interactive_shell_path(config) {
+            Ok(path) => path,
+            Err(err) => {
+                error!("启动 shell 会话失败: {}", err);
+                return None;
+            }
+        };
         let marker = format!("{}{}", Self::MARKER_PREFIX, std::process::id());
         let pty_system = NativePtySystem::default();
         let pair = match pty_system.openpty(current_pty_size()) {
@@ -639,6 +647,56 @@ pub fn inject_envs_to_process(config: &YamlConfig) {
         // SAFETY: 交互模式为单线程，set_var 不会引起数据竞争
         unsafe {
             std::env::set_var(&key, &value);
+        }
+    }
+}
+
+fn resolve_interactive_shell_path(config: &YamlConfig) -> Result<String, String> {
+    let runtime = config.shell_runtime();
+
+    if cfg!(windows) {
+        return resolve_shell_runtime(Some(runtime)).map(|resolved| resolved.program);
+    }
+
+    if runtime == ShellRuntime::Auto {
+        return Ok(std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string()));
+    }
+
+    resolve_shell_runtime(Some(runtime)).map(|resolved| resolved.program)
+}
+
+/// 一次性执行 shell 命令。
+/// Windows 下 `ShellSession` 不可用时，用它作为 `!cmd` 的降级路径。
+pub fn execute_shell_once(command: &str, config: &YamlConfig) -> bool {
+    let resolved = match resolve_shell_runtime(None) {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            error!("未找到可用 shell: {}", err);
+            return false;
+        }
+    };
+
+    let mut cmd = resolved.build_command(command);
+    inject_envs_to_process(config);
+    for (key, value) in config.collect_alias_envs() {
+        cmd.env(&key, &value);
+    }
+    cmd.stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+
+    match cmd.status() {
+        Ok(status) => {
+            if !status.success()
+                && let Some(code) = status.code()
+            {
+                error!("shell 退出码: {}", code);
+            }
+            status.success()
+        }
+        Err(err) => {
+            error!("执行 shell 命令失败: {}", err);
+            false
         }
     }
 }

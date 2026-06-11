@@ -244,6 +244,7 @@ impl ChatApp {
             loaded_skills,
             disabled_skills,
             disabled_tools.clone(),
+            provider.tools_allowed(tools_enabled),
             Arc::clone(&self.deferred_tools),
             Arc::clone(&tool_registry_arc),
             Arc::clone(&self.teammate_manager),

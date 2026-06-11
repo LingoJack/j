@@ -44,6 +44,7 @@ pub fn build_system_prompt_fn(
     loaded_skills: Vec<skill::Skill>,
     disabled_skills: Vec<String>,
     disabled_tools: Vec<String>,
+    tools_allowed: bool,
     deferred_tools: Arc<Mutex<Vec<String>>>,
     tool_registry: Arc<ToolRegistry>,
     teammate_manager: Arc<Mutex<TeammateManager>>,
@@ -61,8 +62,11 @@ pub fn build_system_prompt_fn(
             Ok(guard) => guard.clone(),
             Err(e) => e.into_inner().clone(),
         };
-        let tools_summary =
-            tool_registry.build_tools_summary_non_deferred(&disabled_tools, &deferred);
+        let tools_summary = if tools_allowed {
+            tool_registry.build_tools_summary_non_deferred(&disabled_tools, &deferred)
+        } else {
+            String::new()
+        };
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
@@ -121,9 +125,17 @@ impl ChatApp {
             Ok(guard) => guard.clone(),
             Err(e) => e.into_inner().clone(),
         };
-        let tools_summary = self
-            .tool_registry
-            .build_tools_summary_non_deferred(&self.state.agent_config.disabled_tools, &deferred);
+        let tools_summary = if self
+            .active_provider()
+            .is_some_and(|provider| provider.tools_allowed(self.state.agent_config.tools_enabled))
+        {
+            self.tool_registry.build_tools_summary_non_deferred(
+                &self.state.agent_config.disabled_tools,
+                &deferred,
+            )
+        } else {
+            String::new()
+        };
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
