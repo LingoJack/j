@@ -196,4 +196,5 @@ allow:
 - Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src-tauri/src/:*)
 - Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src-tauri/src/commands/:*)
 - Shell(ls /Users/jacklingo/dev_custom/jcli/apps/jstudio/src-tauri/:*)
+- Shell(which npm:*)
 deny: []
