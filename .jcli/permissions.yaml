@@ -211,4 +211,5 @@ allow:
 - Write
 - Shell(ls -R:*)
 - Shell(ls src/app/studio:*)
+- Shell(rsync -a:*)
 deny: []
