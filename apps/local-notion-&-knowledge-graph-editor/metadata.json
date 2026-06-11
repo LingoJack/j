@@ -1,0 +1,6 @@
+{
+  "name": "Local Notion & Knowledge Graph Editor",
+  "description": "An offline-first, local Notion-like editor featuring live HTML rendering, bidirectional linking, dynamic knowledge graph visualization, custom drawing canvas blocks, and a slash (/) command menu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
