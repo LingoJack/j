@@ -209,4 +209,6 @@ allow:
 - Shell(which npm:*)
 - Shell(which rg:*)
 - Write
+- Shell(ls -R:*)
+- Shell(ls src/app/studio:*)
 deny: []
