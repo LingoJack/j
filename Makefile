@@ -47,7 +47,7 @@ DIR ?=
         pre-commit \
         build-remote \
         init-jstudio dev-jstudio build-jstudio install-jstudio uninstall-jstudio clean-jstudio \
-        status-jstudio commit-jstudio push-jstudio push-jstudio-non-ai \
+        status-jstudio commit-jstudio push-jstudio push-jstudio-non-ai pull-jstudio \
         sm-status sm-diff sm-log sm-cd sm-pull sm-commit sm-push sm-push-quick sm-update-pointer \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
@@ -134,11 +134,11 @@ sm-cd: ## 打印 submodule 绝对路径（DIR= 必填）
 sm-pull: ## 拉取并更新所有/单个 submodule（DIR= 可选）
 	@if [ -n "$(DIR)" ]; then \
 		echo "📥 拉取 $(DIR) 远程更新..."; \
-		git submodule update --remote $(DIR); \
+		git submodule update --init --remote --recursive $(DIR); \
 		echo "☑️ $(DIR) 已更新"; \
 	else \
 		echo "📥 拉取所有 submodule 远程更新..."; \
-		git submodule update --remote; \
+		git submodule update --init --remote --recursive; \
 		echo "☑️ 所有 submodule 已更新"; \
 	fi
 
@@ -165,7 +165,7 @@ sm-commit: ## 非 AI 自动提交 submodule（DIR= 必填）
 		echo "☑️ $(DIR) 已提交: $$msg"
 	$(SM_UPDATE_POINTER)
 
-sm-push: ## AI 生成 commit message 并推送 submodule（DIR= 必填）
+sm-push: ## AI 生成 commit message 并推送 submodule，同时推送主仓库指针（DIR= 必填）
 	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-push DIR=apps/jstudio"; exit 1; fi
 	@echo "🤖 AI 生成 $(DIR) 变更说明..."
 	@cd $(DIR) && \
@@ -185,7 +185,8 @@ sm-push: ## AI 生成 commit message 并推送 submodule（DIR= 必填）
 		printf '%s\n' "$$diff_stat" > "$$stat_file"; \
 		git diff 2>/dev/null | head -200 > "$$diff_file"; \
 		sm_name=$$(basename $(DIR)); \
-		prompt_dir=$$(cd $(DIR) && git rev-parse --show-toplevel | sed 's|/[^/]*$$||'); \
+		prompt_dir=$$(git rev-parse --show-superproject-working-tree 2>/dev/null); \
+		if [ -z "$$prompt_dir" ]; then prompt_dir=$$(git rev-parse --show-toplevel); fi; \
 		awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" ' \
 			/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
 			/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
@@ -203,8 +204,10 @@ sm-push: ## AI 生成 commit message 并推送 submodule（DIR= 必填）
 		git add . && git commit -m "$$msg" && git push origin HEAD; \
 		echo "✅ $(DIR) 已推送: $$msg"
 	$(SM_UPDATE_POINTER)
+	@echo "📤 推送主仓库 submodule 指针..."
+	@git push origin $(GIT_BRANCH)
 
-sm-push-quick: ## 非 AI 快速 push submodule（DIR= 必填，MSG='message' 可指定提交信息）
+sm-push-quick: ## 非 AI 快速 push submodule，同时推送主仓库指针（DIR= 必填，MSG='message' 可指定提交信息）
 	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-push-quick DIR=apps/jstudio"; exit 1; fi
 	@echo "📤 非 AI 推送 $(DIR) submodule..."
 	@cd $(DIR) && \
@@ -219,6 +222,8 @@ sm-push-quick: ## 非 AI 快速 push submodule（DIR= 必填，MSG='message' 可
 			echo "☑️ $(DIR) 已推送: $$msg"; \
 		fi
 	$(SM_UPDATE_POINTER)
+	@echo "📤 推送主仓库 submodule 指针..."
+	@git push origin $(GIT_BRANCH)
 
 sm-update-pointer: ## 仅更新主仓库 submodule 指针（DIR= 必填）
 	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-update-pointer DIR=apps/jstudio"; exit 1; fi
@@ -243,16 +248,23 @@ define J_AI_EXTRACT
 awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'
 endef
 
-push: current_dir fmt build-web ## AI 生成 commit message 并推送
-	@echo "🤖 AI 生成变更说明..."
+push: current_dir fmt build-web ## AI 生成 commit message 并推送（包含所有 submodule）
+	@if [ -n "$(SUBMODULES)" ]; then \
+		echo "📦 先提交并推送所有 submodule..."; \
+		for sm in $(SUBMODULES); do \
+			echo ""; \
+			$(MAKE) sm-push DIR=$$sm || exit $$?; \
+		done; \
+	fi
+	@echo "🤖 AI 生成主仓库变更说明..."
 	@diff_stat="$$(git diff --stat 2>/dev/null)"; \
 	if [ -z "$$diff_stat" ]; then \
 		diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
 	fi; \
 	if [ -z "$$diff_stat" ]; then \
-		echo "ℹ️ 没有检测到本地变更，直接 push 已有 commits..."; \
+		echo "ℹ️ 主仓库没有检测到本地变更，直接 push 已有 commits..."; \
 		git push origin $(GIT_BRANCH); \
-		echo "✅ 已 push"; \
+		echo "✅ 主仓库已 push"; \
 		exit 0; \
 	fi; \
 	prompt_file=$$(mktemp); \
@@ -276,14 +288,21 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	rm -f "$$ai_out"; \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
-	echo "✅ 已推送: $$msg"
+	echo "✅ 主仓库已推送: $$msg"
 
-push-non-ai: current_dir fmt build-web ## 提交并推送代码（手动 commit message）
-	@echo "📤 推送代码到远程仓库..."
+push-non-ai: current_dir fmt build-web ## 提交并推送代码（包含所有 submodule，手动 commit message）
+	@if [ -n "$(SUBMODULES)" ]; then \
+		echo "📦 先快速提交并推送所有 submodule..."; \
+		for sm in $(SUBMODULES); do \
+			echo ""; \
+			$(MAKE) sm-push-quick DIR=$$sm || exit $$?; \
+		done; \
+	fi
+	@echo "📤 推送主仓库代码到远程仓库..."
 	@git add .\
 	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
 	&& git push origin $(GIT_BRANCH)
-	@echo "☑️ 代码已推送"
+	@echo "☑️ 主仓库代码已推送"
 
 commit: current_dir fmt build-web ## 自动提交（基于变更生成 message，不调用 AI）
 	@echo "📝 自动生成 commit message..."
@@ -303,10 +322,16 @@ commit: current_dir fmt build-web ## 自动提交（基于变更生成 message�
 	git commit -m "$$msg"; \
 	echo "✅ 已提交: $$msg"
 
-pull: current_dir ## 拉取最新代码
-	@echo "📥 拉取最新代码..."
+pull: current_dir ## 拉取最新代码（包含所有 submodule）
+	@echo "📥 拉取主仓库最新代码..."
 	@git pull origin $(GIT_BRANCH)
-	@echo "☑️ 代码已更新"
+	@echo "📦 初始化并同步 submodule 指针..."
+	@git submodule update --init --recursive
+	@if [ -n "$(SUBMODULES)" ]; then \
+		echo "📥 拉取所有 submodule 远程更新..."; \
+		git submodule update --remote --recursive; \
+	fi
+	@echo "☑️ 主仓库与 submodule 已全部更新"
 
 status: current_dir ## 查看 Git 状态
 	@git status
@@ -381,6 +406,9 @@ push-jstudio: ## → make sm-push DIR=apps/jstudio
 
 push-jstudio-non-ai: ## → make sm-push-quick DIR=apps/jstudio
 	@$(MAKE) sm-push-quick DIR=$(JSTUDIO_DIR)
+
+pull-jstudio: ## → make sm-pull DIR=apps/jstudio
+	@$(MAKE) sm-pull DIR=$(JSTUDIO_DIR)
 
 uninstall-jstudio: ## 卸载 jstudio app（macOS）
 	@echo "🗑️  卸载 jstudio..."
