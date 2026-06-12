@@ -51,26 +51,35 @@ impl LlmClient {
         })
     }
 
+    /// Build the JSON body used for streaming chat completion requests.
+    ///
+    /// This is shared by the request sender and error logging so diagnostics match the
+    /// exact payload sent to the OpenAI-compatible endpoint.
+    pub fn stream_request_body(&self, request: &ChatRequest) -> Result<String, LlmError> {
+        let mut body = serde_json::to_value(request)
+            .map_err(|e| LlmError::RequestBuild(format!("Failed to serialize request: {}", e)))?;
+        let Some(obj) = body.as_object_mut() else {
+            return Err(LlmError::RequestBuild(
+                "ChatRequest must serialize to a JSON object".to_string(),
+            ));
+        };
+        obj.insert("stream".to_string(), serde_json::Value::Bool(true));
+        Ok(body.to_string())
+    }
+
     /// Streaming chat completion — returns SSE stream.
     pub async fn chat_completion_stream(
         &self,
         request: &ChatRequest,
     ) -> Result<SseStream, LlmError> {
-        // Ensure stream is set to true in the serialized body
-        let mut body = serde_json::to_value(request)
-            .map_err(|e| LlmError::RequestBuild(format!("Failed to serialize request: {}", e)))?;
-        // SAFETY: `ChatRequest` always serializes as a JSON object (struct with named
-        // fields), so `serde_json::to_value(request)` is guaranteed to produce a Value::Object.
-        body.as_object_mut()
-            .expect("ChatRequest must serialize to a JSON object")
-            .insert("stream".to_string(), serde_json::Value::Bool(true));
+        let body = self.stream_request_body(request)?;
 
         let resp = self
             .http_client
             .post(self.endpoint())
             .bearer_auth(&self.api_key)
             .header("Content-Type", "application/json")
-            .body(body.to_string())
+            .body(body)
             .send()
             .await?;
 

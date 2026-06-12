@@ -572,6 +572,22 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let request_body = client
+            .stream_request_body(&request)
+            .unwrap_or_else(|e| format!("构建流式 request body 失败: {}", e));
+        write_info_log(
+            "agent_loop request summary",
+            &format!(
+                "provider={}, model={}, api_base={}, messages={}, tools={}, body_len={}",
+                provider.name,
+                provider.model,
+                provider.api_base,
+                request.messages.len(),
+                request.tools.as_ref().map_or(0, Vec::len),
+                request_body.len()
+            ),
+        );
+        write_info_log("agent_loop request body", &request_body);
         let tools_requested = !requested_tool_names.is_empty();
 
         // ── 指数退避重试循环：包裹整个流式请求+读取过程 ──
@@ -594,7 +610,13 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                 }
                 Err(e) => {
                     let err = ChatError::from(e);
-                    write_error_log("Chat API 流式请求创建", &err.to_string());
+                    write_error_log(
+                        "Chat API 流式请求创建",
+                        &format!(
+                            "{}\nprovider={}, model={}, api_base={}, request_body={}",
+                            err, provider.name, provider.model, provider.api_base, request_body
+                        ),
+                    );
                     if let Some(policy) = retry_policy_for(&err)
                         && retry_attempt <= policy.max_attempts
                     {
