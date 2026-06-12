@@ -2,6 +2,12 @@ use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_ERROR, AGENT_LOG_INFO
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::Path;
+
+/// 单个日志文件最大大小（10 MB），超过后触发轮转
+const MAX_LOG_SIZE: u64 = 10 * 1024 * 1024;
+/// 日志保留的历史备份数（info.log.1 ~ info.log.3）
+const MAX_LOG_BACKUPS: u32 = 3;
 
 /// 打印普通信息
 #[macro_export]
@@ -48,6 +54,31 @@ pub fn capitalize_first_letter(s: &str) -> String {
     }
 }
 
+/// 如果日志文件超过阈值，执行轮转。
+/// 轮转策略：info.log → info.log.1 → info.log.2 → info.log.3（最旧的被丢弃）
+fn rotate_log_if_needed(log_dir: &Path, file_name: &str) {
+    let current = log_dir.join(file_name);
+    let need_rotate = match fs::metadata(&current) {
+        Ok(meta) => meta.len() >= MAX_LOG_SIZE,
+        Err(_) => false,
+    };
+    if !need_rotate {
+        return;
+    }
+    // 删除最旧的备份
+    let oldest = log_dir.join(format!("{}.{}", file_name, MAX_LOG_BACKUPS));
+    let _ = fs::remove_file(&oldest);
+    // 从旧到新依次重命名: .2→.3, .1→.2
+    for i in (1..MAX_LOG_BACKUPS).rev() {
+        let src = log_dir.join(format!("{}.{}", file_name, i));
+        let dst = log_dir.join(format!("{}.{}", file_name, i + 1));
+        let _ = fs::rename(&src, &dst);
+    }
+    // original → .1
+    let backup = log_dir.join(format!("{}.1", file_name));
+    let _ = fs::rename(&current, &backup);
+}
+
 /// 写入信息日志到文件
 /// 日志文件位置：~/.jdata/agent/logs/info.log
 pub fn write_info_log(context: &str, content: &str) {
@@ -91,6 +122,8 @@ pub fn write_error_log(context: &str, error: &str) {
         eprintln!("无法创建日志目录: {}", e);
         return;
     }
+
+    rotate_log_if_needed(&log_dir, AGENT_LOG_ERROR);
 
     let log_file = log_dir.join(AGENT_LOG_ERROR);
 
