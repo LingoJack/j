@@ -13,9 +13,7 @@ endif
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
 JSTUDIO_DIR := apps/jstudio
-JSTUDIO_TAURI_DIR := $(JSTUDIO_DIR)/src-tauri
-JSTUDIO_MACOS_APP := $(JSTUDIO_TAURI_DIR)/target/release/bundle/macos/jstudio.app
-JSTUDIO_BIN := $(JSTUDIO_TAURI_DIR)/target/release/jstudio
+JSTUDIO_BIN := $(JSTUDIO_DIR)/src-tauri/target/release/jstudio
 JSTUDIO_INSTALL_APP_DIR ?= /Applications
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
@@ -350,48 +348,28 @@ build-web: ## 构建 Web 前端
 	@echo "☑️ Web 前端构建完成"
 
 # ============================================
-# jstudio Tauri App
+# jstudio Tauri App（委托给子模块 Makefile）
 # ============================================
 init-jstudio: ## 初始化 jstudio submodule 并安装前端依赖
 	@echo "📖 初始化 jstudio..."
 	@git submodule update --init --recursive $(JSTUDIO_DIR)
-	@cd $(JSTUDIO_DIR) && npm install --silent
-	@echo "☑️ jstudio 依赖已就绪"
+	@$(MAKE) -C $(JSTUDIO_DIR) deps
 
 dev-jstudio: init-jstudio ## 启动 jstudio Tauri 开发模式
-	@echo "📖 启动 jstudio 开发模式..."
-	@cd $(JSTUDIO_DIR) && npm run tauri:dev
+	@$(MAKE) -C $(JSTUDIO_DIR) dev
 
 build-jstudio: init-jstudio ## 构建 jstudio Tauri 应用
-	@echo "📖 构建 jstudio Tauri 应用..."
-	@cd $(JSTUDIO_DIR) && npm run tauri:build -- --bundles app
-	@echo "☑️ jstudio 构建完成"
-	@if [ -d "$(JSTUDIO_MACOS_APP)" ]; then \
-		echo "   macOS App: $(JSTUDIO_MACOS_APP)"; \
-	elif [ -x "$(JSTUDIO_BIN)" ]; then \
-		echo "   Binary: $(JSTUDIO_BIN)"; \
-	fi
+	@$(MAKE) -C $(JSTUDIO_DIR) build
 
-install-jstudio: build-jstudio ## 安装 jstudio app（macOS 安装到 /Applications，其他系统提示二进制路径）
-	@echo "📦 安装 jstudio..."
+install-jstudio: init-jstudio ## 安装 jstudio app（macOS 安装到 /Applications，其他系统提示二进制路径）
+	@$(MAKE) -C $(JSTUDIO_DIR) install INSTALL_APP_DIR=$(JSTUDIO_INSTALL_APP_DIR)
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		if [ ! -d "$(JSTUDIO_MACOS_APP)" ]; then \
-			echo "✖️ 未找到 $(JSTUDIO_MACOS_APP)"; exit 1; \
-		fi; \
-		if [ ! -w "$(JSTUDIO_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-		echo "   正在安装到 $(JSTUDIO_INSTALL_APP_DIR)/jstudio.app..."; \
-		$$SUDO rm -rf "$(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
-		$$SUDO cp -R "$(JSTUDIO_MACOS_APP)" "$(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
-		echo "☑️ jstudio 已安装: $(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
 		echo "   现在可以使用: j read <file_or_dir_path>"; \
 	else \
 		if [ -x "$(JSTUDIO_BIN)" ]; then \
-			echo "☑️ jstudio 已构建: $(JSTUDIO_BIN)"; \
 			echo "   请设置环境变量后使用:"; \
 			echo "   export JSTUDIO_BIN=$$(pwd)/$(JSTUDIO_BIN)"; \
 			echo "   j read <file_or_dir_path>"; \
-		else \
-			echo "✖️ 未找到 jstudio 二进制: $(JSTUDIO_BIN)"; exit 1; \
 		fi; \
 	fi
 
@@ -411,19 +389,33 @@ pull-jstudio: ## → make sm-pull DIR=apps/jstudio
 	@$(MAKE) sm-pull DIR=$(JSTUDIO_DIR)
 
 uninstall-jstudio: ## 卸载 jstudio app（macOS）
-	@echo "🗑️  卸载 jstudio..."
-	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		if [ ! -w "$(JSTUDIO_INSTALL_APP_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-		$$SUDO rm -rf "$(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
-		echo "☑️ 已卸载 $(JSTUDIO_INSTALL_APP_DIR)/jstudio.app"; \
-	else \
-		echo "ℹ️ 非 macOS 平台请删除自定义安装位置，并取消 JSTUDIO_BIN 环境变量。"; \
-	fi
+	@$(MAKE) -C $(JSTUDIO_DIR) uninstall INSTALL_APP_DIR=$(JSTUDIO_INSTALL_APP_DIR)
+	@echo "   jstudio 已卸载，请取消 JSTUDIO_BIN 环境变量（如有）"
 
 clean-jstudio: ## 清理 jstudio 构建产物
-	@echo "🧹 清理 jstudio 构建产物..."
-	@rm -rf $(JSTUDIO_DIR)/dist $(JSTUDIO_TAURI_DIR)/target
-	@echo "☑️ jstudio 构建产物已清理"
+	@$(MAKE) -C $(JSTUDIO_DIR) clean
+
+# 以下命令委托给子模块 Makefile，与主仓库命令风格对齐
+fmt-jstudio: ## 格式化 jstudio 代码（前端 + Rust）
+	@$(MAKE) -C $(JSTUDIO_DIR) fmt
+
+lint-jstudio: ## 检查 jstudio 代码质量（前端 TypeScript + Rust clippy）
+	@$(MAKE) -C $(JSTUDIO_DIR) lint
+
+check-jstudio: ## 检查 jstudio 代码（不构建）
+	@$(MAKE) -C $(JSTUDIO_DIR) check
+
+test-jstudio: ## 运行 jstudio 测试
+	@$(MAKE) -C $(JSTUDIO_DIR) test
+
+pre-commit-jstudio: ## jstudio 提交前检查（fmt + lint + test）
+	@$(MAKE) -C $(JSTUDIO_DIR) pre-commit
+
+bump-version-jstudio: ## 递增 jstudio 版本号（同步 tauri.conf.json、Cargo.toml、package.json）
+	@$(MAKE) -C $(JSTUDIO_DIR) bump-version
+
+help-jstudio: ## 显示 jstudio Makefile 帮助
+	@$(MAKE) -C $(JSTUDIO_DIR) help
 
 build-indicator: ## 构建 j-indicator (仅 macOS)
 	@if [ "$(OS)" = "Windows_NT" ]; then echo "ℹ️ j-indicator 仅支持 macOS，跳过"; exit 0; fi

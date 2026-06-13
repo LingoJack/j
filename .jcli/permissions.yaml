@@ -214,4 +214,5 @@ allow:
 - Shell(rsync -a:*)
 - Shell(cp -R:*)
 - Shell(head -7:*)
+- Shell(ls -d:*)
 deny: []
