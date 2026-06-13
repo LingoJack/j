@@ -213,4 +213,5 @@ allow:
 - Shell(ls src/app/studio:*)
 - Shell(rsync -a:*)
 - Shell(cp -R:*)
+- Shell(head -7:*)
 deny: []
