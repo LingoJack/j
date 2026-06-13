@@ -401,49 +401,30 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
             reason_buf.clear();
         }
 
-        // 记录请求输入日志
+        // 记录请求摘要（不 dump 完整内容，避免日志过大）
         {
-            let mut log_content = String::new();
-            if let Some(ref system_prompt) = system_prompt {
-                log_content.push_str(&format!("[System] {}\n", system_prompt));
-            }
-            for msg in &messages {
-                match msg.role {
-                    MessageRole::Assistant => {
-                        if !msg.content.is_empty() {
-                            log_content.push_str(&format!("[Assistant] {}\n", msg.content));
-                        }
-                        if let Some(ref tool_calls) = msg.tool_calls {
-                            for tool_call in tool_calls {
-                                log_content.push_str(&format!(
-                                    "[Assistant/ToolCall] {}: {}\n",
-                                    tool_call.name, tool_call.arguments
-                                ));
-                            }
-                        }
-                    }
-                    MessageRole::Tool => {
-                        let id = msg.tool_call_id.as_deref().unwrap_or("?");
-                        let tool_name = msg
-                            .tool_calls
-                            .as_ref()
-                            .and_then(|tool_calls| tool_calls.first())
-                            .map(|tool_call| tool_call.name.as_str())
-                            .unwrap_or("unknown");
-                        log_content.push_str(&format!(
-                            "[Tool/Result({} with id `{}`)] result:\n{}\n",
-                            tool_name, id, msg.content
-                        ));
-                    }
-                    MessageRole::User => {
-                        log_content.push_str(&format!("[User] {}\n", msg.content));
-                    }
-                    other => {
-                        log_content.push_str(&format!("[{}] {}\n", other, msg.content));
-                    }
-                }
-            }
-            write_info_log("Chat 请求", &log_content);
+            let role_counts = messages
+                .iter()
+                .fold((0u32, 0u32, 0u32), |(u, a, t), msg| match msg.role {
+                    MessageRole::User => (u + 1, a, t),
+                    MessageRole::Assistant => (u, a + 1, t),
+                    MessageRole::Tool => (u, a, t + 1),
+                    _ => (u, a, t),
+                });
+            write_info_log(
+                "agent_loop",
+                &format!(
+                    "请求摘要: messages={} (user={}, assistant={}, tool={}), system_prompt={}",
+                    messages.len(),
+                    role_counts.0,
+                    role_counts.1,
+                    role_counts.2,
+                    system_prompt
+                        .as_ref()
+                        .map(|s| format!("{} chars", s.len()))
+                        .unwrap_or_else(|| "none".to_string()),
+                ),
+            );
         }
 
         // ★ PreLlmRequest hook（可修改 messages 和 system_prompt）
@@ -572,22 +553,17 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let request_body = client
-            .stream_request_body(&request)
-            .unwrap_or_else(|e| format!("构建流式 request body 失败: {}", e));
         write_info_log(
             "agent_loop request summary",
             &format!(
-                "provider={}, model={}, api_base={}, messages={}, tools={}, body_len={}",
+                "provider={}, model={}, api_base={}, messages={}, tools={}",
                 provider.name,
                 provider.model,
                 provider.api_base,
                 request.messages.len(),
                 request.tools.as_ref().map_or(0, Vec::len),
-                request_body.len()
             ),
         );
-        write_info_log("agent_loop request body", &request_body);
         let tools_requested = !requested_tool_names.is_empty();
 
         // ── 指数退避重试循环：包裹整个流式请求+读取过程 ──
@@ -613,8 +589,8 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     write_error_log(
                         "Chat API 流式请求创建",
                         &format!(
-                            "{}\nprovider={}, model={}, api_base={}, request_body={}",
-                            err, provider.name, provider.model, provider.api_base, request_body
+                            "{}\nprovider={}, model={}, api_base={}",
+                            err, provider.name, provider.model, provider.api_base
                         ),
                     );
                     if let Some(policy) = retry_policy_for(&err)
