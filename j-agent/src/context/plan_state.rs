@@ -117,6 +117,8 @@ impl PlanApprovalQueue {
 struct PlanModeInner {
     active: bool,
     plan_file_path: Option<String>,
+    /// 进入 plan mode 时写入的初始模板内容，用于检测 agent 是否修改过计划
+    initial_content: Option<String>,
 }
 
 /// Plan Mode 全局状态（跨工具共享）
@@ -142,6 +144,7 @@ impl PlanModeState {
             inner: Mutex::new(PlanModeInner {
                 active: false,
                 plan_file_path: None,
+                initial_content: None,
             }),
         }
     }
@@ -151,10 +154,15 @@ impl PlanModeState {
         self.inner.lock().map(|g| g.active).unwrap_or(false)
     }
 
-    /// 进入 plan mode，同时设置 plan 文件路径
+    /// 进入 plan mode，同时设置 plan 文件路径和初始模板内容
     /// 返回 Ok(()) 表示成功进入，Err(msg) 表示已在 plan mode
-    pub fn enter(&self, path: impl Into<String>) -> Result<(), String> {
+    pub fn enter(
+        &self,
+        path: impl Into<String>,
+        initial_content: impl Into<String>,
+    ) -> Result<(), String> {
         let path = path.into();
+        let initial = initial_content.into();
         match self.inner.lock() {
             Ok(mut guard) => {
                 if guard.active {
@@ -162,6 +170,7 @@ impl PlanModeState {
                 }
                 guard.active = true;
                 guard.plan_file_path = Some(path);
+                guard.initial_content = Some(initial);
                 Ok(())
             }
             Err(e) => Err(format!("Lock poisoned: {}", e)),
@@ -188,6 +197,34 @@ impl PlanModeState {
     /// 获取 plan 文件路径（仅在 active 时有意义）
     pub fn get_plan_file_path(&self) -> Option<String> {
         self.inner.lock().ok()?.plan_file_path.clone()
+    }
+
+    /// 检查计划文件内容是否仍与初始模板一致（即 agent 未修改过计划）
+    ///
+    /// 读取当前 plan 文件内容，与 `enter()` 时保存的初始模板比较：
+    /// - `Ok(true)` — 内容一致，agent 未修改计划
+    /// - `Ok(false)` — 内容已修改
+    /// - `Err(msg)` — 无法读取文件或状态异常
+    pub fn is_plan_unmodified(&self) -> Result<bool, String> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| format!("Lock poisoned: {}", e))?;
+
+        let plan_path = guard
+            .plan_file_path
+            .as_ref()
+            .ok_or_else(|| "No plan file path set".to_string())?;
+
+        let initial = guard
+            .initial_content
+            .as_ref()
+            .ok_or_else(|| "No initial content recorded".to_string())?;
+
+        let current = std::fs::read_to_string(plan_path)
+            .map_err(|e| format!("Failed to read plan file '{}': {}", plan_path, e))?;
+
+        Ok(current.trim() == initial.trim())
     }
 }
 

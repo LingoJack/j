@@ -125,8 +125,8 @@ impl Tool for EnterPlanModeTool {
         let template = format!("# Plan: {}\n\n## Steps\n\n1. \n\n## Notes\n\n", description);
         let _ = std::fs::write(&plan_file, &template);
 
-        // 原子性地进入 plan mode
-        match self.plan_state.enter(plan_path.clone()) {
+        // 原子性地进入 plan mode（同时保存初始模板用于后续检测）
+        match self.plan_state.enter(plan_path.clone(), template.clone()) {
             Ok(()) => ToolResult {
                 output: format!(
                     "{}Entered plan mode. Plan file: {}\n\
@@ -242,6 +242,20 @@ impl Tool for ExitPlanModeTool {
                 };
             }
         };
+
+        // 检测 agent 是否真正编写了计划内容（而非仅保留了初始模板）
+        match self.plan_state.is_plan_unmodified() {
+            Ok(true) => {
+                return ToolResult {
+                    output: "You have not written any plan yet — the plan file still contains only the initial template. Please explore the codebase, design your approach, and write a detailed plan to the plan file before calling ExitPlanMode.".to_string(),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+            Ok(false) => {} // 计划已被修改，继续
+            Err(_) => {}    // 检测失败不阻塞流程，继续
+        }
 
         // 判断是否在 teammate 线程中（非 Main agent）
         let agent_name = current_agent_name();

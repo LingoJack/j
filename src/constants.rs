@@ -229,8 +229,8 @@ pub const REPORT_DATE_FORMAT: &str = "%Y.%m.%d";
 /// 日报简短日期格式
 pub const REPORT_SIMPLE_DATE_FORMAT: &str = "%Y/%m/%d";
 
-/// check 命令默认行数
-pub const DEFAULT_CHECK_LINES: usize = 10;
+/// check 命令默认读取的 block 数量
+pub const DEFAULT_CHECK_BLOCKS: usize = 10;
 
 // ========== 命令名常量 ==========
 

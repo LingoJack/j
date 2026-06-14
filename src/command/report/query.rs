@@ -1,13 +1,13 @@
 //! 日报查询：check / search 命令。
 
 use crate::config::YamlConfig;
-use crate::constants::DEFAULT_CHECK_LINES;
+use crate::constants::DEFAULT_CHECK_BLOCKS;
 use crate::util::fuzzy;
 use crate::{error, info};
 use colored::Colorize;
 use std::path::Path;
 
-use super::io::{get_report_path, read_last_n_lines, read_last_n_lines_block_aware};
+use super::io::{get_report_path, read_last_n_blocks, read_last_n_lines};
 use super::write::handle_open_report;
 
 // ========== check 命令 ==========
@@ -24,11 +24,11 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
         Some(s) => match s.parse::<usize>() {
             Ok(n) if n > 0 => n,
             _ => {
-                error!("无效的行数参数: {}，请输入正整数或 open", s);
+                error!("无效的块数参数: {}，请输入正整数或 open", s);
                 return;
             }
         },
-        None => DEFAULT_CHECK_LINES,
+        None => DEFAULT_CHECK_BLOCKS,
     };
 
     let report_path = match get_report_path(config) {
@@ -44,8 +44,8 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
         return;
     }
 
-    let lines = read_last_n_lines_block_aware(path, num);
-    info!("最近的 {} 行内容如下：", lines.len());
+    let lines = read_last_n_blocks(path, num);
+    info!("最近的 {} 个块内容如下：", num);
     let md_content = lines.join("\n");
     crate::md!("{}", md_content);
 }
@@ -92,7 +92,7 @@ fn parse_line_count(line_count: &str) -> usize {
             .parse::<usize>()
             .ok()
             .filter(|&n| n > 0)
-            .unwrap_or(DEFAULT_CHECK_LINES)
+            .unwrap_or(DEFAULT_CHECK_BLOCKS)
     }
 }
 

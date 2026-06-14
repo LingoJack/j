@@ -289,7 +289,7 @@ impl ChatApp {
                     }
                     let _ = std::fs::write(path, content);
                 }
-                let _ = plan_state.enter(path);
+                let _ = plan_state.enter(path, plan.plan_content.clone().unwrap_or_default());
             }
         }
 

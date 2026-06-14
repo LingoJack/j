@@ -133,17 +133,14 @@ pub fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
     }
 }
 
-/// 从文件尾部读取最后 N 行，且不切断 Markdown 块（代码块、表格、列表等）。
+/// 从文件尾部读取最后 N 个顶层 Markdown block 对应的行。
 ///
-/// 在 `j check` 等需要把结果再喂给 Markdown 渲染器的场景下使用。
-/// 朴素的按行截取会让起点落在围栏代码块内部，导致 ``` 配对被破坏，
-/// 渲染时把两个真实代码块之间的内容也当成一段代码块包裹。
+/// `j check` 把结果再喂给 Markdown 渲染器，因此按 block 截取可以
+/// 保证每个返回的 block 都是完整的，不会出现 ``` 配对错乱、
+/// 表格断裂等问题。
 ///
-/// 实现：复用 `crate::markdown::parser::parse_markdown` 的 IR 与 `SourceRange`，
-/// 找到任何跨越 `total - n` 边界的 block，把起点回退到该 block 的起始行，
-/// 保证返回的切片里所有 block 都是完整的。返回的行数可能略大于 `n`。
-pub fn read_last_n_lines_block_aware(path: &Path, n: usize) -> Vec<String> {
-    use crate::markdown::ir::{Block, BlockKind, ParsedDocument};
+/// 参数 `n` 表示要读取的顶层 block 数量。空行不单独算作 block。
+pub fn read_last_n_blocks(path: &Path, n: usize) -> Vec<String> {
     use crate::markdown::parser::parse_markdown;
 
     let content = match fs::read_to_string(path) {
@@ -155,53 +152,27 @@ pub fn read_last_n_lines_block_aware(path: &Path, n: usize) -> Vec<String> {
     };
 
     let all_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-    let total = all_lines.len();
-    if total == 0 {
+    if all_lines.is_empty() {
         return Vec::new();
     }
-    if n == usize::MAX || n >= total {
+
+    let doc = parse_markdown(&content, usize::MAX);
+
+    if n == usize::MAX || n >= doc.blocks.len() {
         return all_lines;
     }
 
-    let desired_start = total - n;
+    // 取最后 n 个顶层 block 的第一个的 start_line 作为起点
+    let start_block = &doc.blocks[doc.blocks.len() - n];
+    let start_line = start_block.source.start_line;
 
-    // 解析 IR，递归收集所有 block 的源码行范围（含 BlockQuote/List 子 block）
-    let doc: ParsedDocument = parse_markdown(&content, usize::MAX);
-
-    fn walk(blocks: &[Block], out: &mut Vec<(usize, usize)>) {
-        for b in blocks {
-            out.push((b.source.start_line, b.source.end_line));
-            match &b.kind {
-                BlockKind::BlockQuote(inner) => walk(inner, out),
-                BlockKind::List(data) => {
-                    for item in &data.items {
-                        walk(&item.children, out);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    let mut ranges = Vec::new();
-    walk(&doc.blocks, &mut ranges);
-
-    // 找到任何跨越 desired_start 的 block，把起点回退到它的 start_line。
-    // 反复迭代直到稳定，处理「回退后又触发另一个 block 的跨越」的级联情况。
-    let mut start = desired_start;
-    loop {
-        let mut new_start = start;
-        for (s, e) in &ranges {
-            if *s < new_start && *e >= new_start {
-                new_start = *s;
-            }
-        }
-        if new_start == start {
-            break;
-        }
-        start = new_start;
+    // 回退跳过 start_line 前面紧邻的空行，让输出更干净
+    let mut actual_start = start_line;
+    while actual_start > 0 && all_lines[actual_start - 1].trim().is_empty() {
+        actual_start -= 1;
     }
 
-    all_lines[start..].to_vec()
+    all_lines[actual_start..].to_vec()
 }
 
 /// 从文件尾部读取最后 N 行（高效实现，不需要读取整个文件）

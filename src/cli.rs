@@ -109,10 +109,10 @@ pub enum SubCmd {
         arg: Option<String>,
     },
 
-    /// 查看日报最近 N 行
+    /// 查看日报最近 N 个块
     #[command(alias = "c")]
     Check {
-        /// 行数（默认 5）
+        /// 块数（默认 10）
         line_count: Option<String>,
     },
 
