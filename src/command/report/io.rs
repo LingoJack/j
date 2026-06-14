@@ -159,10 +159,10 @@ pub fn read_last_n_blocks(path: &Path, n: usize) -> Vec<String> {
     let doc = parse_markdown(&content, usize::MAX);
 
     // 最后一个 block 是列表时，按列表项粒度截取
-    if let Some(last_block) = doc.blocks.last() {
-        if let crate::markdown::ir::BlockKind::List(data) = &last_block.kind {
-            return read_last_n_list_items(&all_lines, &doc.blocks, data, n);
-        }
+    if let Some(last_block) = doc.blocks.last()
+        && let crate::markdown::ir::BlockKind::List(data) = &last_block.kind
+    {
+        return read_last_n_list_items(&all_lines, &doc.blocks, data, n);
     }
 
     // 非列表区域：退化为顶层 block 计数
@@ -222,9 +222,11 @@ fn find_list_item_starts(lines: &[String]) -> Vec<usize> {
         .enumerate()
         .filter(|(_, line)| {
             let trimmed = line.trim_start();
-            (trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ "))
-                || (trimmed.chars().next().map_or(false, |c| c.is_ascii_digit())
-                    && trimmed.find('.').map_or(false, |dot| {
+            trimmed.starts_with("- ")
+                || trimmed.starts_with("* ")
+                || trimmed.starts_with("+ ")
+                || (trimmed.chars().next().is_some_and(|c| c.is_ascii_digit())
+                    && trimmed.find('.').is_some_and(|dot| {
                         dot > 0 && trimmed.len() > dot + 1 && trimmed.as_bytes()[dot + 1] == b' '
                     }))
         })

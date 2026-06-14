@@ -216,4 +216,5 @@ allow:
 - Shell(head -7:*)
 - Shell(ls -d:*)
 - Shell(cd /Users/lingojack/dev_custom/jcli:*)
+- Shell(cargo jb:*)
 deny: []
