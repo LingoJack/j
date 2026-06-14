@@ -133,13 +133,13 @@ pub fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
     }
 }
 
-/// 从文件尾部读取最后 N 个顶层 Markdown block 对应的行。
+/// 从文件尾部读取最后 N 个"条目"对应的行。
 ///
-/// `j check` 把结果再喂给 Markdown 渲染器，因此按 block 截取可以
-/// 保证每个返回的 block 都是完整的，不会出现 ``` 配对错乱、
-/// 表格断裂等问题。
+/// 日报/周报通常是 Markdown 列表，一个 block 动辄包含数十个条目。
+/// 按顶层 block 截取粒度太粗（`c 1` 会输出整个列表），因此这里按
+/// **列表项**（以 `- `、`* `、`+ `、`数字.` 开头的行）计数。
 ///
-/// 参数 `n` 表示要读取的顶层 block 数量。空行不单独算作 block。
+/// 非列表区域（标题、段落、代码块等）退化为按顶层 block 计数。
 pub fn read_last_n_blocks(path: &Path, n: usize) -> Vec<String> {
     use crate::markdown::parser::parse_markdown;
 
@@ -158,21 +158,78 @@ pub fn read_last_n_blocks(path: &Path, n: usize) -> Vec<String> {
 
     let doc = parse_markdown(&content, usize::MAX);
 
+    // 最后一个 block 是列表时，按列表项粒度截取
+    if let Some(last_block) = doc.blocks.last() {
+        if let crate::markdown::ir::BlockKind::List(data) = &last_block.kind {
+            return read_last_n_list_items(&all_lines, &doc.blocks, data, n);
+        }
+    }
+
+    // 非列表区域：退化为顶层 block 计数
     if n == usize::MAX || n >= doc.blocks.len() {
         return all_lines;
     }
 
-    // 取最后 n 个顶层 block 的第一个的 start_line 作为起点
     let start_block = &doc.blocks[doc.blocks.len() - n];
-    let start_line = start_block.source.start_line;
-
-    // 回退跳过 start_line 前面紧邻的空行，让输出更干净
-    let mut actual_start = start_line;
+    let mut actual_start = start_block.source.start_line;
     while actual_start > 0 && all_lines[actual_start - 1].trim().is_empty() {
         actual_start -= 1;
     }
 
     all_lines[actual_start..].to_vec()
+}
+
+/// 按列表项粒度截取最后 N 个条目。
+///
+/// 从文件尾部向前扫描，找到第 N 个列表项的起始行作为起点。
+/// 如果 N >= 列表项总数，则回退到列表 block 的 start_line（包含整个列表）。
+fn read_last_n_list_items(
+    all_lines: &[String],
+    blocks: &[crate::markdown::ir::Block],
+    list_data: &crate::markdown::ir::ListData,
+    n: usize,
+) -> Vec<String> {
+    let total_items = list_data.items.len();
+    if n >= total_items {
+        // 要的比列表项还多，返回整个文档尾部（从列表 block 起始）
+        let list_block_start = blocks.last().map(|b| b.source.start_line).unwrap_or(0);
+        let mut start = list_block_start;
+        while start > 0 && all_lines[start - 1].trim().is_empty() {
+            start -= 1;
+        }
+        return all_lines[start..].to_vec();
+    }
+
+    // 找到列表所在区域，从尾部向前数第 n 个列表项
+    // 列表项标记行：以 `- `、`* `、`+ `、`<数字>. ` 开头（允许前导空格用于嵌套）
+    let item_start_lines = find_list_item_starts(all_lines);
+    if item_start_lines.is_empty() || n > item_start_lines.len() {
+        return all_lines.to_vec();
+    }
+
+    let start_idx = item_start_lines.len() - n;
+    let start_line = item_start_lines[start_idx];
+
+    all_lines[start_line..].to_vec()
+}
+
+/// 扫描所有行，返回列表项标记行的行号（0-based）。
+///
+/// 匹配 `- `、`* `、`+ `、`1. ` 等 Markdown 无序/有序列表标记。
+fn find_list_item_starts(lines: &[String]) -> Vec<usize> {
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| {
+            let trimmed = line.trim_start();
+            (trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ "))
+                || (trimmed.chars().next().map_or(false, |c| c.is_ascii_digit())
+                    && trimmed.find('.').map_or(false, |dot| {
+                        dot > 0 && trimmed.len() > dot + 1 && trimmed.as_bytes()[dot + 1] == b' '
+                    }))
+        })
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// 从文件尾部读取最后 N 行（高效实现，不需要读取整个文件）

@@ -278,7 +278,7 @@ pub(crate) fn render_ask_questions(
                 let chars: Vec<char> = input.chars().collect();
 
                 // 光标前的文本
-                let before: String = chars[..cursor_pos].iter().collect();
+                let before: String = chars[..cursor_pos.min(chars.len())].iter().collect();
                 // 光标处的字符（如果没有则使用空格）
                 let cursor_char = chars.get(cursor_pos).copied().unwrap_or(' ');
                 // 光标后的文本（光标位置+1 开始）
@@ -337,14 +337,16 @@ pub(crate) fn render_ask_questions(
                         // 光标行：需要拆分 before / cursor_char / after
                         let line_str = &wrapped[li];
                         let line_chars: Vec<char> = line_str.chars().collect();
-                        let line_before: String =
-                            line_chars[..cursor_offset_in_line].iter().collect();
+                        let line_before: String = line_chars
+                            [..cursor_offset_in_line.min(line_chars.len())]
+                            .iter()
+                            .collect();
                         let cc = line_chars
                             .get(cursor_offset_in_line)
                             .copied()
                             .unwrap_or(' ');
-                        let line_after: String =
-                            line_chars[cursor_offset_in_line + 1..].iter().collect();
+                        let after_start = (cursor_offset_in_line + 1).min(line_chars.len());
+                        let line_after: String = line_chars[after_start..].iter().collect();
 
                         lines.push(bordered_line(
                             vec![
@@ -564,7 +566,7 @@ pub(crate) fn render_tool_confirm_content(
                 let input = &app.ui.tool_interact_input;
                 let cursor_pos = app.ui.tool_interact_cursor;
                 let chars: Vec<char> = input.chars().collect();
-                let before: String = chars[..cursor_pos].iter().collect();
+                let before: String = chars[..cursor_pos.min(chars.len())].iter().collect();
                 let cursor_char = chars.get(cursor_pos).copied().unwrap_or(' ');
                 let after: String = if cursor_pos < chars.len() {
                     chars[cursor_pos + 1..].iter().collect()
@@ -614,14 +616,16 @@ pub(crate) fn render_tool_confirm_content(
                         // 光标行：需要拆分 before / cursor_char / after
                         let line_str = &wrapped[li];
                         let line_chars: Vec<char> = line_str.chars().collect();
-                        let line_before: String =
-                            line_chars[..cursor_offset_in_line].iter().collect();
+                        let line_before: String = line_chars
+                            [..cursor_offset_in_line.min(line_chars.len())]
+                            .iter()
+                            .collect();
                         let cc = line_chars
                             .get(cursor_offset_in_line)
                             .copied()
                             .unwrap_or(' ');
-                        let line_after: String =
-                            line_chars[cursor_offset_in_line + 1..].iter().collect();
+                        let after_start = (cursor_offset_in_line + 1).min(line_chars.len());
+                        let line_after: String = line_chars[after_start..].iter().collect();
 
                         lines.push(bordered_line(
                             vec![
