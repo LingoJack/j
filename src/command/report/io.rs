@@ -158,11 +158,11 @@ pub fn read_last_n_blocks(path: &Path, n: usize) -> Vec<String> {
 
     let doc = parse_markdown(&content, usize::MAX);
 
-    // 最后一个 block 是列表时，按列表项粒度截取
+    // 最后一个 block 是列表时，按列表项粒度截取（跨所有周）
     if let Some(last_block) = doc.blocks.last()
-        && let crate::markdown::ir::BlockKind::List(data) = &last_block.kind
+        && let crate::markdown::ir::BlockKind::List(_) = &last_block.kind
     {
-        return read_last_n_list_items(&all_lines, &doc.blocks, data, n);
+        return read_last_n_list_items(&all_lines, n);
     }
 
     // 非列表区域：退化为顶层 block 计数
@@ -181,30 +181,22 @@ pub fn read_last_n_blocks(path: &Path, n: usize) -> Vec<String> {
 
 /// 按列表项粒度截取最后 N 个条目。
 ///
-/// 从文件尾部向前扫描，找到第 N 个列表项的起始行作为起点。
-/// 如果 N >= 列表项总数，则回退到列表 block 的 start_line（包含整个列表）。
-fn read_last_n_list_items(
-    all_lines: &[String],
-    blocks: &[crate::markdown::ir::Block],
-    list_data: &crate::markdown::ir::ListData,
-    n: usize,
-) -> Vec<String> {
-    let total_items = list_data.items.len();
-    if n >= total_items {
-        // 要的比列表项还多，返回整个文档尾部（从列表 block 起始）
-        let list_block_start = blocks.last().map(|b| b.source.start_line).unwrap_or(0);
-        let mut start = list_block_start;
+/// 从文件尾部向前扫描（跨所有周），找到第 N 个列表项的起始行作为起点。
+/// 如果 N >= 全部列表项总数，则从第一个列表项起始（回溯跳过空行以包含周标题）。
+fn read_last_n_list_items(all_lines: &[String], n: usize) -> Vec<String> {
+    let item_start_lines = find_list_item_starts(all_lines);
+    if item_start_lines.is_empty() {
+        return all_lines.to_vec();
+    }
+
+    // 要的比全部列表项还多 → 从第一个列表项起始
+    if n >= item_start_lines.len() {
+        let mut start = item_start_lines[0];
+        // 回溯跳过空行，尽量包含上方的周标题
         while start > 0 && all_lines[start - 1].trim().is_empty() {
             start -= 1;
         }
         return all_lines[start..].to_vec();
-    }
-
-    // 找到列表所在区域，从尾部向前数第 n 个列表项
-    // 列表项标记行：以 `- `、`* `、`+ `、`<数字>. ` 开头（允许前导空格用于嵌套）
-    let item_start_lines = find_list_item_starts(all_lines);
-    if item_start_lines.is_empty() || n > item_start_lines.len() {
-        return all_lines.to_vec();
     }
 
     let start_idx = item_start_lines.len() - n;
