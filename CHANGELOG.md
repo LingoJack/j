@@ -1,3 +1,28 @@
+# v12.11.2
+
+
+### 新功能
+
+- **Shell Runtime 系统**: 新增可配置的 Shell 运行时（Auto/Pwsh/PowerShell/GitBash/Cmd/Sh/Bash），支持在配置中指定默认 Shell，自动探测系统可用 shell 并按优先级回退
+- **持久化 Shell 会话**: 交互模式下 `!` 前缀命令改用 PTY（portable_pty）实现的 `ShellSession`，命令间保持工作目录和环境变量状态，不再每次启动新进程
+- **Shell 命令自动补全**: 交互式 REPL 新增智能补全——PATH 可执行文件补全、Makefile target 补全、`!` 前缀整行补全、未知命令自动回退为 shell 命令补全
+- **计划模式空模板检测**: ExitPlanMode 工具现在会检测计划文件是否仍为初始模板，若 agent 未编写实际内容则阻止退出并提示先完成计划
+- **Provider 级工具调用开关**: 每个 ModelProvider 新增 `tool_call_mode` 字段（原生/禁用），可针对单个 Provider 独立控制是否启用工具调用
+
+### 改进
+
+- **REPL 提示符重构**: 新增 git 分支和脏标记显示，采用 `(jcli) 路径 ❯` 双行布局，Windows 下禁用 ANSI 颜色码规避 rustyline 宽度计算 bug
+- **日报 check 按列表项粒度读取**: `j check N` 从按行/按顶层 block 计数改为按 Markdown 列表项计数，`c 1` 精确返回最近 1 条日报而非整个列表
+- **Shell 命令语法高亮**: 交互模式执行的 shell 命令现在复用 Chat 代码块的 bash 语法高亮进行彩色展示
+- **剪贴板跨平台支持**: 从依赖系统命令（pbcopy/xclip/xsel）改为使用 `arboard` 库，原生支持 macOS/Linux/Windows
+- **编辑器粘贴支持**: Markdown 编辑器启用 Bracketed Paste，支持终端原生粘贴多行文本
+- **配置保存错误提示**: 全局配置字段保存失败时弹出 toast 提示而非静默忽略
+- **Edit 工具渲染**: 批量替换的 confirm_token 现在在工具调用展示中可见
+
+### Bug 修复
+
+- **编辑器光标越界 panic**: 重构渲染阶段顺序——先根据光标位置同步并 clamp 视口，再基于最终 scroll_offset 计算渲染范围，修复滚动到文件末尾时底部提前出现 `~` 及光标越界导致的 panic
+
 # v12.11.1
 
 
