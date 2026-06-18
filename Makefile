@@ -133,10 +133,20 @@ sm-pull: ## 拉取并更新所有/单个 submodule（DIR= 可选）
 	@if [ -n "$(DIR)" ]; then \
 		echo "📥 拉取 $(DIR) 远程更新..."; \
 		git submodule update --init --remote --recursive $(DIR); \
+		sm_branch=$$(git config -f .gitmodules submodule.$(DIR).branch 2>/dev/null || echo "main"); \
+		echo "🔗 $(DIR) 切回分支 $$sm_branch ..."; \
+		git -C $(DIR) checkout $$sm_branch 2>/dev/null && \
+		git -C $(DIR) merge --ff-only origin/$$sm_branch 2>/dev/null; \
 		echo "☑️ $(DIR) 已更新"; \
 	else \
 		echo "📥 拉取所有 submodule 远程更新..."; \
 		git submodule update --init --remote --recursive; \
+		for sm in $(SUBMODULES); do \
+			sm_branch=$$(git config -f .gitmodules submodule.$$sm.branch 2>/dev/null || echo "main"); \
+			echo "🔗 $$sm 切回分支 $$sm_branch ..."; \
+			git -C $$sm checkout $$sm_branch 2>/dev/null && \
+			git -C $$sm merge --ff-only origin/$$sm_branch 2>/dev/null; \
+		done; \
 		echo "☑️ 所有 submodule 已更新"; \
 	fi
 
@@ -328,6 +338,12 @@ pull: current_dir ## 拉取最新代码（包含所有 submodule）
 	@if [ -n "$(SUBMODULES)" ]; then \
 		echo "📥 拉取所有 submodule 远程更新..."; \
 		git submodule update --remote --recursive; \
+		for sm in $(SUBMODULES); do \
+			sm_branch=$$(git config -f .gitmodules submodule.$$sm.branch 2>/dev/null || echo "main"); \
+			echo "🔗 $$sm 切回分支 $$sm_branch ..."; \
+			git -C $$sm checkout $$sm_branch 2>/dev/null && \
+			git -C $$sm merge --ff-only origin/$$sm_branch 2>/dev/null; \
+		done; \
 	fi
 	@echo "☑️ 主仓库与 submodule 已全部更新"
 
