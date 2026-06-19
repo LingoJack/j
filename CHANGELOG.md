@@ -1,3 +1,17 @@
+# v12.11.3
+
+
+### 改进
+
+- **Submodule 拉取逻辑**: `make sm-pull` 和 `make pull` 在更新 submodule 后自动切换回配置分支并执行 fast-forward merge，避免拉取后停留在 detached HEAD 状态
+- **Submodule 分支配置**: 在 `.gitmodules` 中为 jstudio 显式声明 `branch = main`
+
+### 其他
+
+- 更新 jstudio submodule 指针
+- 版本号升级至 12.11.3
+</result
+
 # v12.11.2
 
 

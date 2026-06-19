@@ -11,7 +11,7 @@ REPO="LingoJack/jcli"
 BINARY_NAME="j"
 INSTALL_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"
-DEFAULT_VERSION="v12.11.2"  # 备用默认版本（publish 时自动更新）
+DEFAULT_VERSION="v12.11.3"  # 备用默认版本（publish 时自动更新）
 
 
 # 颜色输出
