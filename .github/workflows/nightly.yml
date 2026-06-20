@@ -1,0 +1,344 @@
+name: Nightly
+
+# Nightly build for both the `j` CLI (jcli) and the JStudio Tauri desktop app.
+# Produces native installers for Windows, macOS (universal) and Linux, then
+# publishes them to a rolling `nightly` prerelease tag.
+#
+# Build chain:
+#   1. Checkout jcli + jstudio submodule.
+#   2. Build the `j` CLI binary (release). jstudio's build.rs stages it into
+#      resources/bin/ so it ships inside the GUI bundle.
+#   3. `tauri build` produces the platform-native installer.
+#
+# Architecture:
+#   Each platform job only builds + uploads a workflow artifact. The final
+#   `publish-nightly` job consolidates everything onto the rolling `nightly`
+#   tag, so the three build jobs never contend for a release.
+#
+# Runs daily at UTC 00:00 and on manual dispatch.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  INSTALL_SOURCE: github
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Windows x64 — j CLI + JStudio (NSIS .exe + MSI)
+  # ─────────────────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout jcli (with jstudio submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install build dependencies
+        run: choco install cmake --installargs '"ADD_CMakeToPath=system"' -y
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build j CLI (release)
+        run: cargo build --release
+
+      - name: Stage j binary for jstudio bundle
+        shell: pwsh
+        run: |
+          $binDir = "apps/jstudio/src-tauri/resources/bin"
+          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+          Copy-Item "target/release/j.exe" "$binDir/j.exe" -Force
+          Write-Host "Staged j.exe -> $binDir/j.exe"
+
+      - name: Install jstudio frontend deps
+        run: npm ci
+        working-directory: apps/jstudio
+
+      - name: Build JStudio (NSIS + MSI)
+        working-directory: apps/jstudio
+        run: npx tauri build --target x86_64-pc-windows-msvc
+
+      - name: Collect Windows artifacts
+        shell: pwsh
+        run: |
+          $artifacts = "artifacts"
+          New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+          $bundle = "apps/jstudio/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          # NSIS installer (.exe) and MSI installer
+          Get-ChildItem -Path "$bundle/nsis" -Filter *.exe -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $artifacts
+          Get-ChildItem -Path "$bundle/msi" -Filter *.msi -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $artifacts
+          Write-Host "=== Windows artifacts ==="
+          Get-ChildItem -Path $artifacts | ForEach-Object { Write-Host $_.Name }
+          if (-not (Get-ChildItem -Path $artifacts)) { throw "No Windows artifacts found" }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jstudio-windows-x64
+          path: artifacts/*
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # macOS Universal — j CLI (arm64+x86_64, lipo) + JStudio (.dmg)
+  # ─────────────────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS Universal
+    runs-on: macos-latest
+    steps:
+      - name: Checkout jcli (with jstudio submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain (stable, dual target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install build dependencies
+        run: brew install cmake
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build j CLI (aarch64 + x86_64)
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: Merge j into universal binary (lipo)
+        run: |
+          # build.rs probes ws_root/target/release/<j>, so place the universal
+          # binary there. lipo merges the two arch slices into one fat binary.
+          lipo -create \
+            -output target/release/j \
+            target/aarch64-apple-darwin/release/j \
+            target/x86_64-apple-darwin/release/j
+          file target/release/j
+
+      - name: Stage universal j binary for jstudio bundle
+        run: |
+          bin_dir="apps/jstudio/src-tauri/resources/bin"
+          mkdir -p "$bin_dir"
+          cp target/release/j "$bin_dir/j"
+          chmod +x "$bin_dir/j"
+          echo "Staged universal j -> $bin_dir/j"
+
+      - name: Install jstudio frontend deps
+        run: npm ci
+        working-directory: apps/jstudio
+
+      - name: Build JStudio (universal .dmg)
+        working-directory: apps/jstudio
+        run: npx tauri build --target universal-apple-darwin
+
+      - name: Collect macOS artifacts
+        run: |
+          mkdir -p artifacts
+          bundle="apps/jstudio/src-tauri/target/universal-apple-darwin/release/bundle"
+          # .dmg (primary installer)
+          find "$bundle/dmg" -name '*.dmg' -exec cp {} artifacts/ \; 2>/dev/null || true
+          echo "=== macOS artifacts ==="
+          ls -la artifacts
+          if [ -z "$(ls -A artifacts)" ]; then echo "::error::No macOS artifacts found"; exit 1; fi
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jstudio-macos-universal
+          path: artifacts/*
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Linux x64 — j CLI + JStudio (.deb + .AppImage)
+  # ─────────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux x64
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout jcli (with jstudio submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install system dependencies (Tauri requires webkit2gtk)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            cmake \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build j CLI (release)
+        run: cargo build --release
+
+      - name: Stage j binary for jstudio bundle
+        run: |
+          bin_dir="apps/jstudio/src-tauri/resources/bin"
+          mkdir -p "$bin_dir"
+          cp target/release/j "$bin_dir/j"
+          chmod +x "$bin_dir/j"
+          echo "Staged j -> $bin_dir/j"
+
+      - name: Install jstudio frontend deps
+        run: npm ci
+        working-directory: apps/jstudio
+
+      - name: Build JStudio (.deb + .AppImage)
+        working-directory: apps/jstudio
+        run: npx tauri build --target x86_64-unknown-linux-gnu
+
+      - name: Collect Linux artifacts
+        run: |
+          mkdir -p artifacts
+          bundle="apps/jstudio/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          # .deb and .AppImage
+          find "$bundle/deb" -name '*.deb' -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$bundle/appimage" -name '*.AppImage' -exec cp {} artifacts/ \; 2>/dev/null || true
+          echo "=== Linux artifacts ==="
+          ls -la artifacts
+          if [ -z "$(ls -A artifacts)" ]; then echo "::error::No Linux artifacts found"; exit 1; fi
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jstudio-linux-x64
+          path: artifacts/*
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Publish — consolidate all platform artifacts onto the rolling nightly tag
+  # ─────────────────────────────────────────────────────────────────────────
+  publish-nightly:
+    name: Publish Nightly Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find artifacts -type f \( \
+            -name '*.exe' -o \
+            -name '*.msi' -o \
+            -name '*.dmg' -o \
+            -name '*.deb' -o \
+            -name '*.AppImage' \
+          \) -exec cp {} release/ \;
+          echo "=== Artifacts to publish ==="
+          ls -la release
+          if [ -z "$(ls -A release)" ]; then echo "::error::No artifacts collected"; exit 1; fi
+
+      - name: Delete previous rolling nightly release + tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Remove the previous nightly release (and its assets) so the new
+          # build starts clean. Ignore errors — the tag may not exist yet.
+          gh release delete nightly --yes --cleanup-tag 2>/dev/null || true
+          echo "Cleared previous nightly release/tag (if any)"
+
+      - name: Generate release body
+        id: body
+        run: |
+          date=$(date -u '+%Y-%m-%d')
+          commit=$(git rev-parse --short HEAD)
+          {
+            echo "body<<EOF"
+            echo "# JStudio Nightly — ${date}"
+            echo ""
+            echo "Automated build from commit \`${commit}\`."
+            echo ""
+            echo "## Downloads"
+            echo ""
+            echo "| Platform | Artifact |"
+            echo "|---|---|"
+            cd release
+            for f in *; do
+              echo "| - | \`$f\` |"
+            done
+            echo ""
+            echo "> ⚠️ This is an automated nightly build and may be unstable."
+            echo "> The \`nightly\` tag is recreated each day."
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create rolling nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: JStudio Nightly
+          body: ${{ steps.body.outputs.body }}
+          prerelease: true
+          make_latest: 'false'
+          files: release/*
+          fail_on_unmatched_files: true
