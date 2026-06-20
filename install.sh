@@ -9,7 +9,8 @@ set -e
 # 配置
 REPO="LingoJack/jcli"
 BINARY_NAME="j"
-INSTALL_DIR="/usr/local/bin"
+BIN_DIR="$HOME/.jdata/bin"
+LINK_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"
 DEFAULT_VERSION="v12.11.5"  # 备用默认版本（publish 时自动更新）
 
@@ -128,39 +129,60 @@ install() {
     info "正在解压..."
     tar -xzf "$tmp_dir/j.tar.gz" -C "$tmp_dir"
 
-    # 检查安装目录是否存在，不存在则创建
-    if [ ! -d "$INSTALL_DIR" ]; then
-        info "创建安装目录 $INSTALL_DIR..."
-        sudo mkdir -p "$INSTALL_DIR"
-    fi
+    # 创建二进制安装目录（用户可写，无需 sudo）
+    mkdir -p "$BIN_DIR"
+    info "安装目录: $BIN_DIR"
 
-    # 检查安装目录权限
-    if [ ! -w "$INSTALL_DIR" ]; then
-        warn "安装目录 $INSTALL_DIR 需要管理员权限"
-        SUDO="sudo"
-    else
-        SUDO=""
-    fi
-
-    # 安装
-    info "正在安装到 $INSTALL_DIR..."
-    $SUDO mv "$tmp_dir/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-    $SUDO chmod +x "$INSTALL_DIR/$BINARY_NAME"
+    # 安装二进制本体到 ~/.jdata/bin
+    info "正在安装到 $BIN_DIR..."
+    mv "$tmp_dir/$BINARY_NAME" "$BIN_DIR/$BINARY_NAME"
+    chmod +x "$BIN_DIR/$BINARY_NAME"
 
     # 安装 Swift helpers（如果存在）
     for helper in j-indicator j-ax; do
         if [ -f "$tmp_dir/$helper" ]; then
-            $SUDO mv "$tmp_dir/$helper" "$INSTALL_DIR/$helper"
-            $SUDO chmod +x "$INSTALL_DIR/$helper"
+            mv "$tmp_dir/$helper" "$BIN_DIR/$helper"
+            chmod +x "$BIN_DIR/$helper"
             info "已安装 $helper"
         fi
     done
 
+    # macOS: 重新签名 adhoc（Apple Silicon 下移动二进制会导致 SIGKILL）
+    if [ "$(uname)" = "Darwin" ]; then
+        info "macOS: 重新签名 adhoc ..."
+        codesign -s - --force "$BIN_DIR/$BINARY_NAME" 2>/dev/null
+        for helper in j-indicator j-ax; do
+            if [ -f "$BIN_DIR/$helper" ]; then
+                codesign -s - --force "$BIN_DIR/$helper" 2>/dev/null
+            fi
+        done
+    fi
+
+    # 创建 symlink 到 /usr/local/bin
+    mkdir -p "$LINK_DIR" 2>/dev/null || true
+    if [ -w "$LINK_DIR" ]; then
+        SUDO=""
+    else
+        warn "符号链接目录 $LINK_DIR 需要管理员权限"
+        SUDO="sudo"
+    fi
+
+    info "创建符号链接 $LINK_DIR/$BINARY_NAME → $BIN_DIR/$BINARY_NAME ..."
+    $SUDO ln -sf "$BIN_DIR/$BINARY_NAME" "$LINK_DIR/$BINARY_NAME"
+
+    for helper in j-indicator j-ax; do
+        if [ -f "$BIN_DIR/$helper" ]; then
+            $SUDO ln -sf "$BIN_DIR/$helper" "$LINK_DIR/$helper"
+            info "符号链接: $LINK_DIR/$helper → $BIN_DIR/$helper"
+        fi
+    done
+
     # 验证安装
-    if [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
+    if [ -x "$BIN_DIR/$BINARY_NAME" ]; then
         info "☑️ 安装成功！"
         info ""
-        info "安装位置: $INSTALL_DIR/$BINARY_NAME"
+        info "二进制位置: $BIN_DIR/$BINARY_NAME"
+        info "符号链接: $LINK_DIR/$BINARY_NAME → $BIN_DIR/$BINARY_NAME"
         info "数据目录: $DATA_DIR"
         info ""
         info "运行 'j version' 查看版本信息"
@@ -174,19 +196,28 @@ install() {
 uninstall() {
     info "正在卸载..."
     
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-        if [ ! -w "$INSTALL_DIR" ]; then
-            SUDO="sudo"
-        else
-            SUDO=""
+    # 删除二进制本体
+    for f in "$BINARY_NAME" j-indicator j-ax; do
+        if [ -f "$BIN_DIR/$f" ]; then
+            rm -f "$BIN_DIR/$f"
         fi
-        $SUDO rm -f "$INSTALL_DIR/$BINARY_NAME"
-        $SUDO rm -f "$INSTALL_DIR/j-indicator"
-        $SUDO rm -f "$INSTALL_DIR/j-ax"
-        info "☑️ 已卸载程序及 helpers"
+    done
+
+    # 删除符号链接
+    if [ -w "$LINK_DIR" ]; then
+        SUDO=""
     else
-        warn "程序未安装"
+        SUDO="sudo"
     fi
+    for f in "$BINARY_NAME" j-indicator j-ax; do
+        if [ -L "$LINK_DIR/$f" ] || [ -f "$LINK_DIR/$f" ]; then
+            $SUDO rm -f "$LINK_DIR/$f"
+        fi
+    done
+
+    info "☑️ 已卸载程序及 helpers"
+    info "  二进制目录: $BIN_DIR"
+    info "  符号链接目录: $LINK_DIR"
 
     info ""
     warn "数据目录 $DATA_DIR 未删除，如需彻底清理请手动执行:"

@@ -247,8 +247,9 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 cargo uninstall j-cli
 
 # 手动删除
-sudo rm /usr/local/bin/j  # 一键安装方式
-rm ~/.cargo/bin/j          # cargo 安装方式
+rm ~/.jdata/bin/j               # 一键安装（二进制本体）
+sudo rm /usr/local/bin/j        # 一键安装（符号链接）
+rm ~/.cargo/bin/j               # Cargo 安装
 
 # 彻底清理（可选）
 rm -rf ~/.jdata

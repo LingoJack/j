@@ -5,11 +5,14 @@ SHELL := $(shell which bash 2>/dev/null || echo /bin/bash)
 # 变量定义
 # ============================================
 # 跨平台安装目录
+# 二进制本体安装到 ~/.jdata/bin，然后 symlink 到系统路径
 ifeq ($(OS),Windows_NT)
-	INSTALL_DIR := $(USERPROFILE)/.cargo/bin
+	INSTALL_DIR := $(USERPROFILE)/.jdata/bin
 else
-	INSTALL_DIR := /usr/local/bin
+	INSTALL_DIR := $(HOME)/.jdata/bin
 endif
+# Unix symlink 目标路径
+LINK_DIR := /usr/local/bin
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
 JSTUDIO_DIR := apps/jstudio
@@ -458,7 +461,7 @@ release: ## 构建发布版本（release, INSTALL_SOURCE=github）
 # ============================================
 # 安装相关
 # ============================================
-install: ## 从本地构建安装（Unix → /usr/local/bin，Windows → ~/.cargo/bin）
+install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/bin，Windows → ~/.jdata/bin）
 	@echo "📦 从本地构建安装 j-cli..."
 	@$(MAKE) release
 	@mkdir -p "$(INSTALL_DIR)"; \
@@ -467,20 +470,33 @@ install: ## 从本地构建安装（Unix → /usr/local/bin，Windows → ~/.car
 		echo "☑️ 安装成功！"; \
 		echo "   安装位置: $(INSTALL_DIR)/j.exe"; \
 	else \
-		if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-		$$SUDO rm -f "$(INSTALL_DIR)/j"; \
-		$$SUDO cp "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
-		$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
+		cp -f "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
+		chmod +x "$(INSTALL_DIR)/j"; \
 		for helper in j-indicator j-ax; do \
 			if [ -f "$(TARGET_DIR)/$$helper" ]; then \
-				$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
-				$$SUDO cp "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
-				$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
+				cp -f "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
+				chmod +x "$(INSTALL_DIR)/$$helper"; \
 				echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
 			fi; \
 		done; \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			echo "   🔏 macOS: 重新签名 adhoc ..."; \
+			codesign -s - --force "$(INSTALL_DIR)/j" 2>/dev/null; \
+			for helper in j-indicator j-ax; do \
+				if [ -f "$(INSTALL_DIR)/$$helper" ]; then \
+					codesign -s - --force "$(INSTALL_DIR)/$$helper" 2>/dev/null; \
+				fi; \
+			done; \
+		fi; \
+		ln -sf "$(INSTALL_DIR)/j" "$(LINK_DIR)/j" 2>/dev/null || sudo ln -sf "$(INSTALL_DIR)/j" "$(LINK_DIR)/j"; \
+		for helper in j-indicator j-ax; do \
+			if [ -f "$(INSTALL_DIR)/$$helper" ]; then \
+				ln -sf "$(INSTALL_DIR)/$$helper" "$(LINK_DIR)/$$helper" 2>/dev/null || sudo ln -sf "$(INSTALL_DIR)/$$helper" "$(LINK_DIR)/$$helper"; \
+			fi; \
+		done; \
 		echo "☑️ 安装成功！"; \
-		echo "   安装位置: $(INSTALL_DIR)/j"; \
+		echo "   二进制位置: $(INSTALL_DIR)/j"; \
+		echo "   符号链接: $(LINK_DIR)/j → $(INSTALL_DIR)/j"; \
 	fi; \
 	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	echo "   版本: v$$version (本地构建)"
@@ -491,9 +507,13 @@ uninstall: ## 卸载
 		rm -f "$(INSTALL_DIR)/j.exe"; \
 		echo "☑️ j 已从 $(INSTALL_DIR) 卸载"; \
 	else \
-		if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
-		$$SUDO rm -f "$(INSTALL_DIR)/j" "$(INSTALL_DIR)/j-indicator" "$(INSTALL_DIR)/j-ax"; \
-		echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 卸载"; \
+		for f in j j-indicator j-ax; do \
+			rm -f "$(INSTALL_DIR)/$$f"; \
+			if [ -L "$(LINK_DIR)/$$f" ] || [ -f "$(LINK_DIR)/$$f" ]; then \
+				rm -f "$(LINK_DIR)/$$f" 2>/dev/null || sudo rm -f "$(LINK_DIR)/$$f"; \
+			fi; \
+		done; \
+		echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 和 $(LINK_DIR) 卸载"; \
 	fi
 
 # ============================================

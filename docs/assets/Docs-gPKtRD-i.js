@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-DDvf-pcx.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-DMX0vYaY.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -723,8 +723,9 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 cargo uninstall j-cli
 
 # Or manual removal
-sudo rm /usr/local/bin/j  # One-click install
-rm ~/.cargo/bin/j          # Cargo install
+rm ~/.jdata/bin/j               # One-click install (binary)
+sudo rm /usr/local/bin/j        # One-click install (symlink)
+rm ~/.cargo/bin/j               # Cargo install
 
 # (Optional) Remove data directory
 rm -rf ~/.jdata
@@ -2796,7 +2797,7 @@ rm -rf ~/.jdata
 powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 
 # 或手动删除
-Remove-Item "$env:LOCALAPPDATA\\j-cli" -Recurse -Force
+Remove-Item "$env:USERPROFILE\\.jdata\\bin" -Recurse -Force
 
 # （可选）删除数据目录
 Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force

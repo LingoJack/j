@@ -218,4 +218,5 @@ allow:
 - Shell(cd /Users/lingojack/dev_custom/jcli:*)
 - Shell(cargo jb:*)
 - Shell(date '+%Y-%m-%d:*)
+- Shell(ls -al:*)
 deny: []

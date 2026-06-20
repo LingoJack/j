@@ -88,7 +88,7 @@ rm -rf ~/.jdata
 powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 
 # 或手动删除
-Remove-Item "$env:LOCALAPPDATA\j-cli" -Recurse -Force
+Remove-Item "$env:USERPROFILE\.jdata\bin" -Recurse -Force
 
 # （可选）删除数据目录
 Remove-Item "$env:USERPROFILE\.jdata" -Recurse -Force

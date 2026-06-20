@@ -74,8 +74,9 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 cargo uninstall j-cli
 
 # Or manual removal
-sudo rm /usr/local/bin/j  # One-click install
-rm ~/.cargo/bin/j          # Cargo install
+rm ~/.jdata/bin/j               # One-click install (binary)
+sudo rm /usr/local/bin/j        # One-click install (symlink)
+rm ~/.cargo/bin/j               # Cargo install
 
 # (Optional) Remove data directory
 rm -rf ~/.jdata

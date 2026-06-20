@@ -19,7 +19,7 @@ $ErrorActionPreference = "Stop"
 # 配置
 $Repo = "LingoJack/jcli"
 $BinaryName = "j"
-$InstallDir = "$env:LOCALAPPDATA\j-cli"
+$InstallDir = "$env:USERPROFILE\.jdata\bin"
 $DataDir = "$env:USERPROFILE\.jdata"
 $DefaultVersion = "v12.11.5"  # 备用默认版本（publish 时自动更新）
 
