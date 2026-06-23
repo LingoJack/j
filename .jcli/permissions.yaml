@@ -219,4 +219,5 @@ allow:
 - Shell(cargo jb:*)
 - Shell(date '+%Y-%m-%d:*)
 - Shell(ls -al:*)
+- Shell(find /Users/jacklingo/dev_custom/jcli/apps/jstudio/src:*)
 deny: []
