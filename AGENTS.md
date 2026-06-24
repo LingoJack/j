@@ -80,6 +80,19 @@ make status-jstudio
 - 修改 jstudio 后需先 push 子模块，再更新主仓库指针
 - `make push-jstudio` 会自动同步主仓库指针
 
+
+### CI / Nightly Build
+
+`.github/workflows/nightly.yml` 每天 UTC 00:00（或手动触发）构建 `j` CLI 与 JStudio GUI，产出三平台原生安装包并发布到滚动的 `nightly` 预发布 tag：
+
+- **Windows x64**：NSIS `.exe` + `.msi`
+- **macOS Universal**：`.dmg`（ARM64 + x86_64 经 `lipo` 合并）
+- **Linux x64**：`.deb` + `.AppImage`
+
+构建链：先 `cargo build --release` 编译宿主 `j`，jstudio 的 `build.rs` 会把它 stage 到 `resources/bin/` 打进 GUI 包。三个 build job 各自上传 workflow artifact，`publish-nightly` job 汇总后用 `gh release delete --cleanup-tag` 清掉旧的滚动 release 再重建，保证 `nightly` tag 始终指向最新构建。
+
+手动触发：Actions → Nightly → Run workflow。
+
 ## 架构概览
 
 项目采用 **库 + 二进制分离** 架构：
