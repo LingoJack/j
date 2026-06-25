@@ -319,6 +319,7 @@ export default function App() {
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
   const autoScrollRef = useRef(true)
+  const composingRef = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   useEffect(() => {
@@ -659,6 +660,7 @@ export default function App() {
   }, [send, activeSection, sidebarCollapsed])
 
   const handleKeyDown = useCallback((e) => {
+    if (composingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
@@ -884,6 +886,11 @@ export default function App() {
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => { composingRef.current = true }}
+            onCompositionEnd={e => {
+              composingRef.current = false
+              setInputText(e.target.value)
+            }}
             className={`flex-1 bg-bg3 border rounded-lg px-4 py-3 text-fg text-[15px] resize-none outline-none max-h-[140px] font-[inherit] leading-relaxed transition-colors duration-200 placeholder:text-fg3 focus:border-accent`}
           />
           <button

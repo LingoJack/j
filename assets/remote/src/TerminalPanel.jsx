@@ -26,6 +26,7 @@ export default function TerminalPanel({ terminalHistory, send, onBack, theme }) 
   const inputRef = useRef(null)
   const scrollRef = useRef(null)
   const lastConsumedIdx = useRef(-1)
+  const composingRef = useRef(false)
   const c = THEMES[theme === 'light' ? 'light' : 'dark']
 
   useEffect(() => {
@@ -44,6 +45,9 @@ export default function TerminalPanel({ terminalHistory, send, onBack, theme }) 
   }, [command, send, executing])
 
   const handleKeyDown = useCallback((e) => {
+    // IME 组合期间（中文输入法等）不拦截任何按键，避免干扰输入法提交
+    // 移动端 isComposing/keyCode 检测不可靠，优先使用 composition 事件 ref
+    if (composingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleExec()
@@ -149,6 +153,11 @@ export default function TerminalPanel({ terminalHistory, send, onBack, theme }) 
             value={command}
             onChange={e => setCommand(e.target.value)}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => { composingRef.current = true }}
+            onCompositionEnd={e => {
+              composingRef.current = false
+              setCommand(e.target.value)
+            }}
             autoComplete="off"
             autoFocus
             spellCheck={false}
