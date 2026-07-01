@@ -82,12 +82,15 @@ pub struct WrapEngine {
     /// "膨胀块"，从而执行跨块跳越（避免光标停留在续行上、卡在视觉行号断层处）。
     table_blocks: Vec<(usize, usize)>,
     /// 每行的"渲染后 per-char 显示宽度"数组：
-    ///   - `Some(widths)`：该行折行宽度按 widths 累加（Markdown 标记 = 0，
+    ///   - `Some((widths, prefix_chars))`：该行折行宽度按 widths 累加（Markdown 标记 = 0，
     ///     可见字符 = `char_width`）。长度等于 `lines[i].chars().count()`。
+    ///     `prefix_chars` 是该行 block 前缀（`- `/`# `/`> `）在源码中的字符数，
+    ///     wrap_engine 推进 `visible_pos` 时会跳过这些前缀字符（它们在渲染产物
+    ///     中不存在，pulldown-cmark 把它们当 block syntax 消费）。
     ///   - `None`：该行按源码 `char_width` 累加（兼容老行为）。
     ///
     /// 数组本身长度为 0 表示完全不启用（所有行按源码宽）。
-    line_visible_widths: Vec<Option<Vec<u8>>>,
+    line_visible_widths: Vec<Option<(Vec<u8>, usize)>>,
 }
 
 impl Default for WrapEngine {
@@ -190,8 +193,10 @@ impl WrapEngine {
     ///
     /// `line_visible_widths`：可选切片，长度 0 表示所有行按源码 `char_width` 算
     /// （兼容老行为）；否则长度应等于 `lines.len()`，每个元素：
-    ///   - `Some(per_char_widths)`：该行用此 per-char 宽度数组累加（每个源码
-    ///     char 渲染后占多少列；Markdown 标记符号 = 0）。
+    ///   - `Some((per_char_widths, prefix_chars))`：该行用此 per-char 宽度数组
+    ///     累加（每个源码 char 渲染后占多少列；Markdown 标记符号 = 0）。
+    ///     `prefix_chars` 是该行 block 前缀在源码中的字符数，推进 `visible_pos`
+    ///     时跳过这些前缀字符。
     ///   - `None`：该行按源码 `char_width` 累加（代码块、光标行、表格行等
     ///     不参与 inline 渲染宽度补偿的行）。
     pub fn rebuild_cache_with_blocks_and_widths(
@@ -199,7 +204,7 @@ impl WrapEngine {
         lines: &[String],
         cb_ranges: &[(usize, usize)],
         table_blocks: &[(usize, usize, usize)],
-        line_visible_widths: &[Option<Vec<u8>>],
+        line_visible_widths: &[Option<(Vec<u8>, usize)>],
     ) {
         self.line_cache.clear();
         self.line_visual_counts.clear();
@@ -249,8 +254,10 @@ impl WrapEngine {
                 0
             } else {
                 let w = self.effective_width(i);
-                let widths_for_line: Option<&[u8]> =
-                    line_visible_widths.get(i).and_then(|opt| opt.as_deref());
+                let widths_for_line: Option<&[u8]> = line_visible_widths
+                    .get(i)
+                    .and_then(|opt| opt.as_ref())
+                    .map(|(widths, _)| widths.as_slice());
                 Self::compute_visual_line_count(line, widths_for_line, w, self.enabled)
             };
             self.line_visual_counts.push(count);
@@ -284,6 +291,10 @@ impl WrapEngine {
     ///     widths.len() 应等于 `line.chars().count()`，超出长度的 char fallback 到
     ///     `char_width`；
     ///   - `None`：按源码 `char_width(ch)` 累加（兼容老行为）。
+    ///
+    /// 注意：本函数只算视觉行数量，不维护 `visible_pos`，因此不需要
+    /// `prefix_chars` 参数。`visible_pos` 的维护（含前缀跳过）在
+    /// [`wrap_line_inner`] 中完成。
     fn compute_visual_line_count(
         line: &str,
         visible_widths: Option<&[u8]>,
@@ -322,11 +333,13 @@ impl WrapEngine {
         for (i, line) in lines.iter().enumerate().skip(start).take(end - start) {
             if !self.line_cache.contains_key(&i) {
                 let w = self.effective_width(i);
-                let widths = self
+                let (widths, prefix_chars) = self
                     .line_visible_widths
                     .get(i)
-                    .and_then(|opt| opt.as_deref());
-                let vlines = Self::wrap_line_inner(line, i, widths, w, self.enabled);
+                    .and_then(|opt| opt.as_ref())
+                    .map(|(widths, p)| (Some(widths.as_slice()), *p))
+                    .unwrap_or((None, 0));
+                let vlines = Self::wrap_line_inner(line, i, widths, prefix_chars, w, self.enabled);
                 self.line_cache.insert(i, vlines);
             }
         }
@@ -336,17 +349,25 @@ impl WrapEngine {
     #[allow(dead_code)]
     pub fn wrap_line(&self, line: &str, line_num: usize) -> Vec<VisualLine> {
         let w = self.effective_width(line_num);
-        let widths = self
+        let (widths, prefix_chars) = self
             .line_visible_widths
             .get(line_num)
-            .and_then(|opt| opt.as_deref());
-        Self::wrap_line_inner(line, line_num, widths, w, self.enabled)
+            .and_then(|opt| opt.as_ref())
+            .map(|(widths, p)| (Some(widths.as_slice()), *p))
+            .unwrap_or((None, 0));
+        Self::wrap_line_inner(line, line_num, widths, prefix_chars, w, self.enabled)
     }
 
     /// 将逻辑行按指定宽度拆分为视觉行（支持可选 per-char 渲染宽度）。
     ///
     /// `visible_widths` 语义与 [`compute_visual_line_count`] 一致：`Some` 表示
     /// 按 Markdown 渲染后宽度累加（标记符号 = 0），`None` 表示按源码字符宽。
+    ///
+    /// `prefix_chars`：该行 block 前缀在源码中的字符数。仅当 `visible_widths`
+    /// 为 `Some` 时有意义。前缀字符的 width 仍累加到 `current_width`（保留
+    /// BUG #4 修复，让折行宽度判断正确），但推进 `visible_pos` 时**跳过它们**
+    /// （pulldown-cmark 把 `- `/`# `/`> ` 等 block syntax 当 block 事件消费，
+    /// `render_inline(line)` 的产物中不含前缀字符）。
     ///
     /// 注意：折行点仍然落在源码 char 边界上，`start_col`/`end_col` 仍是源码
     /// 字符索引，光标 / 选区 / 鼠标定位的契约不变。`display_width` 记录的是
@@ -356,6 +377,7 @@ impl WrapEngine {
         line: &str,
         line_num: usize,
         visible_widths: Option<&[u8]>,
+        prefix_chars: usize,
         width: usize,
         enabled: bool,
     ) -> Vec<VisualLine> {
@@ -383,7 +405,9 @@ impl WrapEngine {
         let mut col = 0;
         // 跟踪"渲染产物 char 序列"中的位置：
         // - 当 visible_widths == None：每个源码 char 都是一个渲染 char（visible_pos == col）
-        // - 当 visible_widths == Some：仅 visible_widths[idx] > 0 的源码 char 在渲染产物里占位
+        // - 当 visible_widths == Some：仅 visible_widths[idx] > 0 的源码 char 在渲染产物里占位，
+        //   且前 prefix_chars 个 char（block 前缀）虽然在源码中可见、width > 0，
+        //   但 pulldown-cmark 把它们当 block syntax 消费 → 渲染产物中不含 → 不推进 visible_pos。
         let mut visible_pos: usize = 0;
         let mut visible_start: usize = 0;
 
@@ -410,10 +434,11 @@ impl WrapEngine {
             current_width += ch_width;
             col += 1;
             // 渲染端 char index 推进：
-            // 有 widths 时，仅当该 char 在渲染产物里可见（width > 0 或被解析为可见正文）
-            // 才占一个 char；无 widths 时（按源码宽折行），每个源码 char 都对应一个渲染 char。
+            // - 有 widths 时，仅当该 char 在渲染产物里可见（width > 0）且不是 block 前缀
+            //   （idx >= prefix_chars）才占一个 char；
+            // - 无 widths 时（按源码宽折行），每个源码 char 都对应一个渲染 char。
             if visible_widths.is_some() {
-                if ch_width > 0 {
+                if ch_width > 0 && idx >= prefix_chars {
                     visible_pos += 1;
                 }
             } else {
@@ -444,7 +469,7 @@ impl WrapEngine {
         width: usize,
         enabled: bool,
     ) -> Vec<VisualLine> {
-        Self::wrap_line_inner(line, line_num, None, width, enabled)
+        Self::wrap_line_inner(line, line_num, None, 0, width, enabled)
     }
 
     /// 通过二分查找将视觉行号映射到逻辑行号（O(log n)）

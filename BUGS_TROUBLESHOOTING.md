@@ -232,3 +232,68 @@ Markdown 渲染态下，heading / list / blockquote 等块级内容在行尾或�
 - 宽度计算必须区分 block syntax 和 inline syntax。不能直接把 parser 的“可见文本”结果无条件当成 editor 的折行宽度图。
 - 源码坐标、渲染坐标、终端 cell 宽度三者必须有明确边界；一旦混用，就会出现源码态正常、渲染态尾部裁剪的 bug。
 - wrap cache 依赖 block cache 时，必须先更新 block cache，再重建 wrap cache。
+
+---
+
+## 5. Markdown 编辑器：宽度小折行吞字符（block prefix 行续行少字符）
+
+**涉及文件**
+
+- `src/tui/editor_core/renderer.rs`：`block_prefix_source_widths()`、`compute_line_visible_widths()`、`count_inline_render_chars()`
+- `src/tui/editor_core/wrap_engine.rs`：`wrap_line_inner()` 的 `visible_pos` 推进逻辑、`VisualLine.visible_start_char / visible_end_char`
+- `src/tui/editor_core/renderer.rs`：`render_non_insert_line()` 折行路径 `extract_span_range(&full_line_spans, vl.visible_start_char, vl.visible_end_char)`
+
+### 现象
+
+在窄终端宽度下，含 Markdown 块级前缀（`- ` / `# ` / `> ` / `1. `）的长段落被折行时，续行开头会"吞"掉几个字符——少显示渲染产物开头的 N 个字符，N 等于前缀在源码中的字符数。
+
+未折行的行、纯文本行、代码块、表格行不复现。普通段落（`**bold**` 等 inline 标记）也不复现。
+
+### 触发条件
+
+同时满足：
+
+1. 非光标行（按渲染后宽度折行路径）。
+2. 该行是 block prefix 行（heading / list / blockquote / ordered list）。
+3. 该行被 `wrap_engine` 折成 ≥ 2 段视觉行。
+4. 终端宽度足够小，让前缀 + 部分正文超过 wrap_width 触发折行。
+
+### 根因
+
+`block_prefix_source_widths`（BUG #4 修复引入）给 heading/list/blockquote 前缀字符（`-`、`#`、`>`、空格）返回 `char_width(ch)`（>0），让 wrap_engine 把这些前缀字符当作"渲染产物中的 char"推进了 `visible_pos`。
+
+但 `render_inline(line_content)` 走整行 inline 解析时，pulldown-cmark 把 `- `/`# `/`> ` 等 block syntax **当作 block 事件消费掉了**，渲染产物（`parse_inline_text` 输出的 `Vec<Inline>`）中**不含前缀字符**。
+
+结果：
+
+- `vl.visible_end_char` 比渲染产物实际长度多算前缀字符数（如 `- ` 多算 2，`### ` 多算 4）。
+- 续行 `extract_span_range(spans, vl.visible_start_char, vl.visible_end_char)` 切片时，`visible_start_char` 比渲染产物真实起点偏后 N 个字符 → 续行开头少显示 N 个字符 → "吞字符"。
+
+这是 BUG #2 和 BUG #4 修复的**冲突点**：
+
+- BUG #2 修复要求折行行统一走"整行 inline 渲染 + 按 visible char 索引切片"，保证 vl 之间 char 序列连续。
+- BUG #4 修复要求 block prefix 行的前缀字符按 `char_width` 算（保留宽度），避免终端裁剪。
+- 两者在 block prefix 行折行场景下冲突：前缀字符的 width > 0（BUG #4）让 `visible_pos` 推进，但渲染产物中不含前缀（BUG #2 路径）→ 坐标系错位。
+
+BUG #2 修复文档里"前缀字符以源码形式 fall through 到 inline"的说法**不准确**——pulldown-cmark 实际消费了前缀，没有 fall through。
+
+### 修复
+
+让 wrap_engine 知道每行的"前缀字符数"（`prefix_chars`），推进 `visible_pos` 时**跳过前缀字符**：
+
+1. `block_prefix_source_widths` 改返回 `Option<(Vec<u8>, usize)>`：`(per_char_widths, prefix_chars)`。
+   - 前缀字符的 width 仍为 `char_width`（保留 BUG #4 修复，折行宽度判断正确）。
+   - `prefix_chars` = 源码字符数 - 渲染产物字符数（通过 `count_inline_render_chars` 调 `parse_inline_text` 计算）。
+2. `compute_line_visible_widths` 改返回 `Vec<Option<(Vec<u8>, usize)>>`，普通段落返回 `(widths, 0)`。
+3. `WrapEngine::line_visible_widths` 字段类型改为 `Vec<Option<(Vec<u8>, usize)>>`。
+4. `wrap_line_inner` 循环中：`if ch_width > 0 && idx >= prefix_chars { visible_pos += 1; }`——前缀字符不推进 `visible_pos`，但仍累加 width 到 `current_width`。
+
+这样 `visible_start_char` / `visible_end_char` 严格对应渲染产物坐标，续行 `extract_span_range` 切片不再错位。
+
+### 教训 / 防回归
+
+- **`visible_pos` 是"渲染产物 char 序列"的坐标，不是"源码 char 序列"的坐标**。任何在渲染产物中不存在的源码字符（block prefix、inline 标记符号）都不应推进 `visible_pos`。BUG #4 修复让前缀字符的 width > 0（保留折行宽度），但没同步让 `visible_pos` 跳过它们——这就是 bug 的根因。
+- **折行宽度（`current_width`）和渲染 char 位置（`visible_pos`）是两个独立的累加器**，不能用同一个条件（`ch_width > 0`）同时驱动。前缀字符需要：累加 width（保留宽度）+ 不推进 visible_pos（渲染产物中不存在）。这两个语义必须分离。
+- BUG #2 的"统一走整行解析 + 切片"修复**只对 inline 标记成立**（`**`/`` ` ``/`[]()` 在渲染产物中不存在 → width=0 → 不推进 visible_pos，自动对齐）。block prefix 字符的 width > 0（BUG #4 要求），需要额外机制（`prefix_chars`）让 `visible_pos` 跳过。
+- pulldown-cmark 对 `- xxx` / `# xxx` / `> xxx` 等 block prefix 行，**在 inline-only 解析（`parse_inline_text`）中也会消费前缀**（发出 List/Item/Heading/BlockQuote 事件，但 inline 产物不含前缀字符）。这与"block prefix 在源码中可见、在 inline 渲染产物中不可见"的直觉一致，但与 BUG #2 文档里"前缀以源码形式 fall through 到 inline"的描述矛盾——已修正该描述。
+- 这类 bug 单元测试难发现：单测 `block_prefix_source_widths` 会说"widths 之和 = display_width（正确）"，单测 `wrap_engine` 会说"visible 区间首尾相接（在源码坐标系下）"。只有**对比 visible_end_char 与渲染产物实际长度**才能发现错位。改这块代码时必须用"渲染产物坐标"作为参照系验证。

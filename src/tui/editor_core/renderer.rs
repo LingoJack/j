@@ -23,17 +23,58 @@ use crate::util::text::char_width;
 
 use block_cache::BlockCache;
 
-fn block_prefix_source_widths(line: &str) -> Option<Vec<u8>> {
+/// 为 block prefix 行（heading / list / blockquote / ordered list）计算：
+///   - per-char 渲染宽度数组（前缀字符按 `char_width` 保留，BUG #4 修复）
+///   - 前缀字符数（leading whitespace + block marker）
+///
+/// 前缀字符数用于让 wrap_engine 推进 `visible_pos` 时**跳过前缀字符**：
+/// pulldown-cmark 把 `- `/`# `/`> ` 等 block syntax 当作 block 事件消费，
+/// `render_inline(line)` 的产物中**不含前缀字符**。如果 wrap_engine 把前缀
+/// 字符也算进 `visible_pos`，会导致 `visible_end_char` 比渲染产物实际长度
+/// 多算前缀字符数 → 续行 `extract_span_range(spans, visible_start_char,
+/// visible_end_char)` 切片错位 → "宽度小折行吞字符"。
+///
+/// 前缀字符数通过对比 `parse_inline_text(line)` 的渲染产物长度与源码长度
+/// 计算得出，避免手写各种 block marker 的匹配规则。
+fn block_prefix_source_widths(line: &str) -> Option<(Vec<u8>, usize)> {
     let trimmed = line.trim_start();
-    if is_markdown_block_prefix_line(trimmed) {
-        Some(
-            line.chars()
-                .map(|ch| char_width(ch).min(u8::MAX as usize) as u8)
-                .collect(),
-        )
-    } else {
-        None
+    if !is_markdown_block_prefix_line(trimmed) {
+        return None;
     }
+
+    let widths: Vec<u8> = line
+        .chars()
+        .map(|ch| char_width(ch).min(u8::MAX as usize) as u8)
+        .collect();
+
+    // 计算前缀字符数：源码字符数 - 渲染产物字符数。
+    // pulldown-cmark 消费 `- ` / `# ` / `> ` 等 block 前缀，渲染产物只含
+    // inline 内容。两者的差就是"前缀在源码中占的 char 数"。
+    let source_chars = line.chars().count();
+    let render_chars = count_inline_render_chars(line);
+    let prefix_chars = source_chars.saturating_sub(render_chars);
+
+    Some((widths, prefix_chars))
+}
+
+/// 计算 `parse_inline_text(line)` 产物的总字符数（递归统计所有可见文本）。
+fn count_inline_render_chars(line: &str) -> usize {
+    use crate::markdown::ir::Inline;
+    use inline::parse_inline_text;
+
+    fn count(inl: &Inline) -> usize {
+        match inl {
+            Inline::Text(s) | Inline::Code(s) => s.chars().count(),
+            Inline::Strong(c) | Inline::Emphasis(c) | Inline::Strikethrough(c) => {
+                c.iter().map(count).sum()
+            }
+            Inline::Link { text, .. } => text.iter().map(count).sum(),
+            Inline::Image { alt, .. } => alt.chars().count(),
+            Inline::SoftBreak | Inline::HardBreak => 0,
+        }
+    }
+
+    parse_inline_text(line).iter().map(count).sum()
 }
 
 fn is_markdown_block_prefix_line(trimmed: &str) -> bool {
@@ -143,8 +184,11 @@ impl MarkdownRenderer {
 
     /// 为给定的源码行集合计算"按渲染后宽度折行"用的 per-char 宽度数组。
     ///
-    /// 返回 `Vec<Option<Vec<u8>>>`，长度 = `lines.len()`：
-    /// - `Some(widths)`：该行折行宽度按渲染后算（Markdown 标记符号 = 0）；
+    /// 返回 `Vec<Option<(Vec<u8>, usize)>>`，长度 = `lines.len()`：
+    /// - `Some((widths, prefix_chars))`：该行折行宽度按渲染后算（Markdown 标记符号 = 0）；
+    ///   `prefix_chars` 是该行 block 前缀（`- `/`# `/`> `）在源码中的字符数，
+    ///   wrap_engine 推进 `visible_pos` 时会跳过这些前缀字符（它们在渲染产物
+    ///   中不存在）。
     /// - `None`：该行按源码 `char_width` 算（fence 行、代码块内容行、表格行、
     ///   以及光标所在行 `cursor_line`）。
     ///
@@ -154,7 +198,7 @@ impl MarkdownRenderer {
         &self,
         lines: &[String],
         cursor_line: Option<usize>,
-    ) -> Vec<Option<Vec<u8>>> {
+    ) -> Vec<Option<(Vec<u8>, usize)>> {
         lines
             .iter()
             .enumerate()
@@ -170,10 +214,10 @@ impl MarkdownRenderer {
                 {
                     return None;
                 }
-                if let Some(widths) = block_prefix_source_widths(line) {
-                    return Some(widths);
+                if let Some((widths, prefix_chars)) = block_prefix_source_widths(line) {
+                    return Some((widths, prefix_chars));
                 }
-                Some(inline_width::compute_visible_widths(line))
+                Some((inline_width::compute_visible_widths(line), 0))
             })
             .collect()
     }
@@ -522,8 +566,10 @@ impl MarkdownRenderer {
         // 修复：**只要该行被折成多段**，第一段也走和续行一致的"整行 inline
         // 渲染 + 按 visible char 索引切片"路径，保证两条路径的 char 序列
         // 严格连续。代价：折行场景下 heading 图标 / bullet / blockquote 竖条
-        // 等块级前缀不再渲染（前缀字符以源码形式 fall through 到 inline）；
-        // 这是与"字符不丢失"的取舍。未折行场景沿用 `render_single_line_with_number`。
+        // 等块级前缀不再渲染（pulldown-cmark 在 inline 解析时把 `- `/`# `/`> `
+        // 等 block syntax 当 block 事件消费，渲染产物中不含前缀字符——
+        // 详见 BUGS_TROUBLESHOOTING.md #5）；这是与"字符不丢失"的取舍。
+        // 未折行场景沿用 `render_single_line_with_number`。
         let is_wrapped = vl.end_col < line_content.chars().count();
         if search.is_searching() && search.match_count() > 0 {
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
@@ -726,7 +772,8 @@ mod tests {
     #[test]
     fn block_prefix_widths_keep_source_prefix_visible() {
         let heading = "### tail should not be hidden";
-        let widths = block_prefix_source_widths(heading).expect("heading should use source widths");
+        let (widths, prefix_chars) =
+            block_prefix_source_widths(heading).expect("heading should use source widths");
         let inline_widths = inline_width::compute_visible_widths(heading);
 
         assert_eq!(
@@ -737,6 +784,26 @@ mod tests {
             inline_widths.iter().take(4).any(|w| *w == 0),
             "pulldown-cmark consumes heading marker as block syntax; block lines must not use that width map"
         );
+        // heading `### ` 是 4 个前缀字符，渲染产物中不含
+        assert_eq!(prefix_chars, 4, "heading `### ` 前缀应为 4 字符");
+    }
+
+    #[test]
+    fn block_prefix_list_prefix_chars_correct() {
+        // list `- ` 前缀 2 字符
+        let (_, prefix_chars) =
+            block_prefix_source_widths("- 列表项").expect("list line should use source widths");
+        assert_eq!(prefix_chars, 2);
+
+        // ordered list `1. ` 前缀 3 字符
+        let (_, prefix_chars) = block_prefix_source_widths("1. 有序列表项")
+            .expect("ordered list line should use source widths");
+        assert_eq!(prefix_chars, 3);
+
+        // blockquote `> ` 前缀 2 字符
+        let (_, prefix_chars) =
+            block_prefix_source_widths("> 引用").expect("blockquote line should use source widths");
+        assert_eq!(prefix_chars, 2);
     }
 
     #[test]

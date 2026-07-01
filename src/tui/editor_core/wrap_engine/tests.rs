@@ -241,7 +241,7 @@ fn bold_marks_zero_width_changes_wrap_count() {
     // 带 widths：渲染宽 9 ≤ 10 → 不折
     let mut b = WrapEngine::new();
     b.set_width(10);
-    b.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some(widths)]);
+    b.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some((widths, 0))]);
     assert_eq!(b.visual_line_count(), 1, "渲染宽 9 ≤ 10 应只占 1 行");
 }
 
@@ -269,7 +269,7 @@ fn visible_char_indices_track_render_position() {
 
     let mut engine = WrapEngine::new();
     engine.set_width(10);
-    engine.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some(widths)]);
+    engine.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some((widths, 0))]);
     engine.build_range(lines_slice, 0, 1);
 
     let vlines = engine.get_cached_lines(0);
@@ -309,7 +309,7 @@ fn build_range_respects_widths() {
 
     let mut engine = WrapEngine::new();
     engine.set_width(10);
-    engine.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some(widths)]);
+    engine.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some((widths, 0))]);
     engine.build_range(lines_slice, 0, 1);
 
     let vlines = engine.get_cached_lines(0);
@@ -351,4 +351,97 @@ fn mark_dirty_then_rebuild_clears_dirty() {
 
     engine.rebuild_cache(&["hello".to_string()]);
     assert!(!engine.is_dirty());
+}
+
+/// 复现"宽度小折行吞字符"bug：list 行 `- xxx` 在窄宽度下，
+/// visible_end_char 比渲染产物实际 char 数多算（block prefix `- ` 被消费）。
+///
+/// 渲染产物 = "这是一段比较长的列表项目文字内容" (16 chars)，
+/// 但 wrap 算的 visible_end_char 会包含 `- ` 两个 char，多算 2。
+#[test]
+fn block_prefix_visible_pos_matches_render_output() {
+    use crate::util::text::char_width;
+    // 模拟 list 行，宽度 10 列。
+    // block_prefix_source_widths 给每个 char 算 char_width（包括 `- `），
+    // 并返回 prefix_chars = 2（`- ` 在源码中占 2 char）。
+    let line = "- 这是一段比较长的列表项目文字内容".to_string();
+    let widths: Vec<u8> = line
+        .chars()
+        .map(|c| char_width(c).min(u8::MAX as usize) as u8)
+        .collect();
+    let lines_slice = std::slice::from_ref(&line);
+
+    let mut engine = WrapEngine::new();
+    engine.set_width(10);
+    // 修复前：prefix_chars = 0（不知道前缀），visible_end_char 多算 2
+    // 修复后：prefix_chars = 2，wrap_engine 跳过前缀 char 的 visible_pos 推进
+    engine.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some((widths, 2))]);
+    engine.build_range(lines_slice, 0, 1);
+
+    let vlines = engine.get_cached_lines(0);
+    assert!(vlines.len() >= 2, "应该被折成多个视觉行");
+
+    // 渲染产物长度（pulldown-cmark 消费 `- `，剩下 16 个中文 char）
+    let render_output_len: usize = line.chars().count().saturating_sub(2);
+
+    // 末视觉行的 visible_end_char 应等于渲染产物长度，而不是源码 char 数
+    let last = vlines.last().unwrap();
+    assert_eq!(
+        last.visible_end_char, render_output_len,
+        "末视觉行 visible_end_char 应等于渲染产物长度，但多算了 block prefix 的 char 数 —— 这就是宽度小折行吞字符的根因"
+    );
+}
+
+/// 验证 block prefix 行折行后所有 vl 的 visible_start_char / visible_end_char
+/// 首尾相接，且覆盖整个渲染产物（无丢失、无重复）。
+///
+/// 这是"宽度小折行吞字符"bug 的防回归测试：修复前续行的
+/// visible_start_char 比前一段 visible_end_char 多算前缀 char 数，
+/// 导致 extract_span_range 切片时跳过渲染产物开头的字符。
+#[test]
+fn block_prefix_wrap_continuity_preserved() {
+    use crate::util::text::char_width;
+    // heading 行 `### ` 前缀 4 char，后面是一段较长的中文正文
+    let line = "### 这是一段比较长的标题文字内容用于测试折行连续性".to_string();
+    let widths: Vec<u8> = line
+        .chars()
+        .map(|c| char_width(c).min(u8::MAX as usize) as u8)
+        .collect();
+    let lines_slice = std::slice::from_ref(&line);
+
+    let mut engine = WrapEngine::new();
+    engine.set_width(12);
+    // heading `### ` 在源码中占 4 char，渲染产物中不含
+    engine.rebuild_cache_with_blocks_and_widths(lines_slice, &[], &[], &[Some((widths, 4))]);
+    engine.build_range(lines_slice, 0, 1);
+
+    let vlines = engine.get_cached_lines(0);
+    assert!(vlines.len() >= 2, "应该被折成多个视觉行");
+
+    // 渲染产物长度 = 源码 char 数 - 前缀 char 数
+    let render_output_len = line.chars().count() - 4;
+
+    // 验证所有 vl 首尾相接
+    for i in 0..vlines.len() {
+        if i == 0 {
+            assert_eq!(
+                vlines[i].visible_start_char, 0,
+                "第一段 visible_start_char 应为 0"
+            );
+        } else {
+            assert_eq!(
+                vlines[i].visible_start_char,
+                vlines[i - 1].visible_end_char,
+                "vl[{}] 的 visible_start_char 应等于 vl[{}] 的 visible_end_char",
+                i,
+                i - 1
+            );
+        }
+    }
+    // 末段覆盖整个渲染产物
+    assert_eq!(
+        vlines.last().unwrap().visible_end_char,
+        render_output_len,
+        "末段 visible_end_char 应覆盖整个渲染产物"
+    );
 }
