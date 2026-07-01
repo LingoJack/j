@@ -99,10 +99,12 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else {
         t.input_text.apply_fg(Style::default())
     };
+    let cursor_style = t.cursor_fg.apply_fg(Style::default());
+    let cursor_style = t.cursor_bg.apply_bg(cursor_style);
     let line_styles = InputLineStyles {
         mention: mention_style,
         input_text: input_text_style,
-        cursor: Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+        cursor: cursor_style,
     };
 
     let mut display_lines: Vec<Line> = Vec::new();
@@ -150,10 +152,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     if display_lines.is_empty() {
-        display_lines.push(Line::from(vec![Span::styled(
-            " ",
-            Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-        )]));
+        let cursor_style = t.cursor_fg.apply_fg(Style::default());
+        let cursor_style = t.cursor_bg.apply_bg(cursor_style);
+        display_lines.push(Line::from(vec![Span::styled(" ", cursor_style)]));
     }
 
     let input_widget = Paragraph::new(display_lines).style(Style::default().bg(t.bg_primary));
@@ -421,10 +422,9 @@ fn draw_browse_filter(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             format!("过滤: {}", sanitize_single_line_text(&app.ui.browse_filter)),
             Style::default().fg(t.label_user),
         ));
-        spans.push(Span::styled(
-            "█",
-            Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-        ));
+        let cursor_style = t.cursor_fg.apply_fg(Style::default());
+        let cursor_style = t.cursor_bg.apply_bg(cursor_style);
+        spans.push(Span::styled("█", cursor_style));
     } else {
         spans.push(Span::styled(
             "输入关键词过滤消息...",

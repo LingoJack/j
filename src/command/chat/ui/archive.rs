@@ -39,10 +39,9 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
         let value_style = Style::default().fg(t.text_white);
         let name_with_cursor = if app.ui.archive_custom_name.is_empty() {
-            vec![Span::styled(
-                " ",
-                Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-            )]
+            let cursor_style = t.cursor_fg.apply_fg(Style::default());
+            let cursor_style = t.cursor_bg.apply_bg(cursor_style);
+            vec![Span::styled(" ", cursor_style)]
         } else {
             cursor_spans(
                 &app.ui.archive_custom_name,

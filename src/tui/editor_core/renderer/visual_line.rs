@@ -71,10 +71,12 @@ impl MarkdownRenderer {
             let highlight_spans =
                 ctx.search
                     .highlight_line(vl.logical_line, &text, &self.theme, vl.start_col);
-            let cursor_style = Style::default()
-                .fg(self.theme.cursor_fg)
-                .bg(self.theme.cursor_bg)
+            let cursor_style = self
+                .theme
+                .cursor_fg
+                .apply_fg(Style::default())
                 .add_modifier(Modifier::BOLD);
+            let cursor_style = self.theme.cursor_bg.apply_bg(cursor_style);
 
             if let Some(col) = ctx.cursor_col {
                 let cursor_in_this_vl = if col == vl.end_col {
@@ -120,10 +122,12 @@ impl MarkdownRenderer {
                     spans.push(Span::styled(before, text_style));
                 }
 
-                let cursor_style = Style::default()
-                    .fg(self.theme.cursor_fg)
-                    .bg(self.theme.cursor_bg)
+                let cursor_style = self
+                    .theme
+                    .cursor_fg
+                    .apply_fg(Style::default())
                     .add_modifier(Modifier::BOLD);
+                let cursor_style = self.theme.cursor_bg.apply_bg(cursor_style);
 
                 if char_idx_at_cursor < chars.len() {
                     spans.push(Span::styled(

@@ -24,6 +24,7 @@ use super::{
 };
 
 #[cfg(test)]
+#[allow(unused_imports)]
 use super::theme::{BorderStyle, ThemeColor};
 
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
@@ -1291,6 +1292,7 @@ pub enum EditorAction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::theme::ThemeColor;
     use ratatui::style::Color;
     use ratatui::text::Span;
 
@@ -1299,8 +1301,8 @@ mod tests {
             bg_primary: Color::Reset,
             bg_input: Color::Reset,
             code_bg: Color::DarkGray,
-            cursor_fg: Color::Black,
-            cursor_bg: Color::Cyan,
+            cursor_fg: ThemeColor::Color(Color::Black),
+            cursor_bg: ThemeColor::Color(Color::Cyan),
             text_normal: Color::White,
             text_dim: Color::DarkGray,
             text_bold: Color::White,

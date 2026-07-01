@@ -191,9 +191,9 @@ pub struct Theme {
     /// 输入提示符（加载中）颜色
     pub input_prompt_loading: Color,
     /// 光标前景
-    pub cursor_fg: Color,
+    pub cursor_fg: ThemeColor,
     /// 光标背景
-    pub cursor_bg: Color,
+    pub cursor_bg: ThemeColor,
 
     // ===== 提示栏 =====
     /// 键位标签前景
@@ -427,8 +427,10 @@ struct ThemeJson {
     title_loading: ColorValue,
     input_prompt: ColorValue,
     input_prompt_loading: ColorValue,
-    cursor_fg: ColorValue,
-    cursor_bg: ColorValue,
+    #[serde(default = "default_cursor_color")]
+    cursor_fg: ThemeColorValue,
+    #[serde(default = "default_cursor_color")]
+    cursor_bg: ThemeColorValue,
     hint_key_fg: ColorValue,
     hint_key_bg: ColorValue,
     hint_desc: ColorValue,
@@ -730,6 +732,10 @@ fn default_popup_highlight_fg() -> ThemeColorValue {
     ThemeColorValue(ThemeColor::Color(Color::Yellow))
 }
 
+fn default_cursor_color() -> ThemeColorValue {
+    ThemeColorValue(ThemeColor::Reverse)
+}
+
 /// 在多级颜色对象中按当前 [`crate::util::color_adapt::ColorLevel`] 选取最优值。
 ///
 /// 优先级：当前色阶的精确字段 > rgb > 其他色阶兜底。
@@ -895,8 +901,8 @@ impl Theme {
             title_loading: Color::Reset,
             input_prompt: Color::Reset,
             input_prompt_loading: Color::Reset,
-            cursor_fg: Color::Reset,
-            cursor_bg: Color::Reset,
+            cursor_fg: ThemeColor::Reverse,
+            cursor_bg: ThemeColor::Reverse,
             hint_key_fg: Color::Reset,
             hint_key_bg: Color::Reset,
             hint_desc: Color::Reset,

@@ -429,10 +429,12 @@ impl MarkdownEditor {
 
     /// 渲染命令栏
     fn render_command_bar(&self) -> Line<'static> {
-        let cursor_style = Style::default()
-            .fg(self.theme.cursor_fg)
-            .bg(self.theme.cursor_bg)
+        let cursor_style = self
+            .theme
+            .cursor_fg
+            .apply_fg(Style::default())
             .add_modifier(Modifier::BOLD);
+        let cursor_style = self.theme.cursor_bg.apply_bg(cursor_style);
         let text_style = Style::default().fg(self.theme.text_normal);
         let hint_style = Style::default().fg(self.theme.text_dim);
         match self.vim.mode() {

@@ -23,15 +23,17 @@ pub fn cursor_spans<'a>(value: &str, cursor: usize, style: Style, theme: &Theme)
     } else {
         String::new()
     };
-    vec![
+    let mut spans = vec![
         Span::styled(before, style),
-        Span::styled(
-            cursor_ch,
-            Style::default().fg(theme.cursor_fg).bg(theme.cursor_bg),
-        ),
+        Span::styled(cursor_ch, theme.cursor_fg.apply_fg(Style::default())),
         Span::styled(after, style),
         Span::styled(" \u{270f}\u{fe0f}", Style::default()),
-    ]
+    ];
+    // 对 cursor_bg 应用背景色（可能在 cursor_fg.apply_fg 中已设置 Reverse）
+    if let Some(span) = spans.get_mut(1) {
+        span.style = theme.cursor_bg.apply_bg(span.style);
+    }
+    spans
 }
 
 /// 多行折行光标渲染结果
@@ -61,7 +63,8 @@ pub fn cursor_wrapped_lines(
     placeholder: Option<&str>,
     theme: &Theme,
 ) -> WrappedCursorLines {
-    let cursor_style = Style::default().fg(theme.cursor_fg).bg(theme.cursor_bg);
+    let cursor_style = theme.cursor_fg.apply_fg(Style::default());
+    let cursor_style = theme.cursor_bg.apply_bg(cursor_style);
     let text_style = Style::default().fg(theme.text_normal);
     let placeholder_style = Style::default().fg(theme.text_dim);
 

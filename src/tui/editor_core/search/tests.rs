@@ -1,6 +1,7 @@
 use super::*;
 use ratatui::style::Color;
 
+#[allow(unused_imports)]
 use crate::theme::ThemeColor;
 
 /// 测试用主题
@@ -9,8 +10,8 @@ fn test_theme() -> EditorTheme {
         bg_primary: Color::Reset,
         bg_input: Color::Reset,
         code_bg: Color::DarkGray,
-        cursor_fg: Color::Black,
-        cursor_bg: Color::Cyan,
+        cursor_fg: ThemeColor::Color(Color::Black),
+        cursor_bg: ThemeColor::Color(Color::Cyan),
         text_normal: Color::White,
         text_dim: Color::DarkGray,
         text_bold: Color::White,

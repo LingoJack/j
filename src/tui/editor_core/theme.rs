@@ -17,8 +17,8 @@ pub struct EditorTheme {
     pub code_bg: Color,
 
     // ===== 光标 =====
-    pub cursor_fg: Color,
-    pub cursor_bg: Color,
+    pub cursor_fg: ThemeColor,
+    pub cursor_bg: ThemeColor,
 
     // ===== 文本 =====
     pub text_normal: Color,

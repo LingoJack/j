@@ -291,7 +291,8 @@ pub(crate) fn render_ask_questions(
                 // 普通文本样式
                 let text_style = Style::default().fg(t.text_normal).bg(confirm_bg);
                 // 块状光标样式（使用主题定义的光标颜色）
-                let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
+                let cursor_style = t.cursor_fg.apply_fg(Style::default());
+                let cursor_style = t.cursor_bg.apply_bg(cursor_style);
 
                 // 前缀 " ❯ ✏ " 的显示宽度
                 let prefix = " ❯ ✏ ";
@@ -575,7 +576,8 @@ pub(crate) fn render_tool_confirm_content(
                 };
 
                 let text_style = Style::default().fg(t.text_normal).bg(confirm_bg);
-                let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
+                let cursor_style = t.cursor_fg.apply_fg(Style::default());
+                let cursor_style = t.cursor_bg.apply_bg(cursor_style);
                 let pointer_style = Style::default()
                     .fg(t.tool_confirm_hint)
                     .bg(confirm_bg)

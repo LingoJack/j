@@ -567,10 +567,12 @@ impl MarkdownRenderer {
             return rendered_lines;
         }
 
-        let cursor_style = Style::default()
-            .fg(self.theme.cursor_fg)
-            .bg(self.theme.cursor_bg)
+        let cursor_style = self
+            .theme
+            .cursor_fg
+            .apply_fg(Style::default())
             .add_modifier(Modifier::BOLD);
+        let cursor_style = self.theme.cursor_bg.apply_bg(cursor_style);
 
         // 计算光标在视觉行内的字符偏移
         // 需要加上行号占用的字符数，因为 overlay_cursor_on_spans 在包含行号的完整 spans 上定位
