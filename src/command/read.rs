@@ -11,9 +11,11 @@ use std::process::{Command, Stdio};
 const JSTUDIO_BIN_ENV: &str = "JSTUDIO_BIN";
 #[cfg(target_os = "macos")]
 const MACOS_APP_PATHS: &[&str] = &[
-    "apps/jstudio/src-tauri/target/release/bundle/macos/jstudio.app",
-    "apps/jstudio/src-tauri/target/debug/bundle/macos/jstudio.app",
+    "/Applications/JStudio.app",
+    "/Applications/Jstudio.app",
     "/Applications/jstudio.app",
+    "apps/jstudio/src-tauri/target/release/bundle/macos/JStudio.app",
+    "apps/jstudio/src-tauri/target/debug/bundle/macos/JStudio.app",
 ];
 #[cfg(all(unix, not(target_os = "macos")))]
 const UNIX_BIN_PATHS: &[&str] = &[

@@ -461,7 +461,7 @@ release: ## 构建发布版本（release, INSTALL_SOURCE=github）
 # ============================================
 # 安装相关
 # ============================================
-install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/bin，Windows → ~/.jdata/bin）
+install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/bin，Windows → ~/.jdata/bin；可选 INSTALL_JSTUDIO=1 同时安装 JStudio.app）
 	@echo "📦 从本地构建安装 j-cli..."
 	@$(MAKE) release
 	@mkdir -p "$(INSTALL_DIR)"; \
@@ -500,6 +500,16 @@ install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/b
 	fi; \
 	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	echo "   版本: v$$version (本地构建)"
+	@if [ "$(INSTALL_JSTUDIO)" = "1" ]; then \
+		echo ""; \
+		echo "📦 同时安装 JStudio.app..."; \
+		$(MAKE) install-jstudio; \
+	elif [ "$$(uname -s)" = "Darwin" ] && [ ! -d "/Applications/JStudio.app" ]; then \
+		echo ""; \
+		echo "ℹ️  JStudio.app 未安装。如需使用 'j read' 功能，请执行:"; \
+		echo "   make install-jstudio"; \
+		echo "   或下次安装时使用: make install INSTALL_JSTUDIO=1"; \
+	fi
 
 uninstall: ## 卸载
 	@echo "🗑️  卸载..."
