@@ -46,40 +46,6 @@ cargo jb
 # jb = "install --path . --features browser_cdp"
 ```
 
-## 子模块
-
-### jstudio（Tauri Reader 应用）
-
-`apps/jstudio` 是一个 Tauri 桌面应用，提供文件阅读器功能（`j read <path>`）。
-
-```bash
-# 初始化子模块
-make init-jstudio
-
-# 开发模式（启动 Tauri dev）
-make dev-jstudio
-
-# 构建 Tauri 应用
-make build-jstudio
-
-# 安装到系统（macOS 安装到 /Applications）
-make install-jstudio
-
-# 提交子模块变更（非 AI）
-make commit-jstudio
-
-# 推送子模块（AI 生成 commit message）
-make push-jstudio
-
-# 查看子模块状态
-make status-jstudio
-```
-
-子模块管理注意事项：
-- 主仓库只保存 submodule 指针（特定 commit）
-- 修改 jstudio 后需先 push 子模块，再更新主仓库指针
-- `make push-jstudio` 会自动同步主仓库指针
-
 ## 架构概览
 
 项目采用 **库 + 二进制分离** 架构：
@@ -108,10 +74,6 @@ make status-jstudio
   - `interactive/` — REPL 交互模式
   - `markdown/` — Markdown 解析与渲染
   - `util/` — 工具函数（日志、颜色适配、文件操作）
-
-- **`apps/jstudio/`** — Tauri 桌面应用（submodule）
-  - 文件阅读器 GUI，通过 `j read <path>` 调用
-  - 与 j-cli 共用 j-agent 核心库
 
 ## 代码规范（来自 AGENTS.md）
 

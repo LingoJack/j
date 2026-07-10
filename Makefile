@@ -15,9 +15,6 @@ endif
 LINK_DIR := /usr/local/bin
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
-JSTUDIO_DIR := apps/jstudio
-JSTUDIO_BIN := $(JSTUDIO_DIR)/src-tauri/target/release/jstudio
-JSTUDIO_INSTALL_APP_DIR ?= /Applications
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -47,8 +44,6 @@ DIR ?=
         docker-build docker-run \
         pre-commit \
         build-remote \
-        init-jstudio dev-jstudio build-jstudio install-jstudio uninstall-jstudio clean-jstudio \
-        status-jstudio commit-jstudio push-jstudio push-jstudio-non-ai pull-jstudio \
         sm-status sm-diff sm-log sm-cd sm-pull sm-commit sm-push sm-push-quick sm-update-pointer \
         gui-dev gui-build gui-install gui-clean \
         ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
@@ -109,7 +104,7 @@ sm-status: ## 查看所有/单个 submodule 状态（DIR= 可选，指定单个�
 	fi
 
 sm-diff: ## 查看 submodule diff（DIR= 必填）
-	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-diff DIR=apps/jstudio"; exit 1; fi
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule"; exit 1; fi
 	@git -C $(DIR) diff --stat
 	@echo ""
 	@git -C $(DIR) diff
@@ -127,7 +122,7 @@ sm-log: ## 查看 submodule 最近提交（DIR= 可选，默认所有）
 	fi
 
 sm-cd: ## 打印 submodule 绝对路径（DIR= 必填）
-	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-cd DIR=apps/jstudio"; exit 1; fi
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule"; exit 1; fi
 	@echo "$$(cd $(DIR) && pwd)"
 
 # --- 同步类命令 ---
@@ -156,7 +151,7 @@ sm-pull: ## 拉取并更新所有/单个 submodule（DIR= 可选）
 # --- 提交推送类命令 ---
 
 sm-commit: ## 非 AI 自动提交 submodule（DIR= 必填）
-	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule，例如: make sm-commit DIR=apps/jstudio"; exit 1; fi
+	@if [ -z "$(DIR)" ]; then echo "✖️ 请指定 submodule"; exit 1; fi
 	@echo "📝 自动提交 $(DIR) submodule 代码..."
 	@cd $(DIR) && \
 		git add . && \
@@ -366,76 +361,6 @@ build-web: ## 构建 Web 前端
 	@cd web && npm install --silent && npm run build
 	@echo "☑️ Web 前端构建完成"
 
-# ============================================
-# jstudio Tauri App（委托给子模块 Makefile）
-# ============================================
-init-jstudio: ## 初始化 jstudio submodule 并安装前端依赖
-	@echo "📖 初始化 jstudio..."
-	@git submodule update --init --recursive $(JSTUDIO_DIR)
-	@$(MAKE) -C $(JSTUDIO_DIR) deps
-
-dev-jstudio: init-jstudio ## 启动 jstudio Tauri 开发模式
-	@$(MAKE) -C $(JSTUDIO_DIR) dev
-
-build-jstudio: init-jstudio ## 构建 jstudio Tauri 应用
-	@$(MAKE) -C $(JSTUDIO_DIR) build
-
-install-jstudio: init-jstudio ## 安装 jstudio app（macOS 安装到 /Applications，其他系统提示二进制路径）
-	@$(MAKE) -C $(JSTUDIO_DIR) install INSTALL_APP_DIR=$(JSTUDIO_INSTALL_APP_DIR)
-	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		echo "   现在可以使用: j read <file_or_dir_path>"; \
-	else \
-		if [ -x "$(JSTUDIO_BIN)" ]; then \
-			echo "   请设置环境变量后使用:"; \
-			echo "   export JSTUDIO_BIN=$$(pwd)/$(JSTUDIO_BIN)"; \
-			echo "   j read <file_or_dir_path>"; \
-		fi; \
-	fi
-
-status-jstudio: ## → make sm-status DIR=apps/jstudio
-	@$(MAKE) sm-status DIR=$(JSTUDIO_DIR)
-
-commit-jstudio: ## → make sm-commit DIR=apps/jstudio
-	@$(MAKE) sm-commit DIR=$(JSTUDIO_DIR)
-
-push-jstudio: ## → make sm-push DIR=apps/jstudio
-	@$(MAKE) sm-push DIR=$(JSTUDIO_DIR)
-
-push-jstudio-non-ai: ## → make sm-push-quick DIR=apps/jstudio
-	@$(MAKE) sm-push-quick DIR=$(JSTUDIO_DIR)
-
-pull-jstudio: ## → make sm-pull DIR=apps/jstudio
-	@$(MAKE) sm-pull DIR=$(JSTUDIO_DIR)
-
-uninstall-jstudio: ## 卸载 jstudio app（macOS）
-	@$(MAKE) -C $(JSTUDIO_DIR) uninstall INSTALL_APP_DIR=$(JSTUDIO_INSTALL_APP_DIR)
-	@echo "   jstudio 已卸载，请取消 JSTUDIO_BIN 环境变量（如有）"
-
-clean-jstudio: ## 清理 jstudio 构建产物
-	@$(MAKE) -C $(JSTUDIO_DIR) clean
-
-# 以下命令委托给子模块 Makefile，与主仓库命令风格对齐
-fmt-jstudio: ## 格式化 jstudio 代码（前端 + Rust）
-	@$(MAKE) -C $(JSTUDIO_DIR) fmt
-
-lint-jstudio: ## 检查 jstudio 代码质量（前端 TypeScript + Rust clippy）
-	@$(MAKE) -C $(JSTUDIO_DIR) lint
-
-check-jstudio: ## 检查 jstudio 代码（不构建）
-	@$(MAKE) -C $(JSTUDIO_DIR) check
-
-test-jstudio: ## 运行 jstudio 测试
-	@$(MAKE) -C $(JSTUDIO_DIR) test
-
-pre-commit-jstudio: ## jstudio 提交前检查（fmt + lint + test）
-	@$(MAKE) -C $(JSTUDIO_DIR) pre-commit
-
-bump-version-jstudio: ## 递增 jstudio 版本号（同步 tauri.conf.json、Cargo.toml、package.json）
-	@$(MAKE) -C $(JSTUDIO_DIR) bump-version
-
-help-jstudio: ## 显示 jstudio Makefile 帮助
-	@$(MAKE) -C $(JSTUDIO_DIR) help
-
 build-indicator: ## 构建 j-indicator (仅 macOS)
 	@if [ "$(OS)" = "Windows_NT" ]; then echo "ℹ️ j-indicator 仅支持 macOS，跳过"; exit 0; fi
 	@echo "🔴 构建 j-indicator..."
@@ -461,7 +386,7 @@ release: ## 构建发布版本（release, INSTALL_SOURCE=github）
 # ============================================
 # 安装相关
 # ============================================
-install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/bin，Windows → ~/.jdata/bin；可选 INSTALL_JSTUDIO=1 同时安装 JStudio.app）
+install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/bin，Windows → ~/.jdata/bin）
 	@echo "📦 从本地构建安装 j-cli..."
 	@$(MAKE) release
 	@mkdir -p "$(INSTALL_DIR)"; \
@@ -500,16 +425,6 @@ install: ## 从本地构建安装（Unix → ~/.jdata/bin + symlink /usr/local/b
 	fi; \
 	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	echo "   版本: v$$version (本地构建)"
-	@if [ "$(INSTALL_JSTUDIO)" = "1" ]; then \
-		echo ""; \
-		echo "📦 同时安装 JStudio.app..."; \
-		$(MAKE) install-jstudio; \
-	elif [ "$$(uname -s)" = "Darwin" ] && [ ! -d "/Applications/JStudio.app" ]; then \
-		echo ""; \
-		echo "ℹ️  JStudio.app 未安装。如需使用 'j read' 功能，请执行:"; \
-		echo "   make install-jstudio"; \
-		echo "   或下次安装时使用: make install INSTALL_JSTUDIO=1"; \
-	fi
 
 uninstall: ## 卸载
 	@echo "🗑️  卸载..."
@@ -851,4 +766,4 @@ ppt-clean: ## 清理 PPT 导出产物
 	@echo "🧹 清理 PPT 导出产物..."
 	@rm -rf $(PPT_DECK_DIR)/ppt-png
 	@rm -f $(PPT_OUT)
-	@echo "☑️ 已清理 ppt-png/ 与 $(notdir $(PPT_OUT))"
+	@echo "☑️ 已清理 ppt-png/ 与 $(notdir $(PPT_OUT))")"
