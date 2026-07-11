@@ -155,7 +155,13 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         sub_agent_metrics,
         deferred_tools,
         session_loaded_deferred: _,
+        workspace,
     } = shared;
+
+    // If workspace is set, change current directory for file operations
+    if let Some(ref ws) = workspace {
+        let _ = std::env::set_current_dir(ws);
+    }
 
     let client = create_llm_client(&provider);
 
