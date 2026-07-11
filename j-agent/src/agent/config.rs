@@ -65,4 +65,7 @@ pub struct AgentLoopSharedState {
     /// 子 Agent metrics 累加器（SubAgent/Teammate 的 LLM/tool 统计）
     /// Main agent loop 结束时读取并合并到 `SessionMetrics`
     pub sub_agent_metrics: Arc<Mutex<SubAgentMetrics>>,
+    /// 工作目录（用于文件操作工具的基础路径）
+    /// 如果为 None，则使用进程当前目录
+    pub workspace: Option<String>,
 }
