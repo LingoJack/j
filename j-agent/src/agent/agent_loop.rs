@@ -3,6 +3,7 @@ use super::api::{
 };
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::retry::{backoff_delay_ms, retry_policy_for};
+use super::thread_identity::set_thread_cwd;
 use super::tool_processor::{
     ToolCallContext, clear_channels, drain_pending_user_messages, flush_streaming_as_message,
     process_tool_calls, push_both, sync_context_full,
@@ -158,9 +159,11 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         workspace,
     } = shared;
 
-    // If workspace is set, change current directory for file operations
+    // Set thread-local workspace for file operations
+    // This is thread-safe (each session has its own thread) and doesn't affect other sessions
     if let Some(ref ws) = workspace {
-        let _ = std::env::set_current_dir(ws);
+        use std::path::Path;
+        set_thread_cwd(Path::new(ws));
     }
 
     let client = create_llm_client(&provider);

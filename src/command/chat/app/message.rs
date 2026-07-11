@@ -289,6 +289,7 @@ impl ChatApp {
             session_loaded_deferred: Arc::clone(&self.session_loaded_deferred),
             tools_enabled,
             sub_agent_metrics: Arc::clone(&self.sub_agent_metrics),
+            workspace: None, // Terminal uses current directory
         };
         let (handle, tool_result_tx) =
             MainAgentHandle::spawn(agent_config, agent_shared, api_messages, system_prompt_fn);

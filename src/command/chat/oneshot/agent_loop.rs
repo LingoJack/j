@@ -266,6 +266,7 @@ pub(crate) fn run_oneshot_agent(
         sub_agent_metrics: Arc::new(Mutex::new(
             crate::command::chat::tools::derived_shared::SubAgentMetrics::default(),
         )),
+        workspace: None, // Terminal uses current directory
     };
 
     // Ctrl+C → 设标志，让主 loop 优雅退回（不杀进程，REPL 仍可继续）
