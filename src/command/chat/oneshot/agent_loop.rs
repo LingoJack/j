@@ -527,6 +527,10 @@ pub(crate) fn run_oneshot_agent(
                 StreamMsg::Compacted { messages_before } => {
                     eprintln!("  {} 已压缩 {} 条消息", "📦".dimmed(), messages_before);
                 }
+                StreamMsg::ToolResult(result) => {
+                    // 终端 oneshot 模式不渲染工具结果，已由 handle_tool_call 处理
+                    let _ = result; // suppress unused warning
+                }
             }
         }
     }

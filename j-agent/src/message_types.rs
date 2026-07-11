@@ -21,12 +21,38 @@ pub enum PlanDecision {
 
 // ========== 消息类型（跨线程通信）==========
 
+/// 工具执行状态（用于 ToolResult 消息）
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolResultStatus {
+    /// 正常执行完成
+    Executed,
+    /// 执行失败
+    Failed,
+    /// 用户拒绝
+    Rejected,
+    /// 自动批准执行
+    AutoApproved,
+}
+
+/// 工具执行结果消息（用于 UI 展示真实工具输出）
+#[derive(Debug, Clone)]
+pub struct ToolResultStreamMsg {
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub content: String,
+    pub is_error: bool,
+    pub images: Vec<ImageData>,
+    pub status: ToolResultStatus,
+}
+
 /// 后台线程发送给 TUI 的消息类型
 pub enum StreamMsg {
     /// 收到一个流式文本块
     Chunk,
     /// LLM 请求执行工具（附带完整工具调用列表）
     ToolCallRequest(Vec<ToolCallItem>),
+    /// 工具执行结果（UI 可展示真实输出）
+    ToolResult(ToolResultStreamMsg),
     /// 流式响应完成
     Done,
     /// 发生错误

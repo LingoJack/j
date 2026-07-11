@@ -1,6 +1,8 @@
 use crate::chat_error::ChatError;
 use crate::infra::hook::{HookContext, HookEvent, HookManager};
-use crate::message_types::{PlanDecision, StreamMsg, ToolResultMsg};
+use crate::message_types::{
+    PlanDecision, StreamMsg, ToolResultMsg, ToolResultStatus, ToolResultStreamMsg,
+};
 use crate::storage::{
     ChatMessage, DisplayHint, ImageData, MessageRole, SessionOp, SessionOpKind, ToolCallItem,
     append_session_op,
@@ -302,7 +304,7 @@ pub(super) fn process_tool_calls(
 
         let tool_msg = ChatMessage {
             role: MessageRole::Tool,
-            content: result_content,
+            content: result_content.clone(),
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id.clone()),
             images: None,
@@ -313,6 +315,22 @@ pub(super) fn process_tool_calls(
         };
         messages.push(tool_msg.clone());
         push_both(ctx.display_messages, ctx.context_messages, tool_msg);
+
+        // ★ Emit ToolResult 事件供 UI 展示真实工具输出
+        let _ = ctx
+            .stream_msg_sender
+            .send(StreamMsg::ToolResult(ToolResultStreamMsg {
+                tool_call_id: result.tool_call_id.clone(),
+                tool_name: tool_name.clone().unwrap_or_else(|| "unknown".to_string()),
+                content: result_content,
+                is_error: result.is_error,
+                images: result_images.clone(),
+                status: if result.is_error {
+                    ToolResultStatus::Failed
+                } else {
+                    ToolResultStatus::Executed
+                },
+            }));
 
         // 如果模型支持视觉且工具返回了图片，先收集，稍后统一注入
         if !result_images.is_empty() {

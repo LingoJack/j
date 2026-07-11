@@ -236,6 +236,7 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
         updated_at: now,
         model: None,
         auto_approve: false,
+        workspace: None,
     });
     meta.updated_at = now;
     match event {
@@ -493,6 +494,9 @@ pub struct SessionMetaFile {
     /// 是否自动批准所有操作（bypass 模式）
     #[serde(default)]
     pub auto_approve: bool,
+    /// 工作空间路径（用于按目录分组会话）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
 }
 
 /// 会话元数据（用于会话列表展示）
@@ -505,6 +509,9 @@ pub struct SessionMeta {
     pub message_count: usize,
     pub first_message_preview: Option<String>,
     pub updated_at: u64,
+    /// 工作空间路径
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
 }
 
 /// 加载 session.json 元数据（不存在返回 None）
@@ -585,6 +592,7 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
         updated_at,
         model: None,
         auto_approve: false,
+        workspace: None,
     })
 }
 
@@ -627,6 +635,7 @@ pub fn list_sessions() -> Vec<SessionMeta> {
                 message_count: meta_file.message_count,
                 first_message_preview: None,
                 updated_at: meta_file.updated_at,
+                workspace: meta_file.workspace,
             });
             continue;
         }
@@ -646,6 +655,7 @@ pub fn list_sessions() -> Vec<SessionMeta> {
                 message_count: derived.message_count,
                 first_message_preview: preview_for_ui,
                 updated_at: derived.updated_at,
+                workspace: derived.workspace,
             });
         }
     }

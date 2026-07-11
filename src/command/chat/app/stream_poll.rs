@@ -321,6 +321,22 @@ impl ChatApp {
                     StreamMsg::Compacted { messages_before } => {
                         actions.push(Action::StreamCompacted { messages_before });
                     }
+                    StreamMsg::ToolResult(result) => {
+                        // 终端暂时不渲染工具结果面板，仅记录日志
+                        write_info_log(
+                            "ToolResult",
+                            &format!(
+                                "[{}] {} => {}",
+                                result.tool_call_id,
+                                result.tool_name,
+                                if result.is_error {
+                                    format!("ERROR: {}", result.content)
+                                } else {
+                                    result.content
+                                }
+                            ),
+                        );
+                    }
                 }
             }
         }
