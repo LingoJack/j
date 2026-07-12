@@ -12,7 +12,7 @@ BINARY_NAME="j"
 BIN_DIR="$HOME/.jdata/bin"
 LINK_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"
-DEFAULT_VERSION="v12.11.5"  # 备用默认版本（publish 时自动更新）
+DEFAULT_VERSION="v12.11.6"  # 备用默认版本（publish 时自动更新）
 
 
 # 颜色输出

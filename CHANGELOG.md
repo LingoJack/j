@@ -1,3 +1,22 @@
+# v12.11.6
+
+
+### 新功能
+
+- **工具执行结果流式事件**: 新增 `ToolResultStreamMsg` 消息类型，支持 UI 实时展示工具执行的真实输出内容
+- **工作目录隔离**: AgentLoopSharedState 新增 `workspace` 字段，支持按会话设置独立工作目录，使用线程局部变量替代全局 `set_current_dir`
+
+### 改进
+
+- **安装路径优化**: 二进制安装到 `~/.jdata/bin` 并创建符号链接到 `/usr/local/bin`，避免频繁 sudo 权限请求；macOS 安装后自动 adhoc 签名防止 SIGKILL
+- **JStudio.app 查找顺序**: 优先查找 `/Applications/JStudio.app`，便于独立安装使用
+- **终端主题配色**: 调整颜色亮度，cursor 支持反向显示模式（`reverse`），降低视觉疲劳
+- **远程控制 IME 支持**: 修复中文输入法组合期间 Enter 键被误拦截的问题，移动端输入体验更流畅
+
+### Bug 修复
+
+- **Markdown 折行吞字符**: 修复窄终端下 heading/list/blockquote 行折行后续行开头"吞字符"问题，block prefix 字符不再错误推进 `
+
 # v12.11.5
 
 
