@@ -56,6 +56,15 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
             f if f == crate::constants::rmeta_action::SET_URL => {
                 let url = content.get(1).map(|s| s.as_str());
                 super::git::handle_set_url(url, config);
+                if url.is_some()
+                    && let Err(e) = config.set_property(
+                        section::REPORT,
+                        config_key::REPORT_SYNC_BACKEND,
+                        crate::constants::report_backend::GIT,
+                    )
+                {
+                    error!("保存同步后端配置失败: {}", e);
+                }
             }
             f if f == crate::constants::rmeta_action::USE_BACKEND => {
                 let backend = content.get(1).map(|s| s.as_str());
