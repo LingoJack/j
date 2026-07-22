@@ -347,3 +347,38 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::NotFound
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn reportctl_preserves_force_flag_in_interactive_mode() {
+        let parsed = parse_interactive_command(&args(&["reportctl", "push", "-f"]));
+
+        match parsed {
+            ParseResult::Matched(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "push");
+                assert_eq!(args, vec!["-f"]);
+            }
+            _ => panic!("expected reportctl command"),
+        }
+    }
+
+    #[test]
+    fn rctl_preserves_long_force_flag_in_interactive_mode() {
+        let parsed = parse_interactive_command(&args(&["rctl", "pull", "--force"]));
+
+        match parsed {
+            ParseResult::Matched(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "pull");
+                assert_eq!(args, vec!["--force"]);
+            }
+            _ => panic!("expected reportctl command"),
+        }
+    }
+}
