@@ -244,8 +244,9 @@ fn generate_zsh_completion(config: &YamlConfig) {
 
     // reportctl 命令：补全子操作
     script.push_str("                reportctl|rctl)\n");
-    script
-        .push_str("                    local -a rctl_actions=(new sync push pull set-url open)\n");
+    script.push_str(
+        "                    local -a rctl_actions=(new sync push pull set-url use open)\n",
+    );
     script.push_str("                    _describe 'action' rctl_actions\n");
     script.push_str("                    ;;\n");
 
@@ -381,7 +382,7 @@ fn generate_bash_completion(config: &YamlConfig) {
     script.push_str("            ;;\n");
     script.push_str("        reportctl|rctl)\n");
     script.push_str(
-        "            COMPREPLY=( $(compgen -W \"new sync push pull set-url open\" -- \"$cur\") )\n",
+        "            COMPREPLY=( $(compgen -W \"new sync push pull set-url use open\" -- \"$cur\") )\n",
     );
     script.push_str("            ;;\n");
 

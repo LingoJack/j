@@ -170,12 +170,12 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         })
     } else if is(cmd::REPORTCTL) {
         if rest.is_empty() {
-            crate::usage!("reportctl <new|sync|push|pull|set-url> [date|message|url]");
+            crate::usage!("reportctl <new|sync|push|pull|set-url|use> [date|message|url|backend]");
             return ParseResult::Handled;
         }
         ParseResult::Matched(SubCmd::Reportctl {
             action: rest[0].clone(),
-            arg: rest.get(1).cloned(),
+            args: rest[1..].to_vec(),
         })
     } else if is(cmd::CHECK) {
         ParseResult::Matched(SubCmd::Check {

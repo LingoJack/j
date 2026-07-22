@@ -22,6 +22,13 @@ pub fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
             config
                 .set_property(section::REPORT, config_key::GIT_REPO, u)
                 .unwrap_or_else(|e| error!("保存配置失败: {}", e));
+            config
+                .set_property(
+                    section::REPORT,
+                    config_key::REPORT_SYNC_BACKEND,
+                    crate::constants::report_backend::GIT,
+                )
+                .unwrap_or_else(|e| error!("保存同步后端配置失败: {}", e));
 
             // 如果日报目录已有 .git，同步更新 remote origin
             if let Some(dir) = get_report_dir(config) {

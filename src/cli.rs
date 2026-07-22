@@ -105,8 +105,9 @@ pub enum SubCmd {
     Reportctl {
         /// 操作: new / sync / push / pull
         action: String,
-        /// 可选参数（new/sync 时为日期，push 时为 commit message）
-        arg: Option<String>,
+        /// 可选参数（new/sync 时为日期，push 时为 commit message；Lark push 支持 -f/--force）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 
     /// 查看日报最近 N 个块
