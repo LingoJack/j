@@ -77,6 +77,12 @@ pub struct ModelProvider {
     /// 工具调用协议模式（默认 native）
     #[serde(default)]
     pub tool_call_mode: ToolCallMode,
+    /// 单次请求最大输出 token 数（None = 用 API 默认值）
+    ///
+    /// 推理模型（如 deepseek-r1、ark-code-latest）常把 token 花在 reasoning
+    /// 上导致可见输出为空，建议显式调大（如 8192、16384）。
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
 }
 
 impl ModelProvider {
@@ -530,6 +536,7 @@ mod tests {
             model: "model".to_string(),
             supports_vision: false,
             tool_call_mode: ToolCallMode::Native,
+            max_tokens: None,
         };
 
         assert!(provider.tools_allowed(true));

@@ -235,6 +235,7 @@ impl ChatApp {
                 model: String::new(),
                 supports_vision: false,
                 tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
+                max_tokens: None,
             });
         let agent_provider: Arc<Mutex<ModelProvider>> = Arc::new(Mutex::new(default_provider));
         let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));

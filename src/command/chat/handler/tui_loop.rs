@@ -144,6 +144,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     model: "gpt-4o".to_string(),
                     supports_vision: false,
                     tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
+                    max_tokens: None,
                 }],
                 active_index: 0,
                 system_prompt: None,

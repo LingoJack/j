@@ -316,7 +316,7 @@ pub fn build_request_with_tools(
             Some(tools)
         },
         stream: None,
-        max_tokens: None,
+        max_tokens: provider.max_tokens,
         extra: serde_json::Map::new(),
     })
 }
@@ -391,7 +391,7 @@ pub async fn call_llm_stream_async(
         messages: llm_messages,
         tools: None,
         stream: Some(true),
-        max_tokens: None,
+        max_tokens: provider.max_tokens,
         extra: serde_json::Map::new(),
     };
 
@@ -585,6 +585,7 @@ mod tests {
             model: "model".to_string(),
             supports_vision: false,
             tool_call_mode,
+            max_tokens: None,
         }
     }
 

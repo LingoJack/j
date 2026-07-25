@@ -30,6 +30,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const DEBUG_LOG_CHUNK_LIMIT: u32 = 3;
 /// reasoning 内容日志输出的最小长度阈值
 const REASONING_LOG_THRESHOLD: usize = 50;
+/// finish_reason=length 且空输出时，auto-continue 的最大次数
+const MAX_LENGTH_CONTINUES: u32 = 2;
 
 /// auto_compact 成功后，向 messages 和双通道注入 Compact 工具调用 + 结果消息，
 /// 等同于 LLM 手动调用 CompactTool 的效果。
@@ -192,6 +194,8 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
     };
 
     let mut final_round_idx: usize = 0;
+    // auto-continue 计数器：finish_reason=length 且空输出时注入"继续"重试的次数
+    let mut length_continue_count: u32 = 0;
     'round: for round_idx in 0..max_llm_rounds {
         final_round_idx = round_idx;
 
@@ -1343,23 +1347,51 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                         "agent_loop",
                         "LLM 因 max_tokens 限制被截断 (finish_reason=length)，未产出任何文本或工具调用",
                     );
-                    // 将已积累的 reasoning 内容（如有）刷新到消息中，避免丢失
-                    let reasoning_for_flush: Option<String> = {
-                        let r = take(&mut assistant_reasoning);
-                        if r.is_empty() { None } else { Some(r) }
-                    };
-                    flush_streaming_as_message(
-                        &streaming_content,
-                        &streaming_reasoning_content,
-                        &mut messages,
-                        &display_messages,
-                        &context_messages,
-                        reasoning_for_flush,
-                    );
+                    // 将已积累的 reasoning 内容作为 assistant 消息保存。
+                    // 注意：flush_streaming_as_message 在 content 为空时不会 push 消息，
+                    // 因此这里手动构造 reasoning-only 的 assistant 消息，避免推理成果丢失，
+                    // 同时让 auto-continue 时模型不必重复推理。
+                    let reasoning_for_flush: String = take(&mut assistant_reasoning);
+                    if !reasoning_for_flush.is_empty() {
+                        let reasoning_msg = ChatMessage {
+                            role: MessageRole::Assistant,
+                            content: String::new(),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            images: None,
+                            reasoning_content: Some(reasoning_for_flush),
+                            sender_name: None,
+                            recipient_name: None,
+                            display_hint: DisplayHint::Normal,
+                        };
+                        messages.push(reasoning_msg.clone());
+                        push_both(&display_messages, &context_messages, reasoning_msg);
+                        safe_lock(&streaming_content, "agent::length_content_clear").clear();
+                        safe_lock(&streaming_reasoning_content, "agent::length_reason_clear")
+                            .clear();
+                    }
                     metrics.total_llm_calls += 1;
                     metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
+
+                    // ── auto-continue：注入"继续"指令让模型基于已完成的 reasoning 产出回答 ──
+                    // 推理模型常把全部 token 花在 reasoning 上导致空输出，续写一轮即可恢复。
+                    if length_continue_count < MAX_LENGTH_CONTINUES {
+                        length_continue_count += 1;
+                        write_info_log(
+                            "agent_loop",
+                            &format!(
+                                "finish_reason=length 且无输出，注入继续指令重试 ({}/{})",
+                                length_continue_count, MAX_LENGTH_CONTINUES
+                            ),
+                        );
+                        let continue_msg = ChatMessage::text(MessageRole::User, "继续".to_string());
+                        messages.push(continue_msg.clone());
+                        push_both(&display_messages, &context_messages, continue_msg);
+                        continue 'round;
+                    }
+
                     let _ = tx.send(StreamMsg::Error(ChatError::Other(
-                        "LLM 响应因 token 上限被截断，未产出任何内容。可能原因：模型将全部 token 用于推理（reasoning），或 API 默认 max_tokens 过低。建议减少上下文或调整模型配置。".to_string(),
+                        "LLM 响应因 token 上限被截断，未产出任何内容。已尝试自动续写但仍失败。可能原因：模型将全部 token 用于推理（reasoning），或 API 默认 max_tokens 过低。建议减少上下文或调整模型配置。".to_string(),
                     )));
                     return;
                 }

@@ -23,6 +23,7 @@ pub fn config_field_label_model(idx: usize) -> &'static str {
         "model" => "模型名称",
         "supports_vision" => "支持视觉",
         "tool_call_mode" => "工具协议",
+        "max_tokens" => "最大输出Token",
         _ => CONFIG_FIELDS[idx],
     }
 }
@@ -62,6 +63,10 @@ pub fn config_field_value_model(app: &ChatApp, idx: usize) -> String {
             }
         }
         "tool_call_mode" => p.tool_call_mode.display_name().to_string(),
+        "max_tokens" => p
+            .max_tokens
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "默认".into()),
         _ => String::new(),
     }
 }
@@ -86,6 +91,7 @@ pub fn config_field_raw_value_model(app: &ChatApp, idx: usize) -> String {
         "model" => p.model.clone(),
         "supports_vision" => p.supports_vision.to_string(),
         "tool_call_mode" => p.tool_call_mode.as_str().to_string(),
+        "max_tokens" => p.max_tokens.map(|n| n.to_string()).unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -117,6 +123,14 @@ pub fn config_field_set_model(app: &mut ChatApp, idx: usize, value: &str) {
         }
         "tool_call_mode" => {
             p.tool_call_mode = ToolCallMode::parse(value);
+        }
+        "max_tokens" => {
+            let trimmed = value.trim();
+            p.max_tokens = if trimmed.is_empty() {
+                None
+            } else {
+                trimmed.parse::<u32>().ok()
+            };
         }
         _ => {}
     }
