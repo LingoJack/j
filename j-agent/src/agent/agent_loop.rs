@@ -1333,6 +1333,54 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     return;
                 }
 
+                // ── finish_reason="length" 处理 ──
+                // LLM 因 max_tokens 限制被截断。需与正常 "stop" 区分对待：
+                //  - 空文本 + 无工具调用：模型可能将全部 token 用于 reasoning，或 API
+                //    默认 max_tokens 过低，不应当作正常结束静默退出。
+                //  - 有部分文本：响应被截断但已产出内容，追加截断提示后正常结束。
+                if finish_reason.as_deref() == Some("length") && assistant_text.is_empty() {
+                    write_error_log(
+                        "agent_loop",
+                        "LLM 因 max_tokens 限制被截断 (finish_reason=length)，未产出任何文本或工具调用",
+                    );
+                    // 将已积累的 reasoning 内容（如有）刷新到消息中，避免丢失
+                    let reasoning_for_flush: Option<String> = {
+                        let r = take(&mut assistant_reasoning);
+                        if r.is_empty() { None } else { Some(r) }
+                    };
+                    flush_streaming_as_message(
+                        &streaming_content,
+                        &streaming_reasoning_content,
+                        &mut messages,
+                        &display_messages,
+                        &context_messages,
+                        reasoning_for_flush,
+                    );
+                    metrics.total_llm_calls += 1;
+                    metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
+                    let _ = tx.send(StreamMsg::Error(ChatError::Other(
+                        "LLM 响应因 token 上限被截断，未产出任何内容。可能原因：模型将全部 token 用于推理（reasoning），或 API 默认 max_tokens 过低。建议减少上下文或调整模型配置。".to_string(),
+                    )));
+                    return;
+                }
+                if finish_reason.as_deref() == Some("length") && !assistant_text.is_empty() {
+                    // 有部分文本但被截断，追加截断提示后继续正常流程
+                    write_info_log(
+                        "agent_loop",
+                        &format!(
+                            "LLM 响应因 max_tokens 被截断 (finish_reason=length)，部分文本已保留 (len={})",
+                            assistant_text.len()
+                        ),
+                    );
+                    let notice = "\n\n[响应因 token 上限被截断]";
+                    {
+                        let mut stream_buf =
+                            safe_lock(&streaming_content, "agent::truncation_notice");
+                        stream_buf.push_str(notice);
+                    }
+                    let _ = tx.send(StreamMsg::Chunk);
+                }
+
                 // 正常结束，但如果有用户增量消息则继续循环
                 let has_pending =
                     !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty();
@@ -1413,8 +1461,9 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                 write_info_log(
                     "agent_loop",
                     &format!(
-                        "break 'round: LLM 返回 Stop 且无工具调用，无待处理消息 (round={}, text_len={})",
+                        "break 'round: LLM 结束且无工具调用，无待处理消息 (round={}, finish_reason={:?}, text_len={})",
                         round_idx,
+                        finish_reason,
                         assistant_text.len()
                     ),
                 );
