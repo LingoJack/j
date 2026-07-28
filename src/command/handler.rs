@@ -69,11 +69,9 @@ command_handlers! {
     ReportCmd { content: Vec<String> } => |self, config| {
         crate::command::report::handle_report("report", &self.content, config);
     },
-    ReportCtlCmd { action: String, arg: Option<String> } => |self, config| {
+    ReportCtlCmd { action: String, args: Vec<String> } => |self, config| {
         let mut args = vec![self.action.clone()];
-        if let Some(ref a) = self.arg {
-            args.push(a.clone());
-        }
+        args.extend(self.args.clone());
         crate::command::report::handle_report("reportctl", &args, config);
     },
     CheckCmd { line_count: Option<String> } => |self, config| {
@@ -191,7 +189,7 @@ impl SubCmd {
 
             // 日报系统
             SubCmd::Report { content } => Box::new(ReportCmd { content }),
-            SubCmd::Reportctl { action, arg } => Box::new(ReportCtlCmd { action, arg }),
+            SubCmd::Reportctl { action, args } => Box::new(ReportCtlCmd { action, args }),
             SubCmd::Check { line_count } => Box::new(CheckCmd { line_count }),
             SubCmd::Search {
                 line_count,

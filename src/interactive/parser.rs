@@ -170,12 +170,12 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         })
     } else if is(cmd::REPORTCTL) {
         if rest.is_empty() {
-            crate::usage!("reportctl <new|sync|push|pull|set-url> [date|message|url]");
+            crate::usage!("reportctl <new|sync|push|pull|set-url|use> [date|message|url|backend]");
             return ParseResult::Handled;
         }
         ParseResult::Matched(SubCmd::Reportctl {
             action: rest[0].clone(),
-            arg: rest.get(1).cloned(),
+            args: rest[1..].to_vec(),
         })
     } else if is(cmd::CHECK) {
         ParseResult::Matched(SubCmd::Check {
@@ -345,5 +345,40 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::Matched(SubCmd::Read { file_path: path })
     } else {
         ParseResult::NotFound
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn reportctl_preserves_force_flag_in_interactive_mode() {
+        let parsed = parse_interactive_command(&args(&["reportctl", "push", "-f"]));
+
+        match parsed {
+            ParseResult::Matched(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "push");
+                assert_eq!(args, vec!["-f"]);
+            }
+            _ => panic!("expected reportctl command"),
+        }
+    }
+
+    #[test]
+    fn rctl_preserves_long_force_flag_in_interactive_mode() {
+        let parsed = parse_interactive_command(&args(&["rctl", "pull", "--force"]));
+
+        match parsed {
+            ParseResult::Matched(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "pull");
+                assert_eq!(args, vec!["--force"]);
+            }
+            _ => panic!("expected reportctl command"),
+        }
     }
 }

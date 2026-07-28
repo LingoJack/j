@@ -4,11 +4,15 @@
 //! - `io` — 文件读写辅助（路径获取、尾部读取、追加/替换）
 //! - `write` — 日报写入、TUI 编辑、周数管理、配置同步
 //! - `git` — git 同步（push/pull/set-url、仓库管理）
+//! - `lark` — Lark/Feishu 同步初始化
+//! - `sync` — 同步后端选择与路由
 //! - `query` — 查询命令（check/search）
 
 pub mod git;
 pub mod io;
+pub mod lark;
 pub mod query;
+pub mod sync;
 pub mod write;
 
 // Re-export 外部模块实际使用的公共接口

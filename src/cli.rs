@@ -105,8 +105,9 @@ pub enum SubCmd {
     Reportctl {
         /// 操作: new / sync / push / pull
         action: String,
-        /// 可选参数（new/sync 时为日期，push 时为 commit message）
-        arg: Option<String>,
+        /// 可选参数（new/sync 时为日期，push 时为 commit message；Lark push 支持 -f/--force）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 
     /// 查看日报最近 N 个块
@@ -283,4 +284,48 @@ pub enum SubCmd {
         /// 要打开的文件或目录路径
         file_path: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reportctl_preserves_force_flag_for_push() {
+        let cli = Cli::try_parse_from(["j", "reportctl", "push", "-f"]).unwrap();
+
+        match cli.command {
+            Some(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "push");
+                assert_eq!(args, vec!["-f"]);
+            }
+            other => panic!("expected reportctl command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn reportctl_preserves_long_force_flag_for_pull() {
+        let cli = Cli::try_parse_from(["j", "reportctl", "pull", "--force"]).unwrap();
+
+        match cli.command {
+            Some(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "pull");
+                assert_eq!(args, vec!["--force"]);
+            }
+            other => panic!("expected reportctl command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn reportctl_preserves_push_message_after_force_support() {
+        let cli = Cli::try_parse_from(["j", "reportctl", "push", "update report"]).unwrap();
+
+        match cli.command {
+            Some(SubCmd::Reportctl { action, args }) => {
+                assert_eq!(action, "push");
+                assert_eq!(args, vec!["update report"]);
+            }
+            other => panic!("expected reportctl command, got {:?}", other),
+        }
+    }
 }

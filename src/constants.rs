@@ -177,7 +177,12 @@ pub mod config_key {
     pub const WEEK_REPORT: &str = "week_report";
     pub const WEEK_NUM: &str = "week_num";
     pub const LAST_DAY: &str = "last_day";
+    pub const REPORT_SYNC_BACKEND: &str = "sync_backend";
     pub const GIT_REPO: &str = "git_repo";
+    pub const LARK_DOC_URL: &str = "lark_doc_url";
+    pub const LARK_DOC_TYPE: &str = "lark_doc_type";
+    pub const LARK_DOC_TOKEN: &str = "lark_doc_token";
+    pub const LARK_DOC_TITLE: &str = "lark_doc_title";
     #[allow(dead_code)]
     pub const BROWSER_HEADLESS: &str = "browser_headless";
     pub const NOTEBOOK_PANEL_RATIO: &str = "notebook_panel_ratio";
@@ -322,7 +327,13 @@ pub mod rmeta_action {
     pub const PUSH: &str = "push";
     pub const PULL: &str = "pull";
     pub const SET_URL: &str = "set-url";
+    pub const USE_BACKEND: &str = "use";
     pub const OPEN: &str = "open";
+}
+
+pub mod report_backend {
+    pub const GIT: &str = "git";
+    pub const LARK: &str = "lark";
 }
 
 // ========== notebook 子命令 ==========
