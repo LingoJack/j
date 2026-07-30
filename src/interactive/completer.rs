@@ -168,8 +168,9 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
                     rmeta_action::PULL,
                     rmeta_action::SET_URL,
                     rmeta_action::OPEN,
+                    rmeta_action::MERGE,
                 ]),
-                ArgHint::Placeholder("<date|message|url>"),
+                ArgHint::Placeholder("<date|message|url|path>"),
             ],
         ),
         (

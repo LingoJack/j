@@ -25,7 +25,7 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
         if sub == "reportctl" {
             usage!(
-                "j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open"
+                "j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open | j reportctl merge <url|path>"
             );
             return;
         }
@@ -61,16 +61,21 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
             f if f == crate::constants::rmeta_action::OPEN => {
                 handle_open_report(config);
             }
+            f if f == crate::constants::rmeta_action::MERGE => {
+                let source = content.get(1).map(|s| s.as_str());
+                super::merge::handle_merge(source, config);
+            }
             _ => {
                 error!(
-                    "未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}",
+                    "未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}, {}",
                     first,
                     crate::constants::rmeta_action::NEW,
                     crate::constants::rmeta_action::SYNC,
                     crate::constants::rmeta_action::PUSH,
                     crate::constants::rmeta_action::PULL,
                     crate::constants::rmeta_action::SET_URL,
-                    crate::constants::rmeta_action::OPEN
+                    crate::constants::rmeta_action::OPEN,
+                    crate::constants::rmeta_action::MERGE
                 );
             }
         }

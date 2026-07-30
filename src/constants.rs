@@ -323,6 +323,7 @@ pub mod rmeta_action {
     pub const PULL: &str = "pull";
     pub const SET_URL: &str = "set-url";
     pub const OPEN: &str = "open";
+    pub const MERGE: &str = "merge";
 }
 
 // ========== notebook 子命令 ==========

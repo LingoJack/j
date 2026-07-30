@@ -8,6 +8,7 @@
 
 pub mod git;
 pub mod io;
+pub mod merge;
 pub mod query;
 pub mod write;
 

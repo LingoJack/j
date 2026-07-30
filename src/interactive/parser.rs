@@ -170,7 +170,9 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         })
     } else if is(cmd::REPORTCTL) {
         if rest.is_empty() {
-            crate::usage!("reportctl <new|sync|push|pull|set-url> [date|message|url]");
+            crate::usage!(
+                "reportctl <new|sync|push|pull|set-url|open|merge> [date|message|url|path]"
+            );
             return ParseResult::Handled;
         }
         ParseResult::Matched(SubCmd::Reportctl {
