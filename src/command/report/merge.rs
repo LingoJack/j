@@ -1,10 +1,15 @@
-//! 日报合并：将另一个仓库 / 本地路径的日报按日期合并到 `.merged.md` 文件。
+//! 日报合并：将另一个仓库 / 本地路径的日报按日期合并并写回主日报文件。
 //!
 //! 合并策略：
 //! - 按周的日期范围（`range_str`）匹配两个文件中的周
 //! - 匹配到的周：源周条目原样追加到目标周末尾（不去重、不排序）
 //! - 未匹配的周：作为新周插入，最终按起始日期排序并重新编号
-//! - 输出到主日报文件同目录下的 `*.merged.md`，不修改原文件
+//! - 合并前自动备份原文件为 `.md.bak`，然后将结果直接写回主日报文件
+//!
+//! 多行条目处理：
+//! - 带 `【日期】` 前缀的行（如 `- 【2024/12/02】 内容`）开启新条目块
+//! - 从该日期行到下一个日期行之前的所有内容（子列表、补充说明、无日期普通行等）都属于该日期的块
+//! - 合并时以「条目块」为原子单位，确保多行条目不会被拆散
 
 use crate::config::YamlConfig;
 use crate::constants::{REPORT_DATE_FORMAT, REPORT_DEFAULT_FILE};
@@ -18,7 +23,7 @@ use std::sync::OnceLock;
 
 use super::io::get_report_path;
 
-/// 一个周区块：标题行 + 该周的所有条目行。
+/// 一个周区块：标题行 + 该周的所有条目块。
 struct WeekSection {
     /// 日期范围字符串，如 "2024.01.01-2024.01.07"，用作周匹配 key
     range_str: String,
@@ -26,8 +31,8 @@ struct WeekSection {
     start_date: Option<NaiveDate>,
     /// 原始标题行，如 "# Week3[2024.01.01-2024.01.07]"
     header_line: String,
-    /// 该周的所有条目行（保持原始顺序）
-    entries: Vec<String>,
+    /// 该周的所有条目块，每个块是一个逻辑条目（主行 + 子列表 + 补充说明等续行）
+    entries: Vec<Vec<String>>,
 }
 
 /// 编译好的周标题正则（惰性初始化）
@@ -36,6 +41,15 @@ fn week_header_re() -> &'static Regex {
     RE.get_or_init(|| {
         // 匹配 "# Week3[2024.01.01-2024.01.07]"，捕获周编号和起止日期
         Regex::new(r"^#\s+Week\s*(\d+)\s*\[\s*([\d.]+)\s*-\s*([\d.]+)\s*\]").unwrap()
+    })
+}
+
+/// 编译好的日期条目正则（惰性初始化）
+fn date_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        // 匹配 "- 【2024/12/02】 内容" 或 "【2024/12/02】 内容"
+        Regex::new(r"^\s*[-*+]?\s*【\d{4}/\d{1,2}/\d{1,2}】").unwrap()
     })
 }
 
@@ -259,7 +273,7 @@ fn fetch_local_report(path_str: &str, config: &YamlConfig) -> Option<String> {
 ///
 /// - `# Week{n}[start-end]` 行开启新周区块
 /// - 周标题之前的非空行作为前导文本（preamble）
-/// - 周区块内的非空行作为条目
+/// - 周区块内的行按「条目块」分组：顶格行（无缩进）开启新块，缩进行 / 空行归入当前块
 fn parse_report(content: &str) -> (String, Vec<WeekSection>) {
     let re = week_header_re();
     let mut preamble_lines: Vec<&str> = Vec::new();
@@ -269,7 +283,8 @@ fn parse_report(content: &str) -> (String, Vec<WeekSection>) {
 
     for line in content.lines() {
         if let Some(caps) = re.captures(line) {
-            if let Some(w) = current.take() {
+            if let Some(mut w) = current.take() {
+                trim_trailing_empty(&mut w.entries);
                 weeks.push(w);
             }
             found_first_week = true;
@@ -286,13 +301,12 @@ fn parse_report(content: &str) -> (String, Vec<WeekSection>) {
                 preamble_lines.push(line);
             }
         } else if let Some(w) = current.as_mut() {
-            if !line.trim().is_empty() {
-                w.entries.push(line.to_string());
-            }
+            group_entry_line(&mut w.entries, line);
         }
     }
 
-    if let Some(w) = current.take() {
+    if let Some(mut w) = current.take() {
+        trim_trailing_empty(&mut w.entries);
         weeks.push(w);
     }
 
@@ -305,6 +319,30 @@ fn parse_report(content: &str) -> (String, Vec<WeekSection>) {
     };
 
     (preamble, weeks)
+}
+
+/// 将一行归入条目块列表（按日期分组）。
+///
+/// - 带 `【YYYY/MM/DD】` 日期前缀的行开启新条目块
+/// - 其他行（子列表、补充说明、无日期普通行、空行等）归入当前条目块
+fn group_entry_line(entries: &mut Vec<Vec<String>>, line: &str) {
+    if date_entry_re().is_match(line) {
+        entries.push(vec![line.to_string()]);
+    } else if let Some(last) = entries.last_mut() {
+        last.push(line.to_string());
+    } else {
+        // 周区块内首行不是日期条目：单独成块
+        entries.push(vec![line.to_string()]);
+    }
+}
+
+/// 去除每个条目块末尾的空行（条目间的分隔空行不属于条目内容）。
+fn trim_trailing_empty(entries: &mut Vec<Vec<String>>) {
+    for block in entries.iter_mut() {
+        while block.last().map_or(false, |l| l.trim().is_empty()) {
+            block.pop();
+        }
+    }
 }
 
 /// 解析点分日期 "2024.01.01" -> NaiveDate
@@ -377,9 +415,11 @@ fn render_report(preamble: &str, weeks: &[WeekSection]) -> String {
         }
         out.push_str(&w.header_line);
         out.push('\n');
-        for entry in &w.entries {
-            out.push_str(entry);
-            out.push('\n');
+        for block in &w.entries {
+            for line in block {
+                out.push_str(line);
+                out.push('\n');
+            }
         }
     }
 
