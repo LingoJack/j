@@ -1,9 +1,10 @@
-//! 日报合并：将另一个仓库 / 本地路径的日报按日期合并并写回主日报文件。
+//! 日报合并：将另一个仓库 / 本地路径的日报增量合并并写回主日报文件。
 //!
-//! 合并策略：
+//! 合并策略（增量去重）：
 //! - 按周的日期范围（`range_str`）匹配两个文件中的周
-//! - 匹配到的周：源周条目原样追加到目标周末尾（不去重、不排序）
+//! - 匹配到的周：逐条比较，只追加目标周中不存在的条目（按内容去重，忽略空白差异）
 //! - 未匹配的周：作为新周插入，最终按起始日期排序并重新编号
+//! - 若源日报所有条目均已存在，则不做任何写入
 //! - 合并前自动备份原文件为 `.md.bak`，然后将结果直接写回主日报文件
 //!
 //! 多行条目处理：
@@ -99,8 +100,13 @@ pub fn handle_merge(source: Option<&str>, config: &YamlConfig) {
         return;
     }
 
-    // 合并
-    let merged = merge_weeks(&mut main_weeks, source_weeks);
+    // 合并（增量去重）
+    let (merged, added) = merge_weeks(&mut main_weeks, source_weeks);
+
+    if added == 0 {
+        info!("源日报的所有条目已存在，无需合并");
+        return;
+    }
 
     // 渲染输出
     let output = render_report(&main_preamble, &merged);
@@ -119,7 +125,10 @@ pub fn handle_merge(source: Option<&str>, config: &YamlConfig) {
 
     match fs::write(&main_path, &output) {
         Ok(_) => {
-            info!("合并完成，已写回主日报文件: {}", main_path);
+            info!(
+                "合并完成，新增 {} 条条目，已写回主日报文件: {}",
+                added, main_path
+            );
             info!(
                 "共 {} 个周（原文件备份在 {}）",
                 merged.len(),
@@ -350,20 +359,36 @@ fn parse_dot_date(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s, REPORT_DATE_FORMAT).ok()
 }
 
-/// 合并：把 source 的周条目追加到 target 中匹配的周（按 range_str 匹配）；
+/// 合并：把 source 的周条目增量合并到 target 中匹配的周（按 range_str 匹配）；
+/// 已存在的条目（按内容去重）跳过，只追加新增条目；
 /// 未匹配的周作为新周加入。最终按起始日期排序并重新编号。
-fn merge_weeks(target: &mut Vec<WeekSection>, source: Vec<WeekSection>) -> Vec<WeekSection> {
+///
+/// 返回 `(合并后的周列表, 新增条目数)`。
+fn merge_weeks(
+    target: &mut Vec<WeekSection>,
+    source: Vec<WeekSection>,
+) -> (Vec<WeekSection>, usize) {
     let mut new_weeks: Vec<WeekSection> = Vec::new();
+    let mut added_count: usize = 0;
 
     for src_week in source {
         if let Some(tw) = target
             .iter_mut()
             .find(|w| w.range_str == src_week.range_str)
         {
-            // 匹配到：原样追加 source 的条目（不去重、不排序）
-            tw.entries.extend(src_week.entries);
+            // 匹配到：增量追加，跳过已存在的条目
+            let existing: Vec<String> = tw.entries.iter().map(|e| normalize_entry(e)).collect();
+            for entry in src_week.entries {
+                let key = normalize_entry(&entry);
+                if existing.contains(&key) {
+                    continue;
+                }
+                tw.entries.push(entry);
+                added_count += 1;
+            }
         } else {
             // 未匹配：作为新周
+            added_count += src_week.entries.len();
             new_weeks.push(src_week);
         }
     }
@@ -384,7 +409,18 @@ fn merge_weeks(target: &mut Vec<WeekSection>, source: Vec<WeekSection>) -> Vec<W
         w.header_line = renumber_header(&w.header_line, (i + 1) as i32);
     }
 
-    all
+    (all, added_count)
+}
+
+/// 将条目块归一化为比较 key：每行 trim 后过滤空行，用 `\n` 拼接。
+/// 用于去重比较，忽略首尾空白和条目间的空行差异。
+fn normalize_entry(entry: &[String]) -> String {
+    entry
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// 重新编号周标题行，输出标准格式 `# Week{n}[start-end]`。
