@@ -489,7 +489,7 @@ fn update_config_files(
 }
 
 /// 静默更新配置文件（YAML + JSON），不输出 info
-fn update_config_files_silent(
+pub(crate) fn update_config_files_silent(
     week_num: i32,
     last_day: &NaiveDate,
     config_path: &Path,
