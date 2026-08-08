@@ -336,6 +336,7 @@ pub const CONFIG_FIELDS: &[&str] = &[
     "model",
     "supports_vision",
     "tool_call_mode",
+    "thinking_effort",
 ];
 
 /// 全局配置字段（Tab 分页版，去掉 tools_enabled 和 skills_enabled）

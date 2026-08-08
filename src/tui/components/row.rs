@@ -69,6 +69,8 @@ pub struct TextFieldRowCtx<'a> {
     pub editing: bool,
     pub cursor: usize,
     pub theme: &'a Theme,
+    /// 选中但未编辑时显示的提示文字（如 "low/high/max/xhigh"）
+    pub hint: Option<String>,
 }
 
 /// 普通可编辑文本字段行
@@ -83,7 +85,7 @@ pub fn text_field_row<'a>(ctx: &TextFieldRowCtx<'_>) -> Line<'a> {
         spans.extend(cursor_spans(&ctx.value, ctx.cursor, vs, ctx.theme));
         Line::from(spans)
     } else {
-        Line::from(vec![
+        let mut spans = vec![
             pointer_span(ctx.selected, ctx.theme),
             label_span(&ctx.label, LABEL_WIDTH, ctx.selected, ctx.theme),
             Span::styled("  ", Style::default()),
@@ -95,7 +97,16 @@ pub fn text_field_row<'a>(ctx: &TextFieldRowCtx<'_>) -> Line<'a> {
                 },
                 vs,
             ),
-        ])
+        ];
+        if ctx.selected
+            && let Some(hint) = &ctx.hint
+        {
+            spans.push(Span::styled(
+                format!("  ({})", hint),
+                Style::default().fg(ctx.theme.config_dim),
+            ));
+        }
+        Line::from(spans)
     }
 }
 

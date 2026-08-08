@@ -13,6 +13,27 @@ pub fn create_llm_client(provider: &ModelProvider) -> LlmClient {
     LlmClient::new(&provider.api_base, &provider.api_key)
 }
 
+/// 根据 `thinking_effort` 构建需要注入到请求顶层的 extra 参数。
+///
+/// `thinking_effort` 非空（且不为 `"auto"`）时同时写入：
+/// - `reasoning_effort`：用户填入的字符串值（如 `low` / `high` / `max` / `xhigh`）
+/// - `thinking`：`{"type":"enabled"}`（火山方舟 Ark / DeepSeek 兼容）
+fn build_thinking_extra(provider: &ModelProvider) -> serde_json::Map<String, serde_json::Value> {
+    let mut extra = serde_json::Map::new();
+    let effort = provider.thinking_effort.trim();
+    if !effort.is_empty() && !effort.eq_ignore_ascii_case("auto") {
+        extra.insert(
+            "reasoning_effort".to_string(),
+            serde_json::Value::String(effort.to_string()),
+        );
+        extra.insert(
+            "thinking".to_string(),
+            serde_json::json!({"type": "enabled"}),
+        );
+    }
+    extra
+}
+
 /// 将内部 ChatMessage 转换为 llm::Message 格式
 pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
     messages
@@ -317,7 +338,7 @@ pub fn build_request_with_tools(
         },
         stream: None,
         max_tokens: provider.max_tokens,
-        extra: serde_json::Map::new(),
+        extra: build_thinking_extra(provider),
     })
 }
 
@@ -392,7 +413,7 @@ pub async fn call_llm_stream_async(
         tools: None,
         stream: Some(true),
         max_tokens: provider.max_tokens,
-        extra: serde_json::Map::new(),
+        extra: build_thinking_extra(provider),
     };
 
     let request_body =
@@ -586,6 +607,7 @@ mod tests {
             supports_vision: false,
             tool_call_mode,
             max_tokens: None,
+            thinking_effort: String::new(),
         }
     }
 

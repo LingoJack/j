@@ -145,6 +145,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     supports_vision: false,
                     tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
                     max_tokens: None,
+                    thinking_effort: String::new(),
                 }],
                 active_index: 0,
                 system_prompt: None,

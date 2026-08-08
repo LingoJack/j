@@ -24,6 +24,7 @@ pub fn config_field_label_model(idx: usize) -> &'static str {
         "supports_vision" => "支持视觉",
         "tool_call_mode" => "工具协议",
         "max_tokens" => "最大输出Token",
+        "thinking_effort" => "思考强度",
         _ => CONFIG_FIELDS[idx],
     }
 }
@@ -67,6 +68,14 @@ pub fn config_field_value_model(app: &ChatApp, idx: usize) -> String {
             .max_tokens
             .map(|n| n.to_string())
             .unwrap_or_else(|| "默认".into()),
+        "thinking_effort" => {
+            let v = p.thinking_effort.trim();
+            if v.is_empty() {
+                "默认".to_string()
+            } else {
+                v.to_string()
+            }
+        }
         _ => String::new(),
     }
 }
@@ -92,6 +101,7 @@ pub fn config_field_raw_value_model(app: &ChatApp, idx: usize) -> String {
         "supports_vision" => p.supports_vision.to_string(),
         "tool_call_mode" => p.tool_call_mode.as_str().to_string(),
         "max_tokens" => p.max_tokens.map(|n| n.to_string()).unwrap_or_default(),
+        "thinking_effort" => p.thinking_effort.clone(),
         _ => String::new(),
     }
 }
@@ -131,6 +141,9 @@ pub fn config_field_set_model(app: &mut ChatApp, idx: usize, value: &str) {
             } else {
                 trimmed.parse::<u32>().ok()
             };
+        }
+        "thinking_effort" => {
+            p.thinking_effort = value.to_string();
         }
         _ => {}
     }

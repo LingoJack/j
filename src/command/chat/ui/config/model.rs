@@ -149,6 +149,11 @@ pub(super) fn draw_tab_model_detail<'a>(app: &ChatApp) -> ItemList<'a> {
                 theme: t,
             })
         } else {
+            let hint = if *provider_field == "thinking_effort" {
+                Some("low/high/max/xhigh".to_string())
+            } else {
+                None
+            };
             text_field_row(&TextFieldRowCtx {
                 label: label.to_string(),
                 value,
@@ -156,6 +161,7 @@ pub(super) fn draw_tab_model_detail<'a>(app: &ChatApp) -> ItemList<'a> {
                 editing: app.ui.config_editing,
                 cursor: app.ui.config_edit_cursor,
                 theme: t,
+                hint,
             })
         };
         list.push(line);

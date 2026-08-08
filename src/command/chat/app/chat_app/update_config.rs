@@ -344,6 +344,7 @@ impl ChatApp {
             supports_vision: false,
             tool_call_mode: crate::command::chat::storage::ToolCallMode::Native,
             max_tokens: None,
+            thinking_effort: String::new(),
         };
         self.state.agent_config.providers.push(new_provider);
         self.ui.config_provider_idx = self.state.agent_config.providers.len() - 1;

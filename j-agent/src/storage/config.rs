@@ -83,6 +83,13 @@ pub struct ModelProvider {
     /// 上导致可见输出为空，建议显式调大（如 8192、16384）。
     #[serde(default)]
     pub max_tokens: Option<u32>,
+    /// 思考强度（reasoning_effort），留空 = 不发送思考参数（使用 API 默认行为）。
+    ///
+    /// 常用值：`low` / `high` / `max` / `xhigh`，也可填入 API 支持的任意字符串。
+    /// 非空时会同时发送 `reasoning_effort` 和 `thinking: {"type":"enabled"}` 两个
+    /// 顶层参数，兼容 DeepSeek 官方 API 与火山方舟 Ark API。
+    #[serde(default)]
+    pub thinking_effort: String,
 }
 
 impl ModelProvider {
@@ -537,6 +544,7 @@ mod tests {
             supports_vision: false,
             tool_call_mode: ToolCallMode::Native,
             max_tokens: None,
+            thinking_effort: String::new(),
         };
 
         assert!(provider.tools_allowed(true));
