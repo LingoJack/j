@@ -92,11 +92,10 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
                 })
             }
             MessageRole::Assistant => {
-                let content = if msg.content.is_empty() {
-                    None
-                } else {
-                    Some(Content::Text(msg.content.clone()))
-                };
+                // 始终序列化 content 字段（即使为空字符串）——部分 API（如火山方舟 ark）
+                // 在 assistant 消息缺少 content 字段时会报 "missing messages.content parameter"，
+                // 这对 tool-call-only 消息（content 为空）尤为常见。
+                let content = Some(Content::Text(msg.content.clone()));
                 let tool_calls = msg.tool_calls.as_ref().map(|tcs| {
                     tcs.iter()
                         .map(|tc| ToolCall {

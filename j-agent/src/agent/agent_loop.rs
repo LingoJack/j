@@ -32,6 +32,8 @@ const DEBUG_LOG_CHUNK_LIMIT: u32 = 3;
 const REASONING_LOG_THRESHOLD: usize = 50;
 /// finish_reason=length 且空输出时，auto-continue 的最大次数
 const MAX_LENGTH_CONTINUES: u32 = 2;
+/// 遇到 "missing messages.content" 错误时，auto_compact 恢复的最大次数
+const MAX_OVERSIZED_COMPACTS: u32 = 1;
 
 /// auto_compact 成功后，向 messages 和双通道注入 Compact 工具调用 + 结果消息，
 /// 等同于 LLM 手动调用 CompactTool 的效果。
@@ -196,6 +198,8 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
     let mut final_round_idx: usize = 0;
     // auto-continue 计数器：finish_reason=length 且空输出时注入"继续"重试的次数
     let mut length_continue_count: u32 = 0;
+    // oversized compact 计数器：遇到 "missing messages.content" 错误时 auto_compact 恢复的次数
+    let mut oversized_compact_count: u32 = 0;
     'round: for round_idx in 0..max_llm_rounds {
         final_round_idx = round_idx;
 
@@ -606,6 +610,64 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                             err, provider.name, provider.model, provider.api_base
                         ),
                     );
+                    // ── 检测 "missing messages.content" 错误（火山方舟 ark 在上下文过大时
+                    // 返回此误导性错误）。通过 auto_compact 压缩上下文后重试本轮。
+                    let is_oversized = matches!(&err, ChatError::ApiBadRequest(msg) | ChatError::Other(msg)
+                            if msg.contains("messages.content"));
+                    if is_oversized
+                        && compact_config.enabled
+                        && oversized_compact_count < MAX_OVERSIZED_COMPACTS
+                    {
+                        oversized_compact_count += 1;
+                        write_info_log(
+                            "agent_loop",
+                            "检测到 messages.content 缺失错误，将通过 auto_compact 压缩上下文后重试",
+                        );
+                        safe_lock(&streaming_content, "agent::oversized_content_clear").clear();
+                        safe_lock(
+                            &streaming_reasoning_content,
+                            "agent::oversized_reason_clear",
+                        )
+                        .clear();
+                        let _ = tx.send(StreamMsg::Compacting);
+                        match compact::auto_compact(
+                            &mut messages,
+                            &AutoCompactParams {
+                                provider: &provider,
+                                invoked_skills: &invoked_skills,
+                                session_id: &session_id,
+                                protected_context: None,
+                            },
+                        )
+                        .await
+                        {
+                            Err(e) => {
+                                write_error_log(
+                                    "agent_loop",
+                                    &format!("messages.content 恢复时 auto_compact 失败: {}", e),
+                                );
+                                let _ = tx.send(StreamMsg::Error(ChatError::Other(format!(
+                                    "上下文过大且自动修复失败: {}",
+                                    e
+                                ))));
+                                return;
+                            }
+                            Ok(result) => {
+                                clear_channels(&display_messages, &context_messages);
+                                push_compact_tool_messages(
+                                    &mut messages,
+                                    &display_messages,
+                                    &context_messages,
+                                    &result,
+                                );
+                                metrics.auto_compact_count += 1;
+                                let _ = tx.send(StreamMsg::Compacted {
+                                    messages_before: result.messages_before,
+                                });
+                                continue 'round;
+                            }
+                        }
+                    }
                     if let Some(policy) = retry_policy_for(&err)
                         && retry_attempt <= policy.max_attempts
                     {
