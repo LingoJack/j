@@ -25,7 +25,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use super::io::{get_report_path, get_settings_json_path};
-use super::write::update_config_files_silent;
+use super::write::{read_settings, update_config_files_silent};
 
 /// 一个周区块：标题行 + 该周的所有条目块。
 struct WeekSection {
@@ -105,23 +105,13 @@ pub fn handle_merge(source: Option<&str>, config: &mut YamlConfig) {
 
     // 读取主 settings.json 中的 week_num 和 last_day
     let settings_path = get_settings_json_path(&main_path);
-    let (original_week_num, main_last_day) = settings_path
-        .as_ref()
-        .and_then(|p| fs::read_to_string(p).ok())
-        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
-        .map(|json| {
-            let week_num = json
-                .get("week_num")
-                .and_then(|v| v.as_i64())
-                .map(|v| v as i32)
-                .unwrap_or(1);
-            let last_day = json
-                .get("last_day")
-                .and_then(|v| v.as_str())
-                .and_then(|s| parse_dot_date(s));
-            (week_num, last_day)
-        })
-        .unwrap_or((1, None));
+    let (original_week_num, main_last_day) = match &settings_path {
+        Some(p) => {
+            let s = read_settings(p);
+            (s.week_num, s.last_day)
+        }
+        None => (1, None),
+    };
 
     // 从源 settings.json 中读取 last_day
     let source_last_day = source_settings
@@ -172,7 +162,6 @@ pub fn handle_merge(source: Option<&str>, config: &mut YamlConfig) {
 
             // 同步 settings.json
             sync_settings_after_merge(
-                config,
                 &settings_path,
                 original_week_num,
                 new_weeks_count,
@@ -186,14 +175,13 @@ pub fn handle_merge(source: Option<&str>, config: &mut YamlConfig) {
 
 // ========== 源日报获取 ==========
 
-/// 合并完成后同步 settings.json 和 YAML 配置：
+/// 合并完成后同步 settings.json：
 /// - `week_num` = 原始值 + 新增周数（仅当新增周数 > 0 时才变化）
 /// - `last_day` = max(主 settings.json 的 last_day, 源 settings.json 的 last_day)，
 ///   仅当比原始值更晚时才变化
 ///
 /// 只有任一字段实际变化时才写入。
 fn sync_settings_after_merge(
-    config: &mut YamlConfig,
     settings_path: &Option<PathBuf>,
     original_week_num: i32,
     new_weeks_count: usize,
@@ -239,7 +227,7 @@ fn sync_settings_after_merge(
         }
     };
 
-    update_config_files_silent(new_week_num, &last_day_to_write, settings_path, config);
+    update_config_files_silent(new_week_num, &last_day_to_write, settings_path);
     info!(
         "已同步配置：week_num = {}{}，last_day = {}",
         new_week_num,

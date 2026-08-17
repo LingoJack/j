@@ -2,7 +2,7 @@
 
 use crate::command::chat::storage::load_agent_config;
 use crate::config::YamlConfig;
-use crate::constants::{REPORT_SIMPLE_DATE_FORMAT, config_key, section};
+use crate::constants::REPORT_SIMPLE_DATE_FORMAT;
 use crate::theme::Theme;
 use crate::{error, info, usage};
 use chrono::{Local, NaiveDate};
@@ -109,27 +109,14 @@ pub fn write_to_report(content: &str, config: &mut YamlConfig) -> bool {
         None => return false,
     };
 
-    // 静默加载 JSON 配置并同步到 YAML（不打印 info）
-    load_config_from_json_silent(&config_path, config);
-
     let now = Local::now().date_naive();
-    let week_num = config
-        .get_property(section::REPORT, config_key::WEEK_NUM)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(1);
-    let last_day_str = config
-        .get_property(section::REPORT, config_key::LAST_DAY)
-        .cloned()
-        .unwrap_or_default();
-    let last_day = parse_date(&last_day_str);
-
-    ensure_week_boundary(
-        week_num,
-        last_day,
+    let settings = ensure_settings_initialized(&config_path, now, true);
+    maybe_open_new_week(
+        settings.week_num,
+        settings.last_day,
         now,
         report_file,
         &config_path,
-        config,
         true,
     );
 
@@ -159,31 +146,16 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
         }
     };
 
-    load_config_from_json_and_sync(&config_path, config);
-
     let now = Local::now().date_naive();
-    let week_num = config
-        .get_property(section::REPORT, config_key::WEEK_NUM)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(1);
-    let last_day_str = config
-        .get_property(section::REPORT, config_key::LAST_DAY)
-        .cloned()
-        .unwrap_or_default();
-    let last_day = parse_date(&last_day_str);
-
-    let initialized = ensure_week_boundary(
-        week_num,
-        last_day,
+    let settings = ensure_settings_initialized(&config_path, now, false);
+    maybe_open_new_week(
+        settings.week_num,
+        settings.last_day,
         now,
         report_file,
         &config_path,
-        config,
         false,
     );
-    if initialized {
-        info!("已自动初始化第一周");
-    }
 
     let today_str = now.format(SIMPLE_DATE_FORMAT);
     let log_entry = format!("- 【{}】 {}\n", today_str, content);
@@ -207,19 +179,9 @@ fn handle_report_tui(config: &mut YamlConfig) {
             return;
         }
     };
-    load_config_from_json_and_sync(&config_path, config);
 
-    // 检查是否需要新开一周
     let now = Local::now().date_naive();
-    let week_num = config
-        .get_property(section::REPORT, config_key::WEEK_NUM)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(1);
-    let last_day_str = config
-        .get_property(section::REPORT, config_key::LAST_DAY)
-        .cloned()
-        .unwrap_or_default();
-    let last_day = parse_date(&last_day_str);
+    let settings = ensure_settings_initialized(&config_path, now, false);
 
     // 先读取文件最后 3 行作为历史上下文（在任何写入之前读取）
     let context_lines = 3;
@@ -230,17 +192,17 @@ fn handle_report_tui(config: &mut YamlConfig) {
     let mut initial_lines: Vec<String> = last_lines.clone();
 
     // 检查是否需要新开一周 → 只更新配置，不写入文件；新周标题放入编辑器
-    if let Some(last_day) = last_day
+    if let Some(last_day) = settings.last_day
         && now > last_day
     {
         let next_last_day = now + chrono::Duration::days(6);
         let new_week_title = format!(
             "# Week{}[{}-{}]",
-            week_num,
+            settings.week_num,
             now.format(DATE_FORMAT),
             next_last_day.format(DATE_FORMAT)
         );
-        update_config_files(week_num + 1, &next_last_day, &config_path, config);
+        update_config_files(settings.week_num + 1, &next_last_day, &config_path);
         initial_lines.push(new_week_title);
     }
 
@@ -338,24 +300,17 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
         }
     };
 
-    let week_num = config
-        .get_property(section::REPORT, config_key::WEEK_NUM)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(1);
+    let settings = read_settings(&config_path);
 
     let last_day_str = date_str
         .map(|s| s.to_string())
-        .or_else(|| {
-            config
-                .get_property(section::REPORT, config_key::LAST_DAY)
-                .cloned()
-        })
+        .or_else(|| settings.last_day.map(|d| d.format(DATE_FORMAT).to_string()))
         .unwrap_or_default();
 
     match parse_date(&last_day_str) {
         Some(last_day) => {
             let next_last_day = last_day + chrono::Duration::days(7);
-            update_config_files(week_num + 1, &next_last_day, &config_path, config);
+            update_config_files(settings.week_num + 1, &next_last_day, &config_path);
         }
         None => {
             error!("更新周数失败，请检查日期字符串是否有误: {}", last_day_str);
@@ -378,25 +333,16 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
         }
     };
 
-    load_config_from_json_and_sync(&config_path, config);
-
-    let week_num = config
-        .get_property(section::REPORT, config_key::WEEK_NUM)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(1);
+    let settings = read_settings(&config_path);
 
     let last_day_str = date_str
         .map(|s| s.to_string())
-        .or_else(|| {
-            config
-                .get_property(section::REPORT, config_key::LAST_DAY)
-                .cloned()
-        })
+        .or_else(|| settings.last_day.map(|d| d.format(DATE_FORMAT).to_string()))
         .unwrap_or_default();
 
     match parse_date(&last_day_str) {
         Some(last_day) => {
-            update_config_files(week_num, &last_day, &config_path, config);
+            update_config_files(settings.week_num, &last_day, &config_path);
         }
         None => {
             error!("更新周数失败，请检查日期字符串是否有误: {}", last_day_str);
@@ -404,165 +350,115 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
     }
 }
 
-// ========== 配置同步辅助 ==========
+// ========== 配置读写 ==========
 
-/// 确保周边界正确：如果当前日期超过 last_day 则自动开新周。
-/// 返回 true 表示首次初始化（last_day 为 None）。
-fn ensure_week_boundary(
-    week_num: i32,
-    last_day: Option<NaiveDate>,
-    now: chrono::NaiveDate,
-    report_file: &Path,
-    config_path: &Path,
-    config: &mut YamlConfig,
-    silent: bool,
-) -> bool {
-    match last_day {
-        Some(last_day) => {
-            if now > last_day {
-                let next_last_day = now + chrono::Duration::days(6);
-                let new_week_title = format!(
-                    "# Week{}[{}-{}]\n",
-                    week_num,
-                    now.format(DATE_FORMAT),
-                    next_last_day.format(DATE_FORMAT)
-                );
-                if silent {
-                    update_config_files_silent(week_num + 1, &next_last_day, config_path, config);
-                } else {
-                    update_config_files(week_num + 1, &next_last_day, config_path, config);
-                }
-                append_to_file(report_file, &new_week_title);
-            }
-            false
-        }
-        None => {
-            let next_last_day = now + chrono::Duration::days(6);
-            let new_week_title = format!(
-                "# Week{}[{}-{}]\n",
-                week_num,
-                now.format(DATE_FORMAT),
-                next_last_day.format(DATE_FORMAT)
-            );
-            if silent {
-                update_config_files_silent(week_num + 1, &next_last_day, config_path, config);
-            } else {
-                update_config_files(week_num + 1, &next_last_day, config_path, config);
-            }
-            append_to_file(report_file, &new_week_title);
-            true
-        }
+/// settings.json 中保存的日报运行时状态
+pub(crate) struct SettingsState {
+    pub week_num: i32,
+    pub last_day: Option<NaiveDate>,
+}
+
+/// 从 settings.json 读取运行时状态。
+/// 文件不存在或解析失败时返回默认值 (week_num=1, last_day=None)。
+pub(crate) fn read_settings(config_path: &Path) -> SettingsState {
+    let Ok(content) = fs::read_to_string(config_path) else {
+        return SettingsState {
+            week_num: 1,
+            last_day: None,
+        };
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return SettingsState {
+            week_num: 1,
+            last_day: None,
+        };
+    };
+    let week_num = json
+        .get("week_num")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32)
+        .unwrap_or(1);
+    let last_day = json
+        .get("last_day")
+        .and_then(|v| v.as_str())
+        .and_then(parse_date);
+    SettingsState { week_num, last_day }
+}
+
+/// 确保 settings.json 已初始化。
+/// 文件存在则读取返回；不存在则写入 (week_num=1, last_day=now+6) 后返回。
+/// `silent = true` 时不打印 info。
+fn ensure_settings_initialized(config_path: &Path, now: NaiveDate, silent: bool) -> SettingsState {
+    if config_path.exists() {
+        return read_settings(config_path);
+    }
+    let last_day = now + chrono::Duration::days(6);
+    if silent {
+        update_config_files_silent(1, &last_day, config_path);
+    } else {
+        info!(
+            "日报配置文件不存在，自动初始化：week_num = 1, last_day = {}",
+            last_day.format(DATE_FORMAT)
+        );
+        update_config_files(1, &last_day, config_path);
+    }
+    SettingsState {
+        week_num: 1,
+        last_day: Some(last_day),
     }
 }
 
-/// 更新配置文件（YAML + JSON）
-fn update_config_files(
+/// 如果当前日期已超过 last_day，自动开新周：写入周标题到日报文件并更新 settings.json。
+/// `last_day` 为 None 时不做任何事（调用方应先 `ensure_settings_initialized`）。
+fn maybe_open_new_week(
     week_num: i32,
-    last_day: &NaiveDate,
+    last_day: Option<NaiveDate>,
+    now: NaiveDate,
+    report_file: &Path,
     config_path: &Path,
-    config: &mut YamlConfig,
+    silent: bool,
 ) {
-    let last_day_str = last_day.format(DATE_FORMAT).to_string();
-
-    config
-        .set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string())
-        .unwrap_or_else(|e| error!("保存周数配置失败: {}", e));
-    config
-        .set_property(section::REPORT, config_key::LAST_DAY, &last_day_str)
-        .unwrap_or_else(|e| error!("保存日期配置失败: {}", e));
-    info!(
-        "更新YAML配置文件成功：周数 = {}, 周结束日期 = {}",
-        week_num, last_day_str
+    let Some(last_day) = last_day else { return };
+    if now <= last_day {
+        return;
+    }
+    let next_last_day = now + chrono::Duration::days(6);
+    let new_week_title = format!(
+        "# Week{}[{}-{}]\n",
+        week_num,
+        now.format(DATE_FORMAT),
+        next_last_day.format(DATE_FORMAT)
     );
+    if silent {
+        update_config_files_silent(week_num + 1, &next_last_day, config_path);
+    } else {
+        update_config_files(week_num + 1, &next_last_day, config_path);
+    }
+    append_to_file(report_file, &new_week_title);
+}
 
+/// 更新 settings.json（非静默，打印 info）
+fn update_config_files(week_num: i32, last_day: &NaiveDate, config_path: &Path) {
+    let last_day_str = last_day.format(DATE_FORMAT).to_string();
     let json = serde_json::json!({
         "week_num": week_num,
         "last_day": last_day_str
     });
     match fs::write(config_path, json.to_string()) {
         Ok(_) => info!(
-            "更新JSON配置文件成功：周数 = {}, 周结束日期 = {}",
+            "更新配置文件成功：周数 = {}, 周结束日期 = {}",
             week_num, last_day_str
         ),
-        Err(e) => error!("更新JSON配置文件时出错: {}", e),
+        Err(e) => error!("更新配置文件时出错: {}", e),
     }
 }
 
-/// 静默更新配置文件（YAML + JSON），不输出 info
-pub(crate) fn update_config_files_silent(
-    week_num: i32,
-    last_day: &NaiveDate,
-    config_path: &Path,
-    config: &mut YamlConfig,
-) {
+/// 更新 settings.json（静默，不打印 info）
+pub(crate) fn update_config_files_silent(week_num: i32, last_day: &NaiveDate, config_path: &Path) {
     let last_day_str = last_day.format(DATE_FORMAT).to_string();
-
-    config
-        .set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string())
-        .unwrap_or_else(|e| error!("保存周数配置失败: {}", e));
-    config
-        .set_property(section::REPORT, config_key::LAST_DAY, &last_day_str)
-        .unwrap_or_else(|e| error!("保存日期配置失败: {}", e));
-
     let json = serde_json::json!({
         "week_num": week_num,
         "last_day": last_day_str
     });
     let _ = fs::write(config_path, json.to_string());
-}
-
-/// 从 JSON 配置文件读取并同步到 YAML
-fn load_config_from_json_and_sync(config_path: &Path, config: &mut YamlConfig) {
-    if !config_path.exists() {
-        let now = Local::now().date_naive();
-        let last_day = now + chrono::Duration::days(6);
-        info!(
-            "日报配置文件不存在，自动初始化：week_num = 1, last_day = {}",
-            last_day.format(DATE_FORMAT)
-        );
-        update_config_files(1, &last_day, config_path, config);
-        return;
-    }
-
-    match fs::read_to_string(config_path) {
-        Ok(content) => {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                let last_day = json.get("last_day").and_then(|v| v.as_str()).unwrap_or("");
-                let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
-
-                info!(
-                    "从日报配置文件中读取到：last_day = {}, week_num = {}",
-                    last_day, week_num
-                );
-
-                if let Some(last_day_date) = parse_date(last_day) {
-                    update_config_files(week_num as i32, &last_day_date, config_path, config);
-                }
-            } else {
-                error!("解析日报配置文件时出错");
-            }
-        }
-        Err(e) => error!("读取日报配置文件失败: {}", e),
-    }
-}
-
-/// 静默从 JSON 配置文件读取并同步到 YAML
-fn load_config_from_json_silent(config_path: &Path, config: &mut YamlConfig) {
-    if !config_path.exists() {
-        let now = Local::now().date_naive();
-        let last_day = now + chrono::Duration::days(6);
-        update_config_files_silent(1, &last_day, config_path, config);
-        return;
-    }
-
-    if let Ok(content) = fs::read_to_string(config_path)
-        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&content)
-    {
-        let last_day = json.get("last_day").and_then(|v| v.as_str()).unwrap_or("");
-        let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
-
-        if let Some(last_day_date) = parse_date(last_day) {
-            update_config_files_silent(week_num as i32, &last_day_date, config_path, config);
-        }
-    }
 }

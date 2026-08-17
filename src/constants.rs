@@ -176,8 +176,6 @@ pub mod config_key {
     pub const CONCISE: &str = "concise";
     pub const SEARCH_ENGINE: &str = "search-engine";
     pub const WEEK_REPORT: &str = "week_report";
-    pub const WEEK_NUM: &str = "week_num";
-    pub const LAST_DAY: &str = "last_day";
     pub const GIT_REPO: &str = "git_repo";
     #[allow(dead_code)]
     pub const BROWSER_HEADLESS: &str = "browser_headless";
