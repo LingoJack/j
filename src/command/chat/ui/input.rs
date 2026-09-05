@@ -170,6 +170,41 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     if cursor_x < area.x + area.width && cursor_y < area.y + area.height {
         f.set_cursor_position((cursor_x, cursor_y));
     }
+
+    // 待发送图片附件提示：渲染在输入区倒数第二行（文本最多占 area.height-2 行，不会重叠）
+    if !app.ui.pending_images.is_empty() && area.height >= 4 {
+        let chip_y = area.y + area.height - 2;
+        let chips = render_pending_image_chips(&app.ui.pending_images);
+        let style = Style::default().fg(t.hint_desc);
+        f.buffer_mut().set_string(area.x, chip_y, &chips, style);
+    }
+}
+
+/// 构建待发送图片附件的提示文本，如 `[图1] PNG 800x600 56KB  [图2] PNG 1920x1080 210KB`
+fn render_pending_image_chips(images: &[crate::command::chat::app::PendingImage]) -> String {
+    let mut chips = String::new();
+    for (i, img) in images.iter().enumerate() {
+        if i > 0 {
+            chips.push_str("  ");
+        }
+        let fmt = img
+            .data
+            .media_type
+            .rsplit('/')
+            .next()
+            .unwrap_or("img")
+            .to_uppercase();
+        let size_kb = (img.size_bytes / 1024).max(1);
+        chips.push_str(&format!(
+            "[图{}] {} {}x{} {}KB",
+            i + 1,
+            fmt,
+            img.width,
+            img.height,
+            size_kb
+        ));
+    }
+    chips
 }
 
 /// 计算 @mention 高亮范围（缓存）

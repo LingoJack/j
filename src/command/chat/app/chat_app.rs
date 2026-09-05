@@ -495,6 +495,7 @@ impl ChatApp {
         let new_app = Self {
             ui: UIState {
                 input_buffer: TextBuffer::new(),
+                pending_images: Vec::new(),
                 mode: ChatMode::Chat,
                 scroll_offset: usize::MAX,
                 auto_scroll: true,

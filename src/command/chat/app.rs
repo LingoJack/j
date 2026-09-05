@@ -4,6 +4,7 @@ mod archive;
 mod browse;
 mod chat_app;
 mod chat_state;
+mod clipboard_image;
 mod message;
 mod session_mgr;
 mod stream_poll;

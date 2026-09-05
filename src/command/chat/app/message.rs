@@ -4,6 +4,7 @@ use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState}
 use crate::command::chat::infra::command;
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider};
+use crate::command::chat::app::PendingImage;
 use crate::util::safe_lock;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -12,7 +13,13 @@ impl ChatApp {
     /// 发送消息（非阻塞，启动后台线程流式接收）
     pub fn send_message(&mut self) {
         let text = self.ui.input_text().trim().to_string();
+        let images = std::mem::take(&mut self.ui.pending_images);
         if text.is_empty() {
+            if images.is_empty() {
+                return;
+            }
+            // 只有图片没有文字：用占位文本发送
+            self.send_message_internal_with_images("[图片]".to_string(), images);
             return;
         }
 
@@ -21,11 +28,16 @@ impl ChatApp {
         self.ui.skill_popup_active = false;
         self.ui.clear_input();
 
-        self.send_message_internal(text);
+        self.send_message_internal_with_images(text, images);
     }
 
-    /// 发送指定文本消息并启动 agent loop
+    /// 发送指定文本消息并启动 agent loop（无图片附件，供排队消息 / 远程注入等路径调用）
     pub fn send_message_internal(&mut self, text: String) {
+        self.send_message_internal_with_images(text, Vec::new());
+    }
+
+    /// 发送消息（可携带剪贴板图片附件）并启动 agent loop
+    fn send_message_internal_with_images(&mut self, text: String, images: Vec<PendingImage>) {
         // ★ PreSendMessage hook（同步，需要返回值来决定是否 abort / 修改 text）
         let hook_result = {
             let has_hooks = self
@@ -61,6 +73,10 @@ impl ChatApp {
         };
         let text = if let Some(result) = hook_result {
             if result.is_stop() {
+                // 发送被拦截：图片附件退回输入框
+                if !images.is_empty() {
+                    self.ui.pending_images = images;
+                }
                 self.show_toast("消息发送被 hook 拦截", true);
                 return;
             }
@@ -78,7 +94,10 @@ impl ChatApp {
 
         // 添加用户消息到双通道（UI 渲染 + LLM context）
         // context_messages 是 LLM 上下文和持久化的唯一数据源
-        let user_msg = ChatMessage::text(MessageRole::User, &text);
+        let mut user_msg = ChatMessage::text(MessageRole::User, &text);
+        if !images.is_empty() {
+            user_msg.images = Some(images.into_iter().map(|p| p.data).collect());
+        }
         self.push_both_channels(user_msg);
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = usize::MAX;

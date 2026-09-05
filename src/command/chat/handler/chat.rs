@@ -5,7 +5,7 @@ use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDire
 use crate::command::chat::infra::command;
 use crate::command::chat::input::autocomplete::{SlashCommand, update_at_filter};
 use crate::command::chat::render::theme::ThemeName;
-use crate::command::chat::storage::{ChatMessage, MessageRole};
+use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole};
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use popups::PopupResult;
@@ -89,6 +89,11 @@ fn handle_ctrl_shortcut(app: &mut ChatApp, key: KeyEvent) -> bool {
             enter_config_mode(app);
             true
         }
+        'v' => {
+            // Ctrl+V：粘贴剪贴板图片（无图片时回退为文本粘贴）
+            app.paste_from_clipboard();
+            true
+        }
         _ => false,
     }
 }
@@ -143,8 +148,15 @@ fn handle_main_key(app: &mut ChatApp, key: KeyEvent) -> bool {
         }
 
         KeyCode::Backspace => {
-            app.ui.input_buffer.backspace();
-            check_and_activate_mention_popup(app);
+            // 输入框为空且有图片附件时：移除最后一张图片
+            if app.ui.is_input_empty() && !app.ui.pending_images.is_empty() {
+                if app.ui.pending_images.pop().is_some() {
+                    app.show_toast("已移除最后一张图片附件", false);
+                }
+            } else {
+                app.ui.input_buffer.backspace();
+                check_and_activate_mention_popup(app);
+            }
         }
         KeyCode::Delete => {
             app.ui.input_buffer.delete_char();
@@ -185,23 +197,34 @@ fn handle_enter_key(app: &mut ChatApp, key: KeyEvent) {
 
     // agent loop 期间：将用户消息追加到待处理队列
     let text = app.ui.input_text().trim().to_string();
-    if text.is_empty() {
+    let images: Vec<ImageData> = std::mem::take(&mut app.ui.pending_images)
+        .into_iter()
+        .map(|p| p.data)
+        .collect();
+    if text.is_empty() && images.is_empty() {
         return;
     }
-    let text = command::expand_command_mentions(
-        &text,
-        &app.state.loaded_commands,
-        &app.state.agent_config.disabled_commands,
-    );
-    let user_msg = ChatMessage::text(MessageRole::User, &text);
+    let text = if text.is_empty() {
+        "[图片]".to_string()
+    } else {
+        command::expand_command_mentions(
+            &text,
+            &app.state.loaded_commands,
+            &app.state.agent_config.disabled_commands,
+        )
+    };
+    let mut user_msg = ChatMessage::text(MessageRole::User, &text);
+    if !images.is_empty() {
+        user_msg.images = Some(images);
+    }
     // 双通道写入：display_messages 渲染 + context_messages 持久化
-    app.push_both_channels(user_msg);
+    app.push_both_channels(user_msg.clone());
     {
         let mut pending = safe_lock(
             &app.state.pending_user_messages,
             "handler_chat::pending_user_messages",
         );
-        pending.push(ChatMessage::text(MessageRole::User, &text));
+        pending.push(user_msg);
     }
     app.ui.clear_input();
     app.ui.msg_lines_cache = None;

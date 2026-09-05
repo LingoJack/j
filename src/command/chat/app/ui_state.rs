@@ -2,7 +2,7 @@ use super::types::{AskAnswer, AskQuestion};
 use crate::command::chat::infra::archive::ChatArchive;
 use crate::command::chat::infra::command::CommandSource;
 use crate::command::chat::permission::queue::PendingAgentPerm;
-use crate::command::chat::storage::SessionMeta;
+use crate::command::chat::storage::{ImageData, SessionMeta};
 use crate::command::chat::tools::plan::PendingPlanApproval;
 use crate::markdown::image_cache::ImageCache;
 use crate::theme::Theme;
@@ -34,12 +34,29 @@ pub struct ContextMenu {
     pub screen_pos: (u16, u16),
 }
 
+// ========== 待发送图片附件 ==========
+
+/// 待发送的图片附件（Ctrl+V 从剪贴板粘贴）
+#[derive(Clone, Debug)]
+pub struct PendingImage {
+    /// 多模态图片数据（base64 PNG）
+    pub data: ImageData,
+    /// 原始宽度（像素）
+    pub width: u32,
+    /// 原始高度（像素）
+    pub height: u32,
+    /// PNG 编码后大小（字节）
+    pub size_bytes: usize,
+}
+
 // ========== 前端状态 ==========
 
 /// UI 前端状态：所有与界面展示相关的字段
 pub struct UIState {
     /// 输入缓冲区（多行迷你编辑器）
     pub input_buffer: TextBuffer,
+    /// 待发送的图片附件（Ctrl+V 从剪贴板粘贴，Enter 发送时附带）
+    pub pending_images: Vec<PendingImage>,
     /// 当前模式
     pub mode: ChatMode,
     /// 消息列表滚动偏移（usize 支持超过 65535 行）
